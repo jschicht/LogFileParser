@@ -1,10 +1,9 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.17
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.18
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
-#AutoIt3Wrapper_Run_Obfuscator=y
 #Obfuscator_Parameters=/cn 0
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 
@@ -16,12 +15,12 @@
 #include <SQLite.dll.au3>
 #include <File.au3>
 
-Global $VerboseOn = 0, $CharReplacement=":", $de="|", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=False, $debuglogfile, $csvextra, $CurrentTimestamp
+Global $VerboseOn = 0, $CharReplacement=":", $de="|", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=False, $debuglogfile, $csvextra, $CurrentTimestamp, $EncodingWhenOpen=2, $ReconstructDone=False
 Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef
 Global $ProgressLogFile, $ProgressReconstruct, $CurrentProgress=-1, $ProgressStatus, $ProgressUsnJrnl, $ProgressSize
 Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,$LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile
 Global $RecordOffset, $PredictedRefNumber, $this_lsn, $client_previous_lsn, $redo_operation, $undo_operation, $record_offset_in_mft, $attribute_offset, $hOutFileMFT, $tBuffer, $nBytes2, $HDR_BaseRecord, $FilePath
-Global $nBytes, $rFile, $IRArr[12][2], $RPArr[11][2], $LUSArr[3][2],$EAInfoArr[5][2],$EAArr[8][2], $DataRunArr[2][18], $NewDataRunArr[1][18], $RowsProcessed, $MaxRows, $hQuery, $aRow, $iRows, $iColumns, $aRes, $sOutputFile
+Global $nBytes, $rFile, $IRArr[12][2], $RPArr[11][2], $LUSArr[3][2],$EAInfoArr[5][2],$EAArr[8][2], $DataRunArr[2][18], $NewDataRunArr[1][18], $RowsProcessed, $MaxRows, $hQuery, $aRow, $aRow2, $iRows, $iColumns, $aRes, $sOutputFile
 Global $RSTRsig = "52535452", $RCRDsig = "52435244", $BAADsig = "44414142", $CHKDsig = "444b4843", $Emptysig = "ffffffff"
 Global $SI_CTime, $SI_ATime, $SI_MTime, $SI_RTime, $SI_FilePermission, $SI_MaxVersions, $SI_VersionNumber, $SI_ClassID, $SI_SecurityID, $SI_QuotaCharged, $SI_USN, $SI_PartialValue
 Global $SI_CTime_Core,$SI_ATime_Core,$SI_MTime_Core,$SI_RTime_Core,$SI_CTime_Precision,$SI_ATime_Precision,$SI_MTime_Precision,$SI_RTime_Precision
@@ -47,28 +46,28 @@ Global Const $WS_VSCROLL = 0x00200000
 Global Const $DT_END_ELLIPSIS = 0x8000
 Global Const $GUI_DISABLE = 128
 
-Global Const $STANDARD_INFORMATION = '10000000'; Standard Information
+Global Const $STANDARD_INFORMATION = '10000000'
 Global Const $ATTRIBUTE_LIST = '20000000'
-Global Const $FILE_NAME = '30000000' ; File Name
-Global Const $OBJECT_ID = '40000000' ; Object ID
+Global Const $FILE_NAME = '30000000'
+Global Const $OBJECT_ID = '40000000'
 Global Const $SECURITY_DESCRIPTOR = '50000000'
 Global Const $VOLUME_NAME = '60000000'
 Global Const $VOLUME_INFORMATION = '70000000'
-Global Const $DATA = '80000000' ; Data
-Global Const $INDEX_ROOT = '90000000' ; Index Root
-Global Const $INDEX_ALLOCATION = 'A0000000' ; Index Allocation
-Global Const $BITMAP = 'B0000000' ; Bitmap
+Global Const $DATA = '80000000'
+Global Const $INDEX_ROOT = '90000000'
+Global Const $INDEX_ALLOCATION = 'A0000000'
+Global Const $BITMAP = 'B0000000'
 Global Const $REPARSE_POINT = 'C0000000'
 Global Const $EA_INFORMATION = 'D0000000'
 Global Const $EA = 'E0000000'
 Global Const $PROPERTY_SET = 'F0000000'
-Global Const $LOGGED_UTILITY_STREAM = '00010000'; 0x100
+Global Const $LOGGED_UTILITY_STREAM = '00010000'
 Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("LogFile Parser 1.0.0.17", 540, 460, -1, -1)
+$Form = GUICreate("LogFile Parser 1.0.0.18", 540, 460, -1, -1)
 
 $LabelLogFile = GUICtrlCreateLabel("$LogFile:",20,10,80,20)
 $LogFileField = GUICtrlCreateInput("manadatory",70,10,350,20)
@@ -109,6 +108,9 @@ GUICtrlSetState($SaparatorInput2, $GUI_DISABLE)
 $CheckReconstruct = GUICtrlCreateCheckbox("Reconstruct data runs", 280, 135, 150, 20)
 GUICtrlSetState($CheckReconstruct, $GUI_UNCHECKED)
 
+$CheckUnicode = GUICtrlCreateCheckbox("Unicode", 200, 135, 70, 20)
+GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
+
 $ButtonStart = GUICtrlCreateButton("Start", 430, 135, 100, 30)
 $myctredit = GUICtrlCreateEdit("", 0, 170, 540, 110, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
 _GUICtrlEdit_SetLimitText($myctredit, 128000)
@@ -141,7 +143,7 @@ WEnd
 
 Func _Main()
 Global $DataRunArr[2][18], $NewDataRunArr[1][18]
-Global $GlobalCounter = 1,$AttrArray[$GlobalCounter][2]
+Global $GlobalCounter = 1,$AttrArray[$GlobalCounter][2], $DoReconstructDataRuns=False
 GUICtrlSetData($ProgressLogFile, 0)
 GUICtrlSetData($ProgressUsnJrnl, 0)
 GUICtrlSetData($ProgressReconstruct, 0)
@@ -157,13 +159,32 @@ EndIf
 
 $SectorsPerCluster = GUICtrlRead($InputSectorPerCluster)
 if StringIsDigit($SectorsPerCluster)=0 Then
-	_DisplayInfo("Error: SectorsPerCluster not given in expected format (deciaml)." & @CRLF)
+	_DisplayInfo("Error: SectorsPerCluster not given in expected format (decimal)." & @CRLF)
 	Return
 EndIf
 $BytesPerCluster=$SectorsPerCluster*512
 
+If GUICtrlRead($CheckUnicode) = 1 Then
+	$EncodingWhenOpen = 2+32
+EndIf
+
 If GUICtrlRead($CheckReconstruct) = 1 Then
 	$DoReconstructDataRuns = True
+	If $EncodingWhenOpen=34 Then
+		MsgBox(0,"Warning","Reconstruct of dataruns is not supported with UNICODE. Continuing with ANSI")
+		GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
+		$EncodingWhenOpen = 2
+	EndIf
+	If $ReconstructDone Then
+		MsgBox(0,"Error","Reconstruct of dataruns requires a restart of the program")
+		Return
+	EndIf
+EndIf
+
+If $TargetMftCsvFile And FileGetEncoding($TargetMftCsvFile,2)>0 Then
+	MsgBox(0,"Warning","Skipping import of $MFT csv because it is unicode")
+	$TargetMftCsvFile = ""
+	_DisplayInfo("Warning: Skipping import of $MFT csv because it is unicode" & @CRLF)
 EndIf
 
 $tDelta = _GetUTCRegion()-$tDelta
@@ -261,13 +282,48 @@ _WinAPI_CloseHandle($LogFileCsv)
 _WinAPI_CloseHandle($LogFileIndxCsv)
 _WinAPI_CloseHandle($LogFileDataRunsCsv)
 AdlibUnRegister("_LogFileProgress")
+GUICtrlSetData($ProgressStatus, "Processing LogFile transaction " & $CurrentRecord+1 & " of " & $MaxRecords)
+GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
+GUICtrlSetData($ProgressLogFile, 100 * ($CurrentRecord+1) / $MaxRecords)
 
 _DisplayInfo("$LogFile processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
 
+#cs
+;x64 dll not working properly?
 If @AutoItX64 Then
 	$Sqlite3DllString = @ScriptDir & "\sqlite3_x64.dll"
+
 Else
 	$Sqlite3DllString = @ScriptDir & "\sqlite3.dll"
+EndIf
+#ce
+$Sqlite3DllString = @ScriptDir & "\sqlite3.dll"
+
+;set encoding
+If GUICtrlRead($CheckUnicode) = 1 Then
+	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "PRAGMA encoding = 'UTF-16le';CREATE TABLE bogus(one INTEGER,two TEXT);", $sOutputFile)
+	If $SQLiteExe <> 0 Then
+		MsgBox(0,"Error","Could not PRAGMA encoding = UTF-16le: " & $NtfsDbFile & " : " & @error)
+		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+		Exit
+	EndIf
+	_SQLite_Startup($Sqlite3DllString)
+	If @error Then
+		MsgBox(0,"Error","sqlite3.dll was not loaded. Returned error val: " & @error)
+		Exit
+	EndIf
+	$hDb = _SQLite_Open($NtfsDbFile) ;Open db
+	If @error Then
+		MsgBox(0,"Error","Opening database failed and returned error val: " & @extended)
+		Exit
+	EndIf
+	_SQLite_QuerySingleRow(-1, "PRAGMA encoding;", $aRow2)
+	If $aRow2[0] <> 'UTF-16le' Then
+		MsgBox(0,"Error","Detecting encoding was not correct")
+		Exit
+	EndIf
+	_SQLite_Close()
+	_SQLite_Shutdown()
 EndIf
 
 ; Create database with tables and import csv
@@ -402,7 +458,7 @@ If FileExists($UsnJrnlFile) Then
 		Exit
 	EndIf
 	$UsnJrnlCsvFile = $ParserOutDir & "\UsnJrnl.csv"
-	$UsnJrnlCsv = FileOpen($UsnJrnlCsvFile, 2)
+	$UsnJrnlCsv = FileOpen($UsnJrnlCsvFile, $EncodingWhenOpen)
 	If @error Then
 		ConsoleWrite("Error creating: " & $UsnJrnlCsvFile & @CRLF)
 		Exit
@@ -421,6 +477,9 @@ If FileExists($UsnJrnlFile) Then
 		_UsnProcessPage(StringMid($RawPage,3))
 	Next
 	AdlibUnRegister("_UsnJrnlProgress")
+    GUICtrlSetData($ProgressStatus, "Processing UsnJrnl record " & $CurrentRecord+1 & " of " & $MaxRecords)
+    GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
+	GUICtrlSetData($ProgressUsnJrnl, 100 * ($CurrentRecord+1) / $MaxRecords)
 	_WinAPI_CloseHandle($hUsnJrnl)
 	_WinAPI_CloseHandle($UsnJrnlCsv)
 	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE UsnJrnl (UsnJrnlMFTReference INTEGER,UsnJrnlMFTParentReference INTEGER,UsnJrnlUSN INTEGER,UsnJrnlTimestamp TEXT,UsnJrnlReason TEXT,UsnJrnlSourceInfo TEXT,UsnJrnlFileAttributes TEXT,UsnJrnlFileName TEXT,UsnJrnlFileNameModified INTEGER);", $sOutputFile)
@@ -514,12 +573,23 @@ If FileExists($UsnJrnlFile) Or $TargetMftCsvFile Then
 	$moved = FileMove(@ScriptDir&"\LogFileJoined.csv",$ParserOutDir&"\LogFileJoined.csv",9)
 EndIf
 
+;remove bogus table
+If GUICtrlRead($CheckUnicode) = 1 Then
+	$SQLiteExe2 = _SQLite_SQLiteExe2($NtfsDbFile, "DROP TABLE bogus;", $sOutputFile)
+	If $SQLiteExe2 <> 0 Then
+		MsgBox(0,"Error","Could not DROP TABLE bogus: " & @error)
+		ConsoleWrite("@error: " & @error & @CRLF)
+		ConsoleWrite("$SQLiteExe: " & $SQLiteExe2 & @CRLF)
+		Exit
+	EndIf
+EndIf
+
 ;--------- DataRuns
 If Not $DoReconstructDataRuns Then
 	_DisplayInfo("Done!" & @CRLF)
-	GUICtrlSetData($ProgressLogFile, 0)
-	GUICtrlSetData($ProgressUsnJrnl, 0)
-	GUICtrlSetData($ProgressReconstruct, 0)
+;	GUICtrlSetData($ProgressLogFile, 0)
+;	GUICtrlSetData($ProgressUsnJrnl, 0)
+;	GUICtrlSetData($ProgressReconstruct, 0)
 	Return
 EndIf
 $Progress = GUICtrlCreateLabel("Reconstructing dataruns", 10, 280,540,20)
@@ -658,7 +728,11 @@ EndIf
 _SQLite_Close()
 _SQLite_Shutdown()
 AdlibUnRegister("_DataRunReconstructProgress")
+GUICtrlSetData($ProgressStatus, "Reconstructing dataruns at row " & $RowsProcessed+1 & " of " & $MaxRows)
+GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
+GUICtrlSetData($ProgressReconstruct, 100 * ($RowsProcessed+1) / $MaxRows)
 _DisplayInfo("Done!" & @CRLF)
+$ReconstructDone=True
 Return
 EndFunc
 
@@ -764,8 +838,8 @@ Else
 EndIf
 #ce
 #cs
-;If $this_lsn=189227701 or $this_lsn=189227731 or $this_lsn=189227744 or $this_lsn=189227789 Then
-If $this_lsn=56375521009 Then ;56375452416,56375452487,56375452507
+If $this_lsn=1050781 or $this_lsn=1050856 or $this_lsn=1057451 or $this_lsn=1057496  or $this_lsn=1057521 or $this_lsn=1057631 or $this_lsn=1057647 or $this_lsn=1058513 or $this_lsn=1059209 Then
+;If $this_lsn=1059209 Then ;56375452416,56375452487,56375452507
 	$VerboseOn=1
 Else
 	$VerboseOn=0
@@ -4266,34 +4340,34 @@ Func _PrepareOutput()
 		Exit
 	EndIf
 	ConsoleWrite("Output directory: " & $ParserOutDir & @CRLF)
-	$debuglogfile = FileOpen($ParserOutDir & "\debug.log",2)
+	$debuglogfile = FileOpen($ParserOutDir & "\debug.log",$EncodingWhenOpen)
 	If @error Then
 		MsgBox(0,"Error","Could not create debug.log")
 		Exit
 	EndIf
 	$LogFileCsvFile = $ParserOutDir & "\LogFile.csv"
-	$LogFileCsv = FileOpen($LogFileCsvFile, 2)
+	$LogFileCsv = FileOpen($LogFileCsvFile, $EncodingWhenOpen)
 	If @error Then
 		_DebugOut("Error creating: " & $LogFileCsvFile)
 		Exit
 	EndIf
 	_DebugOut("Created output file: " & $LogFileCsvFile)
 	$LogFileIndxCsvfile = $ParserOutDir & "\LogFile_INDX.csv"
-	$LogFileIndxCsv = FileOpen($LogFileIndxCsvfile, 2)
+	$LogFileIndxCsv = FileOpen($LogFileIndxCsvfile, $EncodingWhenOpen)
 	If @error Then
 		_DebugOut("Error creating: " & $LogFileIndxCsvfile)
 		Exit
 	EndIf
 	_DebugOut("Created output file: " & $LogFileIndxCsvfile)
 	$LogFileUndoWipeIndxCsvfile = $ParserOutDir & "\LogFile_UndoWipe_INDX.csv"
-	$LogFileUndoWipeIndxCsv = FileOpen($LogFileUndoWipeIndxCsvfile, 2)
+	$LogFileUndoWipeIndxCsv = FileOpen($LogFileUndoWipeIndxCsvfile, $EncodingWhenOpen)
 	If @error Then
 		_DebugOut("Error creating: " & $LogFileUndoWipeIndxCsvfile)
 		Exit
 	EndIf
 	_DebugOut("Created output file: " & $LogFileUndoWipeIndxCsvfile)
 	$LogFileUsnJrnlCsvFile = $ParserOutDir & "\LogFile_lfUsnJrnl.csv"
-	$LogFileUsnJrnlCsv = FileOpen($LogFileUsnJrnlCsvFile, 2)
+	$LogFileUsnJrnlCsv = FileOpen($LogFileUsnJrnlCsvFile, $EncodingWhenOpen)
 	If @error Then
 		_DebugOut("Error creating: " & $LogFileUsnJrnlCsvFile)
 		Exit
@@ -4301,14 +4375,14 @@ Func _PrepareOutput()
 	_DebugOut("Created output file: " & $LogFileUsnJrnlCsvFile)
 	If $DoReconstructDataRuns Then
 		$LogFileDataRunsCsvfile = $ParserOutDir & "\LogFile_DataRuns.csv"
-		$LogFileDataRunsCsv = FileOpen($LogFileDataRunsCsvfile, 2)
+		$LogFileDataRunsCsv = FileOpen($LogFileDataRunsCsvfile, $EncodingWhenOpen)
 		If @error Then
 			_DebugOut("Error creating: " & $LogFileDataRunsCsvfile)
 			Exit
 		EndIf
 		_DebugOut("Created output file: " & $LogFileDataRunsCsvfile)
 		$LogFileDataRunsModCsvfile = $ParserOutDir & "\LogFile_DataRunsResolved.csv"
-		$LogFileDataRunsModCsv = FileOpen($LogFileDataRunsModCsvfile, 2)
+		$LogFileDataRunsModCsv = FileOpen($LogFileDataRunsModCsvfile, $EncodingWhenOpen)
 		If @error Then
 			_DebugOut("Error creating: " & $LogFileDataRunsCsvfile)
 			Exit
@@ -4337,7 +4411,7 @@ Func _WriteCSVExtraHeader()
 	$csv_extra_header &= "FN_CTime_Core"&$de&"FN_CTime_Precision"&$de&"FN_ATime_Core"&$de&"FN_ATime_Precision"&$de&"FN_MTime_Core"&$de&"FN_MTime_Precision"&$de&"FN_RTime_Core"&$de&"FN_RTime_Precision"
 	FileWriteLine($csvextra, $csv_extra_header & @CRLF)
 EndFunc
-;FileWriteLine($LogFileUsnJrnlCsv, $UsnJrnlFileName&$de&$UsnJrnlUsn&$de&$UsnJrnlTimestamp&$de&$UsnJrnlReason&$de&$UsnJrnlFileReferenceNumber&$de&$UsnJrnlMFTReferenceSeqNo&$de&$UsnJrnlParentFileReferenceNumber&$de&$UsnJrnlParentReferenceSeqNo&$de&$UsnJrnlFileAttributes&@crlf)
+
 Func _WriteCSVHeader()
 	$LogFile_Csv_Header = "lf_Offset"&$de&"lf_MFTReference"&$de&"lf_RealMFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_LSN"&$de&"lf_LSNPrevious"&$de&"lf_RedoOperation"&$de&"lf_UndoOperation"&$de&"lf_OffsetInMft"&$de&"lf_FileName"&$de&"lf_CurrentAttribute"&$de&"lf_TextInformation"&$de&"lf_UsnJrnlFileName"&$de&"lf_UsnJrnlMFTReference"&$de&"lf_UsnJrnlMFTParentReference"&$de&"lf_UsnJrnlTimestamp"&$de&"lf_UsnJrnlReason"&$de&"lf_UsnJrnlUsn"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"&$de&"lf_FN_CTime"&$de&"lf_FN_ATime"&$de&"lf_FN_MTime"&$de&"lf_FN_RTime"&$de&"lf_FN_AllocSize"&$de&"lf_FN_RealSize"&$de&"lf_FN_Flags"&$de&"lf_FN_Namespace"&$de&"lf_DT_StartVCN"&$de&"lf_DT_LastVCN"&$de&"lf_DT_ComprUnitSize"&$de&"lf_DT_AllocSize"&$de&"lf_DT_RealSize"&$de&"lf_DT_InitStreamSize"&$de&"lf_DT_DataRuns"&$de&"lf_DT_Name"&$de&"lf_FileNameModified"&$de&"lf_RedoChunkSize"&$de&"lf_UndoChunkSize"
 	FileWriteLine($LogFileCsv, $LogFile_Csv_Header & @CRLF)
@@ -4606,19 +4680,19 @@ Func _SelectMftCsv()
 EndFunc
 
 Func _LogFileProgress()
-    GUICtrlSetData($ProgressStatus, "Processing LogFile transaction " & $CurrentRecord & " of " & $MaxRecords & " (step 1 of 3)")
+    GUICtrlSetData($ProgressStatus, "Processing LogFile transaction " & $CurrentRecord & " of " & $MaxRecords)
     GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
 	GUICtrlSetData($ProgressLogFile, 100 * $CurrentRecord / $MaxRecords)
 EndFunc
 
 Func _UsnJrnlProgress()
-    GUICtrlSetData($ProgressStatus, "Processing UsnJrnl record " & $CurrentRecord & " of " & $MaxRecords & " (step 2 of 3)")
+    GUICtrlSetData($ProgressStatus, "Processing UsnJrnl record " & $CurrentRecord & " of " & $MaxRecords)
     GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
 	GUICtrlSetData($ProgressUsnJrnl, 100 * $CurrentRecord / $MaxRecords)
 EndFunc
 
 Func _DataRunReconstructProgress()
-    GUICtrlSetData($ProgressStatus, "Reconstructing dataruns at row " & $RowsProcessed & " of " & $MaxRows & " (step 3 of 3)")
+    GUICtrlSetData($ProgressStatus, "Reconstructing dataruns at row " & $RowsProcessed & " of " & $MaxRows)
     GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
 	GUICtrlSetData($ProgressReconstruct, 100 * $RowsProcessed / $MaxRows)
 EndFunc
