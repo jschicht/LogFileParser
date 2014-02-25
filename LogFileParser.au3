@@ -1,7 +1,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.18
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.19
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #Obfuscator_Parameters=/cn 0
@@ -67,7 +67,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("LogFile Parser 1.0.0.18", 540, 460, -1, -1)
+$Form = GUICreate("LogFile Parser 1.0.0.19", 540, 460, -1, -1)
 
 $LabelLogFile = GUICtrlCreateLabel("$LogFile:",20,10,80,20)
 $LogFileField = GUICtrlCreateInput("manadatory",70,10,350,20)
@@ -1324,7 +1324,7 @@ If $VerboseOn Then
 	ConsoleWrite("$seq_number: 0x" & $seq_number & @CRLF)
 ;	ConsoleWrite("$reserved2: " & $reserved2 & @CRLF)
 	ConsoleWrite("$client_name_length (unicode): 0x" & $client_name_length & @CRLF)
-	ConsoleWrite("$client_name: " & _UnicodeHexToStr($client_name) & @CRLF)
+	ConsoleWrite("$client_name: " & BinaryToString("0x"&$client_name,2) & @CRLF)
 EndIf
 ; End -> size = 160 bytes, 32 bytes + name (128)
 EndFunc
@@ -2054,7 +2054,8 @@ Func _Get_VolumeName($MFTEntry, $VOLUME_NAME_Offset, $VOLUME_NAME_Size)
 	ConsoleWrite("### $VOLUME_NAME ATTRIBUTE ###" & @CRLF)
 	If $VOLUME_NAME_Size - 24 > 0 Then
 		$VOLUME_NAME_NAME = StringMid($MFTEntry, $VOLUME_NAME_Offset + 48, ($VOLUME_NAME_Size - 24) * 2)
-		$VOLUME_NAME_NAME = _UnicodeHexToStr($VOLUME_NAME_NAME)
+;		MsgBox(0,"$VOLUME_NAME_NAME",$VOLUME_NAME_NAME)
+		$VOLUME_NAME_NAME = BinaryToString("0x"&$VOLUME_NAME_NAME,2)
 		$TextInformation &= ";VOLUME_NAME="&$VOLUME_NAME_NAME
 		Return
 	EndIf
@@ -2091,14 +2092,6 @@ Func _VolInfoFlag($VIFinput)
 	$VIFoutput = StringTrimRight($VIFoutput, 1)
 	Return $VIFoutput
 EndFunc   ;==>_VolInfoFlag
-
-Func _UnicodeHexToStr($FileName)
-   $str = ""
-   For $i = 1 To StringLen($FileName) Step 4
-	  $str &= ChrW(Dec(_SwapEndian(StringMid($FileName, $i, 4))))
-   Next
-   Return $str
-EndFunc
 
 Func _Get_FileName($MFTEntry, $FN_Offset, $FN_Size, $FN_Number)
 	Local $FN_ParentSeqNo, $FN_CTime_tmp, $FN_ATime_tmp, $FN_MTime_tmp, $FN_RTime_tmp, $FN_NameLen, $FN_NameSpace
@@ -2200,8 +2193,8 @@ Func _Get_FileName($MFTEntry, $FN_Offset, $FN_Size, $FN_Number)
 			$FN_NameType = 'UNKNOWN'
 	EndSelect
 	$FN_NameSpace = $FN_NameLen - 1 ;Not really
-	$FN_Name = StringMid($MFTEntry, $FN_Offset + 180, ($FN_NameLen + $FN_NameSpace) * 2)
-	$FN_Name = _UnicodeHexToStr($FN_Name)
+	$FN_Name = StringMid($MFTEntry, $FN_Offset + 180, $FN_NameLen*4)
+	$FN_Name = BinaryToString("0x"&$FN_Name,2)
 	$FN_Name = StringReplace($FN_Name,$de,$CharReplacement)
 	$FileNameModified = @extended
 	If $VerboseOn Then
@@ -2240,8 +2233,8 @@ Func _Get_Data($MFTEntry, $DT_Offset, $DT_Size, $DT_Number)
 	EndIf
 	If $DT_NameLength > 0 Then
 		$DT_NameSpace = $DT_NameLength - 1
-		$DT_Name = StringMid($MFTEntry, $DT_Offset + ($DT_NameRelativeOffset * 2), ($DT_NameLength + $DT_NameSpace) * 2)
-		$DT_Name = _UnicodeHexToStr($DT_Name)
+		$DT_Name = StringMid($MFTEntry, $DT_Offset + ($DT_NameRelativeOffset * 2), $DT_NameLength*4)
+		$DT_Name = BinaryToString("0x"&$DT_Name,2)
 		$DT_Name = StringReplace($DT_Name,$de,$CharReplacement)
 		$FileNameModified = @extended
 		If $VerboseOn Then ConsoleWrite("$DT_Name: " & $DT_Name & @CRLF)
@@ -2442,8 +2435,8 @@ Func _Decode_INDX($Entry)
 		Case $Indx_NameSpace = "03"	;DOS+WIN32
 			$Indx_NameSpace = "DOS+WIN32"
 	EndSelect
-	$Indx_FileName = StringMid($Entry,$NewLocalAttributeOffset+164,$Indx_NameLength*2*2)
-	$Indx_FileName = _UnicodeHexToStr($Indx_FileName)
+	$Indx_FileName = StringMid($Entry,$NewLocalAttributeOffset+164,$Indx_NameLength*4)
+	$Indx_FileName = BinaryToString("0x"&$Indx_FileName,2)
 	$Indx_FileName = StringReplace($Indx_FileName,$de,$CharReplacement)
 	$FileNameModified = @extended
 	$tmp1 = 164+($Indx_NameLength*2*2)
@@ -2624,8 +2617,8 @@ Func _Decode_INDX($Entry)
 			Case $Indx_NameSpace = "03"	;DOS+WIN32
 				$Indx_NameSpace = "DOS+WIN32"
 		EndSelect
-		$Indx_FileName = StringMid($Entry,$NextEntryOffset+164,$Indx_NameLength*2*2)
-		$Indx_FileName = _UnicodeHexToStr($Indx_FileName)
+		$Indx_FileName = StringMid($Entry,$NextEntryOffset+164,$Indx_NameLength*4)
+		$Indx_FileName = BinaryToString("0x"&$Indx_FileName,2)
 		$Indx_FileName = StringReplace($Indx_FileName,$de,$CharReplacement)
 		$FileNameModified = @extended
 		$tmp0 = 0
@@ -2817,8 +2810,8 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 		Case $Indx_NameSpace = "03"	;DOS+WIN32
 			$Indx_NameSpace = "DOS+WIN32"
 	EndSelect
-	$Indx_FileName = StringMid($Entry,$NewLocalAttributeOffset+164,$Indx_NameLength*2*2)
-	$Indx_FileName = _UnicodeHexToStr($Indx_FileName)
+	$Indx_FileName = StringMid($Entry,$NewLocalAttributeOffset+164,$Indx_NameLength*4)
+	$Indx_FileName = BinaryToString("0x"&$Indx_FileName,2)
 	$Indx_FileName = StringReplace($Indx_FileName,$de,$CharReplacement)
 	$FileNameModified = @extended
 	$tmp1 = 164+($Indx_NameLength*2*2)
@@ -2958,7 +2951,7 @@ Func _GetAttributeEntry($Entry)
 	$ATTRIBUTE_HEADER_NameRelativeOffset = StringMid($Entry,21,4)
 	$ATTRIBUTE_HEADER_NameRelativeOffset = Dec(_SwapEndian($ATTRIBUTE_HEADER_NameRelativeOffset))
 	If $ATTRIBUTE_HEADER_NameLength > 0 Then
-		$ATTRIBUTE_HEADER_Name = _UnicodeHexToStr(StringMid($Entry,$ATTRIBUTE_HEADER_NameRelativeOffset*2 + 1,$ATTRIBUTE_HEADER_NameLength*4))
+		$ATTRIBUTE_HEADER_Name = BinaryToString("0x"&StringMid($Entry,$ATTRIBUTE_HEADER_NameRelativeOffset*2 + 1,$ATTRIBUTE_HEADER_NameLength*4),2)
 	Else
 		$ATTRIBUTE_HEADER_Name = ""
 	EndIf
@@ -3025,9 +3018,11 @@ Func _Get_ReparsePoint($Entry,$Current_Attrib_Number,$CurrentAttributeName)
 	$ReparsePrintNameLength = StringMid($ReparseData,13,4)
 	$ReparsePrintNameLength = Dec(StringMid($ReparsePrintNameLength,3,2) & StringMid($ReparsePrintNameLength,1,2))
 	$ReparseSubstititeName = StringMid($Entry,$LocalAttributeOffset+16+16,$ReparseSubstituteNameLength*2)
-	$ReparseSubstititeName = _UnicodeHexToStr($ReparseSubstititeName)
+;	MsgBox(0,"$ReparseSubstititeName",$ReparseSubstititeName)
+	$ReparseSubstititeName = BinaryToString("0x"&$ReparseSubstititeName,2)
 	$ReparsePrintName = StringMid($Entry,($LocalAttributeOffset+32)+($ReparsePrintNameOffset*2),$ReparsePrintNameLength*2)
-	$ReparsePrintName = _UnicodeHexToStr($ReparsePrintName)
+;	MsgBox(0,"$ReparsePrintName",$ReparsePrintName)
+	$ReparsePrintName = BinaryToString("0x"&$ReparsePrintName,2)
 	If $VerboseOn Then
 		ConsoleWrite("### $REPARSE_POINT ATTRIBUTE ###" & @CRLF)
 		ConsoleWrite("$ReparseType = " & $ReparseType & @crlf)
@@ -4237,7 +4232,7 @@ Func _UsnDecodeRecord($Record)
 	$UsnJrnlFileNameOffset = StringMid($Record,117,4)
 	$UsnJrnlFileNameOffset = Dec(_SwapEndian($UsnJrnlFileNameOffset),2)
 	$UsnJrnlFileName = StringMid($Record,121,$UsnJrnlFileNameLength*2)
-	$UsnJrnlFileName = _UnicodeHexToStr($UsnJrnlFileName)
+	$UsnJrnlFileName = BinaryToString("0x"&$UsnJrnlFileName,2)
 	$UsnJrnlFileName = StringReplace($UsnJrnlFileName,$de,$CharReplacement)
 	$FileNameModified = @extended
 	If $VerboseOn Then
@@ -4821,8 +4816,8 @@ Func _Decode_UndoWipeINDX($Entry)
 		Case $Indx_NameSpace = "03"	;DOS+WIN32
 			$Indx_NameSpace = "DOS+WIN32"
 	EndSelect
-	$Indx_FileName = StringMid($Entry,$NewLocalAttributeOffset+164,$Indx_NameLength*2*2)
-	$Indx_FileName = _UnicodeHexToStr($Indx_FileName)
+	$Indx_FileName = StringMid($Entry,$NewLocalAttributeOffset+164,$Indx_NameLength*4)
+	$Indx_FileName = BinaryToString("0x"&$Indx_FileName,2)
 	$Indx_FileName = StringReplace($Indx_FileName,$de,$CharReplacement)
 	$FileNameModified = @extended
 	$tmp1 = 164+($Indx_NameLength*2*2)
@@ -4996,8 +4991,8 @@ Func _Decode_UndoWipeINDX($Entry)
 			Case $Indx_NameSpace = "03"	;DOS+WIN32
 				$Indx_NameSpace = "DOS+WIN32"
 		EndSelect
-		$Indx_FileName = StringMid($Entry,$NextEntryOffset+164,$Indx_NameLength*2*2)
-		$Indx_FileName = _UnicodeHexToStr($Indx_FileName)
+		$Indx_FileName = StringMid($Entry,$NextEntryOffset+164,$Indx_NameLength*4)
+		$Indx_FileName = BinaryToString("0x"&$Indx_FileName,2)
 		$Indx_FileName = StringReplace($Indx_FileName,$de,$CharReplacement)
 		$FileNameModified = @extended
 		$tmp0 = 0
@@ -5102,7 +5097,7 @@ Func _UsnDecodeRecord2($Record)
 	$UsnJrnlFileNameOffset = StringMid($Record,117,4)
 	$UsnJrnlFileNameOffset = Dec(_SwapEndian($UsnJrnlFileNameOffset),2)
 	$UsnJrnlFileName = StringMid($Record,121,$UsnJrnlFileNameLength*2)
-	$UsnJrnlFileName = _UnicodeHexToStr($UsnJrnlFileName)
+	$UsnJrnlFileName = BinaryToString("0x"&$UsnJrnlFileName,2)
 	If $VerboseOn Then
 		ConsoleWrite("$UsnJrnlFileReferenceNumber: " & $UsnJrnlFileReferenceNumber & @CRLF)
 		ConsoleWrite("$UsnJrnlMFTReferenceSeqNo: " & $UsnJrnlMFTReferenceSeqNo & @CRLF)
@@ -5136,7 +5131,7 @@ Func _UsnDecodeRecord2($Record)
 EndFunc
 
 Func _Decode_AttributeName($data)
-	$AttributeString &= ":"&_UnicodeHexToStr($data)
+	$AttributeString &= ":"&BinaryToString("0x"&$data,2)
 EndFunc
 
 Func _SetNameOnSystemFiles()
