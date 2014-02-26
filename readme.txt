@@ -17,19 +17,24 @@ NTFS is designed as a recoverable filesystem. This done through logging of all t
 Intro
 This parser will decode and dump lots of transaction information from the $LogFile on NTFS. There are several csv's generated as well as an sqlite database named ntfs.db containing all relevant information.
 The currently handled Redo transaction types are:
+
 InitializeFileRecordSegment
-UpdateFileNameAllocation
-UpdateResidentValue
 CreateAttribute
-UpdateFileNameRoot
+DeleteAttribute
+UpdateResidentValue
 UpdateNonResidentValue
+UpdateMappingPairs
+SetNewAttributeSizes
 AddindexEntryRoot
 DeleteindexEntryRoot
 AddIndexEntryAllocation
 DeleteIndexEntryAllocation
-SetNewAttributeSizes
-UpdateMappingPairs
+ResetAllocation
+ResetRoot
+SetIndexEntryVcnAllocation
+UpdateFileNameRoot
 OpenNonresidentAttribute
+
 
 The list of currently supported attributes:
 $STANDARD_INFORMATION
@@ -47,21 +52,36 @@ $LOGGED_UTILITY_STREAM
 
 So basically there's only 3 missing in the decode; $ATTRIBUTE_LIST, $SECURITY_DESCRIPTOR and $BITMAP. However, $ATTRIBUTE_LIST is kind of implemented as records from attribute lists are processed through InitializeFileRecordSegment as separate MFT records, and information about base ref is already logged.
 
+
 Explanation of the different output generated:
+
 LogFile.csv:
 The main csv generated from the parser.
+
 LogFile_DataRuns.csv
 The input information needed for reconstructing dataruns
+
 LogFile_DataRunsResolved.csv
 The final output of reconstructed dataruns
+
 LogFile_INDX.csv
-All dumped and decoded index records (IndexRoot(IndexAllocation)
+All dumped and decoded index records (IndexRoot/IndexAllocation)
+
 LogFileJoined.csv
 Same as LogFile.csv, but have filename information joined in from the $UsnJrnl or csv of mft2csv.
+
 UsnJrnl.csv
 The output of the $UsnJrnl parser module. File will not be created if not the USN journal is to be analyzed.
+
 MFTRecords.bin
 Dummy $MFT recreated based on found MFT records in InitializeFileRecordSegment transactions. Can use mft2csv on this one (remember to configure "broken MFT" and "Fixups" properly).
+
+LogFile_lfUsnJrnl.csv
+Records for the $UsnJrnl that has been decoded within $LogFile
+
+LogFile_UndoWipe_INDX.csv
+All undo operations for clearing of directory indexes (INDX)
+
 Ntfs.db
 An sqlite database file with tables almost equivalent to the above csv's. The database contains 5 tables:
 DataRuns
