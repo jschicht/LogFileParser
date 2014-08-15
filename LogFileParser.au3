@@ -1,7 +1,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.19
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.20
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #Obfuscator_Parameters=/cn 0
@@ -27,7 +27,7 @@ Global $SI_CTime_Core,$SI_ATime_Core,$SI_MTime_Core,$SI_RTime_Core,$SI_CTime_Pre
 Global $FN_CTime, $FN_ATime, $FN_MTime, $FN_RTime, $FN_AllocSize, $FN_RealSize, $FN_Flags, $FN_Name, $FN_NameType
 Global $FN_CTime_Core,$FN_ATime_Core,$FN_MTime_Core,$FN_RTime_Core,$FN_CTime_Precision,$FN_ATime_Precision,$FN_MTime_Precision,$FN_RTime_Precision
 Global $UsnJrnlFileReferenceNumber, $UsnJrnlParentFileReferenceNumber, $UsnJrnlTimestamp, $UsnJrnlReason, $UsnJrnlFileName, $FileNameModified, $UsnJrnlUsn, $UsnJrnlRef
-Global $UsnJrnlCsv, $UsnJrnlCsvFile, $AttributeString, $KeptRef=-1, $TextInformation, $RedoChunkSize, $UndoChunkSize, $KeptRefTmp
+Global $UsnJrnlCsv, $UsnJrnlCsvFile, $AttributeString, $KeptRef=-1, $TextInformation, $RedoChunkSize, $UndoChunkSize, $KeptRefTmp, $redo_length
 Global $DT_NonResidentFlag, $DT_Flags, $DT_ComprUnitSize, $DT_RealSize, $DT_DataRuns, $DT_InitStreamSize, $DT_OffsetToDataRuns, $DT_StartVCN, $DT_LastVCN, $DT_AllocSize, $DT_Name
 Global $FN_CTime_Core,$FN_CTime_Precision,$FN_ATime_Core,$FN_ATime_Precision,$FN_MTime_Core,$FN_MTime_Precision,$FN_RTime_Core,$FN_RTime_Precision
 Global $SI_CTime_Core,$SI_CTime_Precision,$SI_ATime_Core,$SI_ATime_Precision,$SI_MTime_Core,$SI_MTime_Precision,$SI_RTime_Core,$SI_RTime_Precision
@@ -36,7 +36,7 @@ Global $SI_CTime_Core,$SI_CTime_Precision,$SI_ATime_Core,$SI_ATime_Precision,$SI
 Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $DataQ[1], $AttrQ[1], $BytesPerCluster
 Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
-Global $TargetImageFile, $Entries, $IsImage=False, $IsPhysicalDrive=False, $ComboPhysicalDrives, $Combo
+Global $TargetImageFile, $Entries, $IsImage=False, $IsPhysicalDrive=False, $ComboPhysicalDrives, $Combo, $MFT_Record_Size
 
 Global Const $GUI_EVENT_CLOSE = -3
 Global Const $GUI_CHECKED = 1
@@ -67,7 +67,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("LogFile Parser 1.0.0.19", 540, 460, -1, -1)
+$Form = GUICreate("LogFile Parser 1.0.0.20", 540, 460, -1, -1)
 
 $LabelLogFile = GUICtrlCreateLabel("$LogFile:",20,10,80,20)
 $LogFileField = GUICtrlCreateInput("manadatory",70,10,350,20)
@@ -97,9 +97,6 @@ GUICtrlSetState($InputExampleTimestamp, $GUI_DISABLE)
 $Label1 = GUICtrlCreateLabel("Set decoded timestamps to specific region:",20,110,230,20)
 $Combo2 = GUICtrlCreateCombo("", 230, 110, 85, 25)
 
-$Label2 = GUICtrlCreateLabel("Set sectors per cluster:",320,110,120,20)
-$InputSectorPerCluster = GUICtrlCreateInput("8",440,110,40,20)
-
 $LabelSeparator = GUICtrlCreateLabel("Set separator:",20,135,70,20)
 $SaparatorInput = GUICtrlCreateInput($de,90,135,20,20)
 $SaparatorInput2 = GUICtrlCreateInput($de,120,135,30,20)
@@ -111,8 +108,14 @@ GUICtrlSetState($CheckReconstruct, $GUI_UNCHECKED)
 $CheckUnicode = GUICtrlCreateCheckbox("Unicode", 200, 135, 70, 20)
 GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
 
-$ButtonStart = GUICtrlCreateButton("Start", 430, 135, 100, 30)
-$myctredit = GUICtrlCreateEdit("", 0, 170, 540, 110, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
+$Label2 = GUICtrlCreateLabel("Sectors per cluster:",20,170,100,20)
+$InputSectorPerCluster = GUICtrlCreateInput("8",120,170,40,20)
+
+$Label3 = GUICtrlCreateLabel("MFT record size:",200,170,90,20)
+$InputMFTRecordSize = GUICtrlCreateInput("1024",290,170,40,20)
+
+$ButtonStart = GUICtrlCreateButton("Start", 430, 155, 100, 30)
+$myctredit = GUICtrlCreateEdit("", 0, 190, 540, 90, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
 _GUICtrlEdit_SetLimitText($myctredit, 128000)
 
 _InjectTimeZoneInfo()
@@ -163,6 +166,12 @@ if StringIsDigit($SectorsPerCluster)=0 Then
 	Return
 EndIf
 $BytesPerCluster=$SectorsPerCluster*512
+
+$MFT_Record_Size = GUICtrlRead($InputMFTRecordSize)
+if StringIsDigit($MFT_Record_Size)=0 Or ($MFT_Record_Size <> 1024 And $MFT_Record_Size <> 4096) Then
+	_DisplayInfo("Error: MFT record size should be an integer of either 1024 or 4096" & @CRLF)
+	Return
+EndIf
 
 If GUICtrlRead($CheckUnicode) = 1 Then
 	$EncodingWhenOpen = 2+32
@@ -762,7 +771,7 @@ Return ""
 EndFunc
 
 Func _DecodeLSNRecord($InputData)
-Local $client_undo_next_lsn, $client_data_length, $client_index, $record_type, $flags, $redo_offset, $redo_length, $undo_offset, $target_attribute, $lcns_to_follow, $redo_operation_hex, $undo_operation_hex,$MftClusterIndex, $target_vcn
+Local $client_undo_next_lsn, $client_data_length, $client_index, $record_type, $flags, $redo_offset, $undo_offset, $target_attribute, $lcns_to_follow, $redo_operation_hex, $undo_operation_hex,$MftClusterIndex, $target_vcn
 Local $target_lcn,$DecodeOk=False,$UsnOk=False,$TestAttributeType,$ResolvedAttributeOffset
 Global $AttributeString
 _ClearVar()
@@ -814,7 +823,7 @@ $target_vcn = _SwapEndian($target_vcn)
 $target_lcn = StringMid($InputData,161,8)
 $target_lcn = _SwapEndian($target_lcn)
 ;$alignment_or_reserved3 = StringMid($InputData,169,8)
-$PredictedRefNumber = ((Dec($target_vcn,2)*$BytesPerCluster)/1024)+((Dec($MftClusterIndex,2)*512)/1024)
+$PredictedRefNumber = ((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size)
 ;ConsoleWrite("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
 ;Need to research more on how to calculate correct MFT ref
 If ($redo_operation_hex = "0000" And $undo_operation_hex <> "0000") Or $redo_operation_hex = "0200" Or $redo_operation_hex = "0300" Or $redo_operation_hex = "0500" Or $redo_operation_hex = "0600" Or $redo_operation_hex = "0700" Or ($redo_operation_hex = "0800" And $PreviousRedoOp = "1c00") Or $redo_operation_hex = "0900" Or $redo_operation_hex = "0b00" Or $redo_operation_hex = "0c00" Or $redo_operation_hex = "0d00" Or $redo_operation_hex = "1100" Or $redo_operation_hex = "1300" Or $redo_operation_hex = "1c00" Then
@@ -827,8 +836,8 @@ Else
 	$PredictedRefNumber = -1 ;Not related to any particular MFT ref
 EndIf
 ;if $redo_operation_hex="1b00" Then
-;	MsgBox(0,"lsn: " & $this_lsn,"Ref: " & ((Dec($target_vcn,2)*$BytesPerCluster)/1024)+((Dec($MftClusterIndex,2)*512)/1024))
-;	$PredictedRefNumber = ((Dec($target_vcn,2)*$BytesPerCluster)/1024)+((Dec($MftClusterIndex,2)*512)/1024)
+;	MsgBox(0,"lsn: " & $this_lsn,"Ref: " & ((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size))
+;	$PredictedRefNumber = ((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size)
 ;EndIf
 #cs
 If $redo_operation_hex="1500" or $redo_operation_hex="1600" Then
@@ -848,7 +857,7 @@ EndIf
 If $VerboseOn Then
 ;If Dec($client_undo_next_lsn) <> $client_previous_lsn Then
 ;If $redo_operation_hex="1b00" Then
-	ConsoleWrite("Calculated RefNumber: " & ((Dec($target_vcn,2)*$BytesPerCluster)/1024)+((Dec($MftClusterIndex,2)*512)/1024) & @CRLF)
+	ConsoleWrite("Calculated RefNumber: " & ((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size) & @CRLF)
 	ConsoleWrite("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
 	ConsoleWrite("$KeptRef: " & $KeptRef & @CRLF)
 	ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
@@ -877,7 +886,7 @@ If $VerboseOn Then
 	ConsoleWrite("$target_lcn: 0x" & $target_lcn & @CRLF)
 	ConsoleWrite(@CRLF)
 EndIf
-;If $undo_operation_hex="0100" And (((Dec($target_vcn,2)*$BytesPerCluster)/1024)+((Dec($MftClusterIndex,2)*512)/1024) <> 0) Then MsgBox(0,"Info","Check CompensationlogRecord")
+;If $undo_operation_hex="0100" And (((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size) <> 0) Then MsgBox(0,"Info","Check CompensationlogRecord")
 ;ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
 If $redo_length > 0 Then
@@ -1194,10 +1203,10 @@ If $undo_length > 0 Then ; Not needed I guess
 Else
 	$UndoChunkSize = 0
 EndIf
-If $VerboseOn Then
-	_ArrayDisplay($AttrArray,"$AttrArray")
-	MsgBox(0,"Info","Read output")
-EndIf
+;If $VerboseOn Then
+;	_ArrayDisplay($AttrArray,"$AttrArray")
+;	MsgBox(0,"Info","Read output")
+;EndIf
 If $SI_USN = $PreviousUsn And $SI_USN <> "" Then
 ;	MsgBox(0,"Usn:","$PreviousUsn: " & $PreviousUsn & ", $PreviousUsnFileName: " & $PreviousUsnFileName)
 	$FN_Name = $PreviousUsnFileName
@@ -1532,13 +1541,6 @@ Func _ParserCodeOldVersion($MFTEntry)
 	$HDR_BaseRecSeqNo = Dec(_SwapEndian($HDR_BaseRecSeqNo),2)
 	$HDR_NextAttribID = StringMid($MFTEntry, 81, 4)
 	$HDR_NextAttribID = "0x"&_SwapEndian($HDR_NextAttribID)
-	If $UpdSeqArrOffset = 48 Then
-		$HDR_MFTREcordNumber = StringMid($MFTEntry, 89, 8)
-		$HDR_MFTREcordNumber = Dec(_SwapEndian($HDR_MFTREcordNumber),2)
-		If $HDR_MFTREcordNumber <> $PredictedRefNumber Then MsgBox(0,"Error","Predicted Reference number do not match Reference found in $MFT. Are you sure your SectorsPerCluster configuration is correct?")
-	Else
-		$HDR_MFTREcordNumber = "NT style"
-	EndIf
 	If $VerboseOn Then
 		ConsoleWrite("------------ MFT record decode --------------" & @CRLF)
 		ConsoleWrite("$HDR_LSN: " & $HDR_LSN & @CRLF)
@@ -1551,6 +1553,15 @@ Func _ParserCodeOldVersion($MFTEntry)
 		ConsoleWrite("$HDR_BaseRecord: " & $HDR_BaseRecord & @CRLF)
 		ConsoleWrite("$HDR_BaseRecSeqNo: " & $HDR_BaseRecSeqNo & @CRLF)
 		ConsoleWrite("$HDR_NextAttribID: " & $HDR_NextAttribID & @CRLF)
+	EndIf
+	If $UpdSeqArrOffset = 48 Then
+		$HDR_MFTREcordNumber = StringMid($MFTEntry, 89, 8)
+		$HDR_MFTREcordNumber = Dec(_SwapEndian($HDR_MFTREcordNumber),2)
+		If $HDR_MFTREcordNumber <> $PredictedRefNumber And $redo_length > 24 And $undo_operation <> "CompensationlogRecord" Then MsgBox(0,"Error with LSN " & $this_lsn,"Predicted Reference number " & $PredictedRefNumber & " do not match Reference found in $MFT " & $HDR_MFTREcordNumber & ". Are you sure your SectorsPerCluster or MFT Record size configuration is correct?")
+	Else
+		$HDR_MFTREcordNumber = "NT style"
+	EndIf
+	If $VerboseOn Then
 		ConsoleWrite("$HDR_MFTREcordNumber: " & $HDR_MFTREcordNumber & @CRLF)
 	EndIf
 	$NextAttributeOffset = (Dec(StringMid($MFTEntry, 41, 2)) * 2)+1
@@ -3336,11 +3347,11 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 EndFunc
 
 Func _WriteOut_MFTrecord($MFTref, $content)
-	Local $SectorSize = 1024, $nBytes = "", $Counter = 1, $rBuffer, $hFileOut, $OutFile, $Written, $Written2
-	If Mod(StringLen($content)/2,1024) Then
+	Local $nBytes = "", $Counter = 1, $rBuffer, $hFileOut, $OutFile, $Written, $Written2
+	If Mod(StringLen($content)/2,$MFT_Record_Size) Then
 		Do
 			$content &= "00"
-		Until Mod(StringLen($content)/2,1024)=0
+		Until Mod(StringLen($content)/2,$MFT_Record_Size)=0
 	EndIf
 ;Writing 1 file for each found MFT record
 #cs
@@ -3371,9 +3382,9 @@ Func _WriteOut_MFTrecord($MFTref, $content)
 	_WinAPI_CloseHandle($hFileOut)
 #ce
 ; Writing each record into 1 dummy $MFT with all found records
-	$rBuffer = DllStructCreate("byte ["&$SectorSize&"]")
-	DllStructSetData($tBuffer,1,"0x"&$content)
-	$Written2 = _WinAPI_WriteFile($hOutFileMFT, DllStructGetPtr($tBuffer), $SectorSize, $nBytes2)
+	$rBuffer = DllStructCreate("byte ["&$MFT_Record_Size&"]")
+	DllStructSetData($rBuffer,1,"0x"&$content)
+	$Written2 = _WinAPI_WriteFile($hOutFileMFT, DllStructGetPtr($rBuffer), DllStructGetSize($rBuffer), $nBytes2)
 	If $Written2 = 0 Then
 		ConsoleWrite("Error: WriteFile returned: " & _WinAPI_GetLastErrorMessage() & @CRLF)
 	EndIf
@@ -4307,6 +4318,8 @@ Func _ClearVar()
 	$UndoChunkSize=""
 	$CurrentTimestamp=""
 	$RealMftRef=""
+	$undo_length=""
+	$redo_length=""
 	If $DoSplitCsv Then
 		$SI_CTime_Core = ""
 		$SI_ATime_Core = ""

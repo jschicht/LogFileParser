@@ -10,6 +10,7 @@ Choose region adjustment for timestamps. Default is UTC 0.0.
 Choose separator.
 Configurable UNICODE or ANSI output.
 Optionally decode $UsnJrnl (deactivated - no longer needed).
+Configurable MFT record size (1024 or 4096).
 
 Background
 NTFS is designed as a recoverable filesystem. This done through logging of all transactions that alters volume structure. So any change to a file on the volume will require something to be logged to the $LogFile too, so that it can be reversed in case of system failure at any time. Therefore a lot of information is written to this file, and since it is circular, it means new transactions are overwriting older records in the file. Thus it is somewhat limited how much historical data can be retrieved from this file. Again, that would depend on the type of volume, and the size of the $LogFile. On the systemdrive of a frequently used system, you will likely only get a few hours of history, whereas an external/secondary disk with backup files on, would likely contain more historical information. And a 2MB file will contain far less history than a 256MB one. So in what size range can this file be configured to? Anything from 256 KB and up. Configure the size to 2 GB can be done like this, "chkdsk D: /L:2097152". How a large sized logfile impacts on performance is beyond the scope of this text. Setting it lower than 2048 is normally not possible. However it is possble by patching untfs.dll: http://code.google.com/p/mft2csv/wiki/Tiny_NTFS
