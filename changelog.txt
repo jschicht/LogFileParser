@@ -1,5 +1,7 @@
 LogFileParser Changelog
 
+v1.0.0.21. Added TRANSACTED_CHANGE as reason code 0x00400000 (winioctl.h). Reorganized the concat of reason codes to make it easier reading.
+
 v1.0.0.20. Added support for MFT record size of 4096 bytes.
 
 v1.0.0.19. Fixed a unicode related bug that caused the last character to be incorrect when that character was of 2 bytes.
