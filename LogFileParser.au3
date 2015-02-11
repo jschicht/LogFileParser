@@ -1,7 +1,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.21
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.22
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #Obfuscator_Parameters=/cn 0
@@ -15,7 +15,7 @@
 #include <SQLite.dll.au3>
 #include <File.au3>
 
-Global $VerboseOn = 0, $CharReplacement=":", $de="|", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=False, $debuglogfile, $csvextra, $CurrentTimestamp, $EncodingWhenOpen=2, $ReconstructDone=False
+Global $VerboseOn = 0, $CharReplacement=":", $de="|", $PrecisionSeparator=".", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=False, $debuglogfile, $csvextra, $CurrentTimestamp, $EncodingWhenOpen=2, $ReconstructDone=False
 Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef
 Global $ProgressLogFile, $ProgressReconstruct, $CurrentProgress=-1, $ProgressStatus, $ProgressUsnJrnl, $ProgressSize
 Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,$LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile
@@ -67,7 +67,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("LogFile Parser 1.0.0.21", 540, 460, -1, -1)
+$Form = GUICreate("LogFile Parser 1.0.0.22", 540, 460, -1, -1)
 
 $LabelLogFile = GUICtrlCreateLabel("$LogFile:",20,10,80,20)
 $LogFileField = GUICtrlCreateInput("manadatory",70,10,350,20)
@@ -91,7 +91,10 @@ $LabelTimestampPrecision = GUICtrlCreateLabel("Precision:",150,85,50,20)
 $ComboTimestampPrecision = GUICtrlCreateCombo("", 200, 85, 70, 25)
 $CheckCsvSplit = GUICtrlCreateCheckbox("split csv", 280, 85, 60, 20)
 GUICtrlSetState($CheckCsvSplit, $GUI_UNCHECKED)
-$InputExampleTimestamp = GUICtrlCreateInput("",340,85,190,20)
+$LabelPrecisionSeparator = GUICtrlCreateLabel("Precision separator:",350,85,100,20)
+$PrecisionSeparatorInput = GUICtrlCreateInput($PrecisionSeparator,450,85,20,20)
+
+$InputExampleTimestamp = GUICtrlCreateInput("",340,110,190,20)
 GUICtrlSetState($InputExampleTimestamp, $GUI_DISABLE)
 
 $Label1 = GUICtrlCreateLabel("Set decoded timestamps to specific region:",20,110,230,20)
@@ -121,6 +124,7 @@ _GUICtrlEdit_SetLimitText($myctredit, 128000)
 _InjectTimeZoneInfo()
 _InjectTimestampFormat()
 _InjectTimestampPrecision()
+$PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
 _TranslateTimestamp()
 
 GUISetState(@SW_SHOW)
@@ -129,6 +133,7 @@ While 1
 	$nMsg = GUIGetMsg()
 	Sleep(100)
 	_TranslateSeparator()
+	$PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
 	_TranslateTimestamp()
 	Select
 		Case $nMsg = $ButtonLogFile
@@ -205,6 +210,15 @@ $tDelta = $tDelta*-1 ;Since delta is substracted from timestamp later on
 _PrepareOutput()
 _WriteCSVHeader()
 If $DoSplitCsv Then _WriteCSVExtraHeader()
+
+If StringLen(GUICtrlRead($PrecisionSeparatorInput)) <> 1 Then
+	_DisplayInfo("Error: Precision separator not set properly" & @crlf)
+	_DebugOut("Error: Precision separator not set properly: " & GUICtrlRead($PrecisionSeparatorInput))
+	Return
+Else
+	$PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
+	_DebugOut("Using precision separator: " & $PrecisionSeparator)
+EndIf
 
 _DebugOut("Timestamps presented in UTC: " & $UTCconfig)
 _DebugOut("Sectors per cluster: " & $SectorsPerCluster)
@@ -1986,7 +2000,8 @@ Func _WinTime_FormatTime($iYear,$iMonth,$iDay,$iHour,$iMin,$iSec,$iMilSec,$iDayO
 		$sDateTimeStr&=$iYear&' '&$sHH&':'&$sMin
 		If $iPrecision Then
 			$sDateTimeStr&=':'&$sSS
-			If $iPrecision>1 Then $sDateTimeStr&=':'&$sMS
+;			If $iPrecision>1 Then $sDateTimeStr&=':'&$sMS
+			If $iPrecision>1 Then $sDateTimeStr&=$PrecisionSeparator&$sMS
 		EndIf
 		$sDateTimeStr&=$sAMPM
 	EndIf

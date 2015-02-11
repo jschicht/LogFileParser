@@ -5,7 +5,7 @@ Optionally resolve all datarun list information available in $LogFile.
 Configurable verbose mode (does not affect logging).
 Logs to csv and imports to sqlite database with several tables.
 Optionally import csv output of mft2csv into db.
-Choose timestamp format and precision.
+Choose timestamp format, precision and millisec/precision separator.
 Choose region adjustment for timestamps. Default is UTC 0.0.
 Choose separator.
 Configurable UNICODE or ANSI output.
