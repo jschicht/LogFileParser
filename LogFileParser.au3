@@ -1,10 +1,9 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.22
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.0
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
-#Obfuscator_Parameters=/cn 0
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 
 #include <GuiEdit.au3>
@@ -14,11 +13,13 @@
 #include <SQLite.au3>
 #include <SQLite.dll.au3>
 #include <File.au3>
+#include <Math.au3>
+#include "SecureConstants.au3"
 
 Global $VerboseOn = 0, $CharReplacement=":", $de="|", $PrecisionSeparator=".", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=False, $debuglogfile, $csvextra, $CurrentTimestamp, $EncodingWhenOpen=2, $ReconstructDone=False
-Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef
+Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef, $FromRcrdSlack, $IncompleteTransaction
 Global $ProgressLogFile, $ProgressReconstruct, $CurrentProgress=-1, $ProgressStatus, $ProgressUsnJrnl, $ProgressSize
-Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,$LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile
+Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $SectorSize=512, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,$LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile
 Global $RecordOffset, $PredictedRefNumber, $this_lsn, $client_previous_lsn, $redo_operation, $undo_operation, $record_offset_in_mft, $attribute_offset, $hOutFileMFT, $tBuffer, $nBytes2, $HDR_BaseRecord, $FilePath
 Global $nBytes, $rFile, $IRArr[12][2], $RPArr[11][2], $LUSArr[3][2],$EAInfoArr[5][2],$EAArr[8][2], $DataRunArr[2][18], $NewDataRunArr[1][18], $RowsProcessed, $MaxRows, $hQuery, $aRow, $aRow2, $iRows, $iColumns, $aRes, $sOutputFile
 Global $RSTRsig = "52535452", $RCRDsig = "52435244", $BAADsig = "44414142", $CHKDsig = "444b4843", $Emptysig = "ffffffff"
@@ -32,7 +33,16 @@ Global $DT_NonResidentFlag, $DT_Flags, $DT_ComprUnitSize, $DT_RealSize, $DT_Data
 Global $FN_CTime_Core,$FN_CTime_Precision,$FN_ATime_Core,$FN_ATime_Precision,$FN_MTime_Core,$FN_MTime_Precision,$FN_RTime_Core,$FN_RTime_Precision
 Global $SI_CTime_Core,$SI_CTime_Precision,$SI_ATime_Core,$SI_ATime_Precision,$SI_MTime_Core,$SI_MTime_Precision,$SI_RTime_Core,$SI_RTime_Precision
 ;Global $GlobalCounter = 1,$AttrArray[$GlobalCounter][2]
-
+Global $SDHArray[1][1],$SIIArray[1][1],$de2=":",$LogFileSecureSDSCsv,$LogFileSecureSDHCsv,$LogFileSecureSIICsv,$LogFileSecureSDSCsvFile,$LogFileSecureSDHCsvFile,$LogFileSecureSIICsvFile
+Global $TargetSDSOffsetHex,$SecurityDescriptorHash,$SecurityId,$ControlText,$SidOwner,$SidGroup
+Global $SAclRevision,$SAceCount,$SAceTypeText,$SAceFlagsText,$SAceMask,$SAceObjectType,$SAceInheritedObjectType,$SAceSIDString,$SAceObjectFlagsText
+Global $DAclRevision,$DAceCount,$DAceTypeText,$DAceFlagsText,$DAceMask,$DAceObjectType,$DAceInheritedObjectType,$DAceSIDString,$DAceObjectFlagsText
+Global $OpenAttributesArray[1][13],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray[1][10],$lsn_openattributestable=0,$FileOutputTesterArray[18],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][13],$SlackAttributeNamesDumpArray[1][4]
+Global $LogFileOpenAttributeTableCsv,$LogFileOpenAttributeTableCsvFile,$LogFileDirtyPageTableCsv,$LogFileDirtyPageTableCsvFile,$LogFileBitsInNonresidentBitMapCsv,$LogFileBitsInNonresidentBitMapCsvFile,$LogFileTransactionTableCsv,$LogFileTransactionTableCsvFile
+Global $LogFileReparseRCsv,$LogFileQuotaQCsv,$LogFileQuotaOCsv,$LogFileObjIdOCsv,$LogFileReparseRCsvFile,$LogFileQuotaQCsvFile,$LogFileQuotaOCsvFile,$LogFileObjIdOCsvFile,$LogFileRCRDCsv,$LogFileRCRDCsvFile
+Global $client_index,$record_type,$transaction_id,$lf_flags,$target_attribute,$lcns_to_follow,$record_offset_in_mft,$attribute_offset,$MftClusterIndex,$target_vcn,$target_lcn,$InOpenAttributeTable=-1,$LsnValidationLevel
+Global $LogFileTransactionHeaderCsv,$LogFileTransactionHeaderCsvFile,$LogFileSlackOpenAttributeTableCsv,$LogFileSlackOpenAttributeTableCsvFile,$LogFileSlackAttributeNamesDumpCsv,$LogFileSlackAttributeNamesDumpCsvFile
+Global $GlobalDataKeepCounter=0,$GlobalRecordSpreadCounter=0,$GlobalRecordSpreadReset=0,$GlobalRecordSpreadReset2=0,$DoRebuildBrokenHeader=False,$MinSizeBrokenTransaction = 80
 Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $DataQ[1], $AttrQ[1], $BytesPerCluster
 Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
@@ -67,21 +77,30 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("LogFile Parser 1.0.0.22", 540, 460, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.0", 540, 480, -1, -1)
+
+$Menu_help = GUICtrlCreateMenu("&Help")
+;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
+$Menu_Donate = GUICtrlCreateMenuItem("&Donate", $Menu_Help)
+$Menu_GetHelp = GUICtrlCreateMenuItem("&Help", $Menu_Help)
 
 $LabelLogFile = GUICtrlCreateLabel("$LogFile:",20,10,80,20)
-$LogFileField = GUICtrlCreateInput("manadatory",70,10,350,20)
+$LogFileField = GUICtrlCreateInput("mandatory (unless fragment)",70,10,350,20)
 GUICtrlSetState($LogFileField, $GUI_DISABLE)
 $ButtonLogFile = GUICtrlCreateButton("Select $LogFile", 430, 10, 100, 20)
 
-$LabelUsnJrnl = GUICtrlCreateLabel("$UsnJrnl:",20,35,80,20)
-$UsnJrnlField = GUICtrlCreateInput("No longer needed",70,35,350,20)
-GUICtrlSetState($UsnJrnlField, $GUI_DISABLE)
-$ButtonUsnJrnl = GUICtrlCreateButton("Select $UsnJrnl", 430, 35, 100, 20)
-GUICtrlSetState($ButtonUsnJrnl, $GUI_DISABLE)
+;$LabelUsnJrnl = GUICtrlCreateLabel("$UsnJrnl:",20,35,80,20)
+;$UsnJrnlField = GUICtrlCreateInput("No longer needed",70,35,350,20)
+;GUICtrlSetState($UsnJrnlField, $GUI_DISABLE)
+;$ButtonUsnJrnl = GUICtrlCreateButton("Select $UsnJrnl", 430, 35, 100, 20)
+;GUICtrlSetState($ButtonUsnJrnl, $GUI_DISABLE)
+$LabelFragment = GUICtrlCreateLabel("Fragment:",20,35,80,20)
+$FragmentField = GUICtrlCreateInput("Broken transaction fragment (optional, not yet activated)",70,35,350,20)
+GUICtrlSetState($FragmentField, $GUI_DISABLE)
+$ButtonFragment = GUICtrlCreateButton("Select fragment", 430, 35, 100, 20)
 
 $LabelMFT = GUICtrlCreateLabel("MFT:",20,60,80,20)
-$MFTField = GUICtrlCreateInput("optional (output of latest mft2csv)",70,60,350,20)
+$MFTField = GUICtrlCreateInput("Output of latest mft2csv (optional)",70,60,350,20)
 GUICtrlSetState($MFTField, $GUI_DISABLE)
 $ButtonMFT = GUICtrlCreateButton("Get MFT csv", 430, 60, 100, 20)
 
@@ -105,19 +124,27 @@ $SaparatorInput = GUICtrlCreateInput($de,90,135,20,20)
 $SaparatorInput2 = GUICtrlCreateInput($de,120,135,30,20)
 GUICtrlSetState($SaparatorInput2, $GUI_DISABLE)
 
-$CheckReconstruct = GUICtrlCreateCheckbox("Reconstruct data runs", 280, 135, 150, 20)
-GUICtrlSetState($CheckReconstruct, $GUI_UNCHECKED)
-
-$CheckUnicode = GUICtrlCreateCheckbox("Unicode", 200, 135, 70, 20)
+$CheckUnicode = GUICtrlCreateCheckbox("Unicode", 160, 135, 60, 20)
 GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
 
+$CheckReconstruct = GUICtrlCreateCheckbox("Reconstruct data runs", 220, 135, 120, 20)
+GUICtrlSetState($CheckReconstruct, $GUI_UNCHECKED)
+
+$CheckBrokenHeaderRebuild = GUICtrlCreateCheckbox("Rebuild header", 350, 135, 90, 20)
+GUICtrlSetState($CheckBrokenHeaderRebuild, $GUI_UNCHECKED)
+
 $Label2 = GUICtrlCreateLabel("Sectors per cluster:",20,170,100,20)
-$InputSectorPerCluster = GUICtrlCreateInput("8",120,170,40,20)
+$InputSectorPerCluster = GUICtrlCreateInput("8",120,170,30,20)
 
-$Label3 = GUICtrlCreateLabel("MFT record size:",200,170,90,20)
-$InputMFTRecordSize = GUICtrlCreateInput("1024",290,170,40,20)
+$Label3 = GUICtrlCreateLabel("MFT record size:",170,170,80,20)
+$InputMFTRecordSize = GUICtrlCreateInput("1024",260,170,40,20)
 
-$ButtonStart = GUICtrlCreateButton("Start", 430, 155, 100, 30)
+$Label4 = GUICtrlCreateLabel("LSN error level:",310,170,80,20)
+$InputErrorLevel = GUICtrlCreateInput("0.1",400,170,40,20)
+$InputErrorLevelTranslated = GUICtrlCreateInput("",450,170,80,20)
+GUICtrlSetState($InputErrorLevelTranslated, $GUI_DISABLE)
+
+$ButtonStart = GUICtrlCreateButton("Start", 450, 135, 80, 30)
 $myctredit = GUICtrlCreateEdit("", 0, 190, 540, 90, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
 _GUICtrlEdit_SetLimitText($myctredit, 128000)
 
@@ -126,32 +153,42 @@ _InjectTimestampFormat()
 _InjectTimestampPrecision()
 $PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
 _TranslateTimestamp()
+_TranslateErrorLevel()
 
 GUISetState(@SW_SHOW)
 
 While 1
 	$nMsg = GUIGetMsg()
-	Sleep(100)
+	Sleep(50)
 	_TranslateSeparator()
 	$PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
 	_TranslateTimestamp()
-	Select
-		Case $nMsg = $ButtonLogFile
+	_TranslateErrorLevel()
+	Switch $nMsg
+;		Case $Menu_Documentation
+;			ShellExecute("https://github.com/jschicht/LogFileParser")
+		Case $Menu_Donate
+			ShellExecute("https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=joakim%2eschicht%40gmail%2ecom&bn=PP%2dDonationsBF%3abtn_donateCC_LG%2egif%3aNonHostedGuest")
+		Case $Menu_GetHelp
+			ShellExecute("mailto:joakim%2eschicht%40gmail%2ecom")
+		Case $ButtonLogFile
 			_SelectLogFile()
-		Case $nMsg = $ButtonMFT
+		Case $ButtonMFT
 			_SelectMftCsv()
-		Case $nMsg = $ButtonUsnJrnl
-			_SelectUsnJrnl()
-		Case $nMsg = $ButtonStart
+;		Case $ButtonUsnJrnl
+;			_SelectUsnJrnl()
+		Case $ButtonFragment
+			_SelectFragment()
+		Case $ButtonStart
 			_Main()
-		Case $nMsg = $GUI_EVENT_CLOSE
+		Case $GUI_EVENT_CLOSE
 			Exit
-	EndSelect
+	EndSwitch
 WEnd
 
 Func _Main()
 Global $DataRunArr[2][18], $NewDataRunArr[1][18]
-Global $GlobalCounter = 1,$AttrArray[$GlobalCounter][2], $DoReconstructDataRuns=False
+Global $GlobalCounter = 1,$AttrArray[$GlobalCounter][2], $DoReconstructDataRuns=False, $DoRebuildBrokenHeader=False
 GUICtrlSetData($ProgressLogFile, 0)
 GUICtrlSetData($ProgressUsnJrnl, 0)
 GUICtrlSetData($ProgressReconstruct, 0)
@@ -195,6 +232,10 @@ If GUICtrlRead($CheckReconstruct) = 1 Then
 	EndIf
 EndIf
 
+If GUICtrlRead($CheckBrokenHeaderRebuild) = 1 Then
+	$DoRebuildBrokenHeader = True
+EndIf
+
 If $TargetMftCsvFile And FileGetEncoding($TargetMftCsvFile,2)>0 Then
 	MsgBox(0,"Warning","Skipping import of $MFT csv because it is unicode")
 	$TargetMftCsvFile = ""
@@ -207,9 +248,60 @@ If @error Then
 	Return
 EndIf
 $tDelta = $tDelta*-1 ;Since delta is substracted from timestamp later on
+
+If $LsnValidationLevel = 0 Then
+	_DisplayInfo("Error: LsnValidationLevel: " & $LsnValidationLevel & @CRLF)
+	Return
+EndIf
+
 _PrepareOutput()
+;Put output filenames into an array
+$FileOutputTesterArray[0] = $LogFileCsvFile
+$FileOutputTesterArray[1] = $LogFileIndxCsvFile
+$FileOutputTesterArray[2] = $LogFileDataRunsCsvFile
+$FileOutputTesterArray[3] = $LogFileSecureSDSCsvFile
+$FileOutputTesterArray[4] = $LogFileSecureSDHCsvFile
+$FileOutputTesterArray[5] = $LogFileSecureSIICsvFile
+$FileOutputTesterArray[6] = $LogFileOpenAttributeTableCsvFile
+$FileOutputTesterArray[7] = $LogFileDirtyPageTableCsvFile
+$FileOutputTesterArray[8] = $LogFileBitsInNonresidentBitMapCsvFile
+$FileOutputTesterArray[9] = $LogFileUsnJrnlCsv
+$FileOutputTesterArray[10] = $LogFileReparseRCsvFile
+$FileOutputTesterArray[11] = $LogFileQuotaQCsvFile
+$FileOutputTesterArray[12] = $LogFileQuotaOCsvFile
+$FileOutputTesterArray[13] = $LogFileObjIdOCsvFile
+$FileOutputTesterArray[14] = $LogFileTransactionTableCsvFile
+$FileOutputTesterArray[15] = $LogFileRCRDCsvFile
+$FileOutputTesterArray[16] = $LogFileSlackOpenAttributeTableCsvFile
+$FileOutputTesterArray[17] = $LogFileSlackAttributeNamesDumpCsvFile
+
 _WriteCSVHeader()
 If $DoSplitCsv Then _WriteCSVExtraHeader()
+
+;Secure headers
+_WriteCSVHeaderSecureSDS()
+_WriteCSVHeaderSecureSDH()
+_WriteCSVHeaderSecureSII()
+
+;Various csv headers
+_WriteCSVHeaderOpenAttributeTable()
+_WriteCSVHeaderDirtyPageTable()
+_WriteCSVHeaderBitsInNonresidentBitMap()
+_WriteCSVHeaderReparseR()
+_WriteCSVHeaderQuotaQ()
+_WriteCSVHeaderQuotaO()
+_WriteCSVHeaderObjIdO()
+_WriteCSVHeaderTransactionTable()
+_WriteCSVHeaderRCRD()
+_WriteCSVHeaderTransactionHeader()
+_WriteCSVHeaderSlackOpenAttributeTable()
+_WriteCSVHeaderSlackAttributeNamesDump()
+
+$FileNamesArray[0][0] = "Ref"
+$FileNamesArray[0][1] = "FileName"
+$FileNamesArray[0][2] = "LSN"
+
+_DebugOut("Using $LogFile: " & $InputLogFile)
 
 If StringLen(GUICtrlRead($PrecisionSeparatorInput)) <> 1 Then
 	_DisplayInfo("Error: Precision separator not set properly" & @crlf)
@@ -220,22 +312,26 @@ Else
 	_DebugOut("Using precision separator: " & $PrecisionSeparator)
 EndIf
 
+_DebugOut("LSN Validation level: " & $LsnValidationLevel & " (" & $LsnValidationLevel*100 & " %)")
 _DebugOut("Timestamps presented in UTC: " & $UTCconfig)
 _DebugOut("Sectors per cluster: " & $SectorsPerCluster)
 _DebugOut("DataRun reconstruct configuration: " & $DoReconstructDataRuns)
+_DebugOut("Rebuild broken header for transactions found in slack: " & $DoRebuildBrokenHeader)
 
 $tBuffer = DllStructCreate("byte[" & $Record_Size & "]")
+$tBuffer2 = DllStructCreate("byte[" & $SectorSize & "]")
 $hFile = _WinAPI_CreateFile("\\.\" & $InputLogFile,2,2,7)
 If $hFile = 0 Then
 	_DebugOut("Error: Creating handle on $LogFile: " & _WinAPI_GetLastErrorMessage())
 	Exit
 EndIf
 
-_DebugOut("Using $LogFile: " & $InputLogFile)
+
 If FileExists($UsnJrnlFile) Then _DebugOut("Using $UsnJrnl: " & $UsnJrnlFile)
 If $TargetMftCsvFile Then _DebugOut("Using MFT csv: " & $TargetMftCsvFile)
 _DebugOut("Using DateTime format: " & $DateTimeFormat)
 _DebugOut("Using timestamp precision: " & $TimestampPrecision)
+_DebugOut("------------------- END CONFIGURATION -----------------------")
 
 $Progress = GUICtrlCreateLabel("Decoding $LogFile info and writing to csv", 10, 280,540,20)
 GUICtrlSetFont($Progress, 12)
@@ -251,6 +347,9 @@ $MaxRecords = Ceiling($InputFileSize/$Record_Size)
 $RCRDRecord=""
 $ConcatenatedRCRD=""
 $DataUnprocessed = ""
+$PreviousRcrdLsn = 0
+$PreviousRcrdPosition = 0
+$NextRecordChunk=""
 
 For $i = 0 To $MaxRecords-1
 	$CurrentRecord=$i
@@ -259,6 +358,7 @@ For $i = 0 To $MaxRecords-1
 	$LogFileRecord = DllStructGetData($tBuffer, 1)
 	$CurrentFileOffset = DllCall('kernel32.dll', 'int', 'SetFilePointerEx', 'ptr', $hFile, 'int64', 0, 'int64*', 0, 'dword', 1)
 	$CurrentFileOffset = $CurrentFileOffset[3]-$Record_Size
+
 	$Magic = StringMid($LogFileRecord,3,8)
 	If $Magic = $RCRDsig Then
 		$RCRDRecord = _DoFixup($LogFileRecord)
@@ -267,19 +367,96 @@ For $i = 0 To $MaxRecords-1
 			$Remainder = ""
 			ContinueLoop
 		EndIf
+
 		$last_lsn = StringMid($RCRDRecord,19,16)
+		$last_lsn = Dec(_SwapEndian($last_lsn),2)
+		$page_flags = "0x" & _SwapEndian(StringMid($RCRDRecord,35,8))
 		$page_count = Dec(_SwapEndian(StringMid($RCRDRecord,43,4)),2)
 		$page_position = Dec(_SwapEndian(StringMid($RCRDRecord,47,4)),2)
-		$next_record_offset = StringMid($RCRDRecord,51,4)
+		$next_record_offset = "0x" & _SwapEndian(StringMid($RCRDRecord,51,4))
+		$page_unknown = "0x" & _SwapEndian(StringMid($RCRDRecord,55,12))
 		$last_end_lsn = StringMid($RCRDRecord,67,16)
+		$last_end_lsn = Dec(_SwapEndian($last_end_lsn),2)
+
+		;Start - Get values from next record
+		If $i < $MaxRecords-1 Then
+			_WinAPI_SetFilePointerEx($hFile, ($i+1)*$Record_Size, $FILE_BEGIN)
+			_WinAPI_ReadFile($hFile, DllStructGetPtr($tBuffer2), $SectorSize, $nBytes)
+			$NextRecordChunk = DllStructGetData($tBuffer2, 1)
+			If StringMid($NextRecordChunk,3,8) = $RCRDsig Then
+				$next_last_lsn = StringMid($NextRecordChunk,19,16)
+				$next_last_lsn = Dec(_SwapEndian($next_last_lsn),2)
+				$next_page_flags = "0x" & _SwapEndian(StringMid($NextRecordChunk,35,8))
+				$next_page_count = Dec(_SwapEndian(StringMid($NextRecordChunk,43,4)),2)
+				$next_page_position = Dec(_SwapEndian(StringMid($NextRecordChunk,47,4)),2)
+				$next_next_record_offset = "0x" & _SwapEndian(StringMid($NextRecordChunk,51,4))
+				$next_page_unknown = "0x" & _SwapEndian(StringMid($NextRecordChunk,55,12))
+				$next_last_end_lsn = StringMid($NextRecordChunk,67,16)
+				$next_last_end_lsn = Dec(_SwapEndian($next_last_end_lsn),2)
+			Else
+				;
+			EndIf
+		EndIf
+		;End - Get values from next record
+
+		$RulesString=""
+		;Rules that determine if data flow will continue into next record
+		$rule1 = ($last_lsn = $last_end_lsn)
+		If $rule1 Then $RulesString&="rule1;"
+		$rule2 = ($last_lsn > $next_last_lsn)
+		If $rule2 Then $RulesString&="rule2;"
+		$rule3 = ($last_end_lsn > $next_last_end_lsn And $next_last_end_lsn <> 0)
+		If $rule3 Then $RulesString&="rule3;"
+;		$rule4 = ($last_lsn = $next_last_lsn And $last_end_lsn <> 0 And $next_last_end_lsn <> 0 And $last_end_lsn > $next_last_end_lsn)
+;		If $rule4 Then $RulesString&="rule4;"
+		$rule5 = ($page_count - $page_position = 0) And ($next_page_position > 1)
+		If $rule5 Then $RulesString&="rule5;"
+		$rule6 = ($page_count - $page_position <> 0) And ($next_page_position - $page_position <> 1)
+		If $rule6 Then $RulesString&="rule6;"
+		$rule7 = ($page_count - $page_position <> 0) And ($next_page_position - $page_position = 0) And ($page_count <> $next_page_count)
+		If $rule7 Then $RulesString&="rule7;"
+;		If ($last_lsn = $last_end_lsn) Or ($last_lsn > $next_last_lsn) Or ($last_end_lsn > $next_last_end_lsn And $next_last_end_lsn <> 0) Or (($page_count - $page_position = 0) And ($next_page_position > 1)) Or (($page_count - $page_position <> 0) And ($next_page_position - $page_position <> 1)) Or (($page_count - $page_position <> 0) And ($next_page_position - $page_position = 0) And ($page_count <> $next_page_count)) Then
+		If $rule1 Or $rule2 Or $rule3 Or $rule5 Or $rule6 Or $rule7 Then
+			$NoMoreData=1
+		Else
+			$NoMoreData=0
+		EndIf
+
+		If $i = $MaxRecords-1 Then $NoMoreData=1
+
 		$RCRDHeader = StringMid($RCRDRecord,1,130)
 		$RCRDRecord = $RCRDHeader&$Remainder&StringMid($RCRDRecord,131)
-		$DataUnprocessed = _DecodeRCRD($RCRDRecord, $CurrentFileOffset, StringLen($Remainder))
-		If ($last_lsn = $last_end_lsn) Or ($i < 4) Then
+		$DataUnprocessed = _DecodeRCRD($RCRDRecord, $CurrentFileOffset, StringLen($Remainder), $NoMoreData)
+
+		If $NoMoreData Then
 			$Remainder = ""
+			$GlobalDataKeepCounter=0
+;			If Not ($last_lsn = $last_end_lsn) Then _DumpOutput("------------- Skipping returned data -----------------Offset: 0x" & Hex($CurrentFileOffset,8) & @CRLF)
+;			_DumpOutput("------------- Skipping returned data -----------------Offset: 0x" & Hex($CurrentFileOffset,8) & @CRLF)
+;			ConsoleWrite("Offset: 0x" & Hex($CurrentFileOffset,8) & @CRLF)
 		Else
 			$Remainder = $DataUnprocessed
+			$GlobalDataKeepCounter+=1
 		EndIf
+
+		$GlobalRecordSpreadReset2 = $GlobalRecordSpreadReset
+
+		If $last_lsn = $next_last_lsn And $GlobalDataKeepCounter Then
+			$GlobalRecordSpreadCounter += 1
+			$GlobalRecordSpreadReset = 0
+		Else
+			If $GlobalRecordSpreadCounter Then
+				$GlobalRecordSpreadReset = $GlobalRecordSpreadCounter
+				$GlobalRecordSpreadCounter = 0
+			Else
+				$GlobalRecordSpreadReset = 0
+				$GlobalRecordSpreadCounter = 0
+			EndIf
+		EndIf
+
+		FileWriteLine($LogFileRCRDCsv, "0x"&Hex($CurrentFileOffset,8)&$de&$last_lsn&$de&$page_flags&$de&$page_count&$de&$page_position&$de&$next_record_offset&$de&$page_unknown&$de&$last_end_lsn&$de&$GlobalDataKeepCounter&$de&$RulesString&$de&$GlobalRecordSpreadCounter&$de&$GlobalRecordSpreadReset2&@crlf)
+		$PreviousRcrdLsn = $last_lsn
+		$PreviousRcrdPosition = $page_position
 		ContinueLoop
 	ElseIf $Magic = $RSTRsig Then
 		If $VerboseOn Then ConsoleWrite("RSTR record" & @CRLF)
@@ -304,12 +481,39 @@ _WinAPI_CloseHandle($hOutFileMFT)
 _WinAPI_CloseHandle($LogFileCsv)
 _WinAPI_CloseHandle($LogFileIndxCsv)
 _WinAPI_CloseHandle($LogFileDataRunsCsv)
+_WinAPI_CloseHandle($LogFileSecureSDSCsv)
+_WinAPI_CloseHandle($LogFileSecureSDHCsv)
+_WinAPI_CloseHandle($LogFileSecureSIICsv)
+_WinAPI_CloseHandle($LogFileOpenAttributeTableCsv)
+_WinAPI_CloseHandle($LogFileDirtyPageTableCsv)
+_WinAPI_CloseHandle($LogFileBitsInNonresidentBitMapCsv)
+_WinAPI_CloseHandle($UsnJrnlCsv)
+_WinAPI_CloseHandle($LogFileReparseRCsv)
+_WinAPI_CloseHandle($LogFileQuotaQCsv)
+_WinAPI_CloseHandle($LogFileQuotaOCsv)
+_WinAPI_CloseHandle($LogFileObjIdOCsv)
+_WinAPI_CloseHandle($LogFileTransactionTableCsv)
+_WinAPI_CloseHandle($LogFileSlackOpenAttributeTableCsv)
+_WinAPI_CloseHandle($LogFileSlackAttributeNamesDumpCsv)
+
 AdlibUnRegister("_LogFileProgress")
 GUICtrlSetData($ProgressStatus, "Processing LogFile transaction " & $CurrentRecord+1 & " of " & $MaxRecords)
 GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
 GUICtrlSetData($ProgressLogFile, 100 * ($CurrentRecord+1) / $MaxRecords)
 
 _DisplayInfo("$LogFile processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
+_DumpOutput("------------------ END PROCESSING -------------------" & @CRLF)
+_DumpOutput("$LogFile processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
+
+For $FileNumber = 0 To UBound($FileOutputTesterArray)-1
+	If FileExists($FileOutputTesterArray[$FileNumber]) Then
+;		ConsoleWrite("Checking output: " & $FileOutputTesterArray[$FileNumber] & @CRLF)
+		If (_FileCountLines($FileOutputTesterArray[$FileNumber]) < 2) Then
+			FileMove($FileOutputTesterArray[$FileNumber],$FileOutputTesterArray[$FileNumber]&".empty",1)
+			_DumpOutput("Empty output: " & $FileOutputTesterArray[$FileNumber] & " is postfixed with .empty" & @CRLF)
+		EndIf
+	EndIf
+Next
 
 #cs
 ;x64 dll not working properly?
@@ -350,6 +554,7 @@ If GUICtrlRead($CheckUnicode) = 1 Then
 EndIf
 
 ; Create database with tables and import csv
+_DisplayInfo("Importing csv's to db and updating tables." & @CRLF)
 $begin = TimerInit()
 If $DoReconstructDataRuns Then
 	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE DataRuns (lf_Offset TEXT,lf_MFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_FileName TEXT,lf_LSN INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_AttributeOffset INTEGER,lf_SI_USN INTEGER,lf_DataName TEXT,lf_Flags TEXT,lf_NonResident TEXT,lf_CompressionUnitSize TEXT,lf_FileSize INTEGER,lf_InitializedStreamSize INTEGER,lf_OffsetToDataRuns INTEGER,lf_DataRuns TEXT);", $sOutputFile)
@@ -360,7 +565,8 @@ If $DoReconstructDataRuns Then
 	EndIf
 EndIf
 
-$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE LogFile (lf_Offset TEXT,lf_MFTReference INTEGER,lf_RealMFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_LSN INTEGER,lf_LSNPrevious INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_FileName TEXT,lf_CurrentAttribute TEXT,lf_TextInformation TEXT,lf_UsnJrlFileName TEXT,lf_UsnJrlMFTReference INTEGER,lf_UsnJrlMFTParentReference INTEGER,lf_UsnJrlTimestamp TEXT,lf_UsnJrlReason TEXT,lf_UsnJrnlUsn INTEGER,lf_SI_CTime TEXT,lf_SI_ATime TEXT,lf_SI_MTime TEXT,lf_SI_RTime TEXT,lf_SI_FilePermission TEXT,lf_SI_MaxVersions INTEGER,lf_SI_VersionNumber INTEGER,lf_SI_ClassID INTEGER,lf_SI_SecurityID INTEGER,lf_SI_QuotaCharged INTEGER,lf_SI_USN INTEGER,lf_SI_PartialValue TEXT,lf_FN_CTime TEXT,lf_FN_ATime TEXT,lf_FN_MTime TEXT,lf_FN_RTime TEXT,lf_FN_AllocSize INTEGER,lf_FN_RealSize INTEGER,lf_FN_Flags TEXT,lf_FN_Namespace TEXT,lf_DT_StartVCN INTEGER,lf_DT_LastVCN INTEGER,lf_DT_ComprUnitSize INTEGER,lf_DT_AllocSize INTEGER,lf_DT_RealSize INTEGER,lf_DT_InitStreamSize INTEGER,lf_DT_DataRuns TEXT,lf_DT_Name TEXT,lf_FileNameModified INTEGER,lf_RedoChunkSize INTEGER,lf_UndoChunkSize INTEGER);", $sOutputFile)
+;$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE LogFile (lf_Offset TEXT,lf_MFTReference INTEGER,lf_RealMFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_LSN INTEGER,lf_LSNPrevious INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_FileName TEXT,lf_CurrentAttribute TEXT,lf_TextInformation TEXT,lf_UsnJrlFileName TEXT,lf_UsnJrlMFTReference INTEGER,lf_UsnJrlMFTParentReference INTEGER,lf_UsnJrlTimestamp TEXT,lf_UsnJrlReason TEXT,lf_UsnJrnlUsn INTEGER,lf_SI_CTime TEXT,lf_SI_ATime TEXT,lf_SI_MTime TEXT,lf_SI_RTime TEXT,lf_SI_FilePermission TEXT,lf_SI_MaxVersions INTEGER,lf_SI_VersionNumber INTEGER,lf_SI_ClassID INTEGER,lf_SI_SecurityID INTEGER,lf_SI_QuotaCharged INTEGER,lf_SI_USN INTEGER,lf_SI_PartialValue TEXT,lf_FN_CTime TEXT,lf_FN_ATime TEXT,lf_FN_MTime TEXT,lf_FN_RTime TEXT,lf_FN_AllocSize INTEGER,lf_FN_RealSize INTEGER,lf_FN_Flags TEXT,lf_FN_Namespace TEXT,lf_DT_StartVCN INTEGER,lf_DT_LastVCN INTEGER,lf_DT_ComprUnitSize INTEGER,lf_DT_AllocSize INTEGER,lf_DT_RealSize INTEGER,lf_DT_InitStreamSize INTEGER,lf_DT_DataRuns TEXT,lf_DT_Name TEXT,lf_FileNameModified INTEGER,lf_RedoChunkSize INTEGER,lf_UndoChunkSize INTEGER);", $sOutputFile)
+$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE LogFile (lf_Offset TEXT,lf_MFTReference INTEGER,lf_RealMFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_LSN INTEGER,lf_LSNPrevious INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_FileName TEXT,lf_CurrentAttribute TEXT,lf_TextInformation TEXT,lf_UsnJrlFileName TEXT,lf_UsnJrlMFTReference INTEGER,lf_UsnJrlMFTParentReference INTEGER,lf_UsnJrlTimestamp TEXT,lf_UsnJrlReason TEXT,lf_UsnJrnlUsn INTEGER,lf_SI_CTime TEXT,lf_SI_ATime TEXT,lf_SI_MTime TEXT,lf_SI_RTime TEXT,lf_SI_FilePermission TEXT,lf_SI_MaxVersions INTEGER,lf_SI_VersionNumber INTEGER,lf_SI_ClassID INTEGER,lf_SI_SecurityID INTEGER,lf_SI_QuotaCharged INTEGER,lf_SI_USN INTEGER,lf_SI_PartialValue TEXT,lf_FN_CTime TEXT,lf_FN_ATime TEXT,lf_FN_MTime TEXT,lf_FN_RTime TEXT,lf_FN_AllocSize INTEGER,lf_FN_RealSize INTEGER,lf_FN_Flags TEXT,lf_FN_Namespace TEXT,lf_DT_StartVCN INTEGER,lf_DT_LastVCN INTEGER,lf_DT_ComprUnitSize INTEGER,lf_DT_AllocSize INTEGER,lf_DT_RealSize INTEGER,lf_DT_InitStreamSize INTEGER,lf_DT_DataRuns TEXT,lf_DT_Name TEXT,lf_FileNameModified INTEGER,lf_RedoChunkSize INTEGER,lf_UndoChunkSize INTEGER,lf_record_type INTEGER,lf_transaction_id INTEGER,lf_flags INTEGER,lf_target_attribute INTEGER,lf_lcns_to_follow INTEGER,lf_attribute_offset INTEGER,lf_MftClusterIndex INTEGER,lf_target_vcn INTEGER,lf_target_lcn INTEGER,InOpenAttributeTable INTEGER,FromRcrdSlack INTEGER,IncompleteTransaction INTEGER);", $sOutputFile)
 If $SQLiteExe <> 0 Then
 	MsgBox(0,"Error","Could not create table LogFile in database: " & $NtfsDbFile & " : " & @error)
 	ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
@@ -466,7 +672,7 @@ If $TargetMftCsvFile Then
 	_SQLite_SQLiteExe2($NtfsDbFile, "DROP TABLE LogFile;", $sOutputFile)
 	_SQLite_SQLiteExe2($NtfsDbFile, "ALTER TABLE LogFileTmp rename to LogFile;", $sOutputFile)
 EndIf
-_DisplayInfo("Importing of csv's to db and update of tables took " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
+_DisplayInfo("Job took " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
 
 ;----------------- UsnJrnl
 If FileExists($UsnJrnlFile) Then
@@ -758,60 +964,422 @@ _DisplayInfo("Done!" & @CRLF)
 $ReconstructDone=True
 Return
 EndFunc
+#cs
+RCRD
+0x40: 64 byte header
+0x30: record 48 byte header + data
+#ce
+Func _DecodeRCRD($RCRDRecord, $RCRDOffset, $OffsetAdjustment, $DoNotReturnData)
+Local $DataPart = 0, $NextOffset = 131, $TotalSizeOfRCRD = StringLen($RCRDRecord), $LsnSignatureLength=10, $CharsToMove=0, $ZeroSample="0000000000000000", $LsnSignatureFound=0, $last_lsn_tmp_refup, $last_lsn_tmp_refdown, $RebuiltLsn
+Global $PredictedRefNumber = "", $FromRcrdSlack=0
 
-Func _DecodeRCRD($RCRDRecord, $RCRDOffset, $OffsetAdjustment)
-Local $DataPart = 0, $NextOffset = 131, $TotalSizeOfRCRD = StringLen($RCRDRecord)
-Global $PredictedRefNumber = ""
-Do
-	$DataPart+=1
-	$SizeOfNextClientData = StringMid($RCRDRecord,$NextOffset+48,8)
-	$SizeOfNextClientData = Dec(_SwapEndian($SizeOfNextClientData),2)
-	If $SizeOfNextClientData = 0 Then ExitLoop
-	$SizeOfNextClientData = $SizeOfNextClientData*2
-	$NextClientData = StringMid($RCRDRecord,$NextOffset,96+$SizeOfNextClientData) ; 48 bytes header + data
-	If $NextOffset+96+$SizeOfNextClientData >= $TotalSizeOfRCRD Then Return $NextClientData ; We need to return the incomplete record, and attach it to the beginning of the next RCRD and continue processing
-	$RecordOffset = $RCRDOffset+(($NextOffset-$OffsetAdjustment-3)/2)
-	$RecordOffset = "0x"&Hex(Int($RecordOffset))
-	If $VerboseOn Then
-		ConsoleWrite(" - - - - - - - - - - - - - - - - - - - - - - - - - - " & @CRLF)
-		ConsoleWrite("Record offset: " & $RecordOffset & @CRLF)
-;		ConsoleWrite("Part: " & $DataPart & @CRLF)
-;		ConsoleWrite(_HexEncode("0x"&$NextClientData) & @CRLF)
+;_DumpOutput("<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>" & @CRLF)
+;_DumpOutput("$RCRDOffset: 0x" & Hex($RCRDOffset,8) & @CRLF)
+;ConsoleWrite(_HexEncode(StringMid($RCRDRecord,1,130)) & @CRLF)
+;ConsoleWrite("$TotalSizeOfRCRD: 0x" & Hex(Int(($TotalSizeOfRCRD-3)/2),8) & @CRLF)
+;ConsoleWrite(_HexEncode("0x"&StringMid($RCRDRecord,131)) & @CRLF)
+;ConsoleWrite(_HexEncode(StringMid($RCRDRecord,1)) & @CRLF)
+
+$last_lsn_tmp = StringMid($RCRDRecord,19,16)
+$last_lsn_tmp = Dec(_SwapEndian($last_lsn_tmp),2)
+
+$last_end_lsn_tmp = StringMid($RCRDRecord,67,16)
+$last_end_lsn_tmp = Dec(_SwapEndian($last_end_lsn_tmp),2)
+
+$max_last_lsn = _Max($last_lsn_tmp,$last_end_lsn_tmp)
+
+$last_lsn_tmp_refup = Round($max_last_lsn*(1+$LsnValidationLevel))
+$last_lsn_tmp_refdown = Round($max_last_lsn*(1-$LsnValidationLevel))
+
+$this_lsn_tmp = StringMid($RCRDRecord,$NextOffset,16)
+$this_lsn_tmp = Dec(_SwapEndian($this_lsn_tmp),2)
+
+$next_record_offset = Dec(_SwapEndian(StringMid($RCRDRecord,51,4)),2)
+
+$client_previous_lsn_tmp = StringMid($RCRDRecord,$NextOffset+16,16)
+$client_previous_lsn_tmp = Dec(_SwapEndian($client_previous_lsn_tmp),2)
+$client_undo_next_lsn_tmp = StringMid($RCRDRecord,$NextOffset+32,16)
+$client_undo_next_lsn_tmp = Dec(_SwapEndian($client_undo_next_lsn_tmp),2)
+;If ($this_lsn_tmp > $last_lsn_tmp) Or ($this_lsn_tmp < $last_lsn_tmp - 1000) Then
+;	_DumpOutput("Error: RCRD seems corrupt at offset: 0x" & Hex($RCRDOffset,8) & @CRLF)
+;	_DumpOutput("Bytes reassembled: " & $OffsetAdjustment & @CRLF)
+;	_DumpOutput("$last_lsn_tmp: " & $last_lsn_tmp & @CRLF)
+;	_DumpOutput("$this_lsn_tmp: " & $this_lsn_tmp & @CRLF)
+;	_DumpOutput(_HexEncode(StringMid($RCRDRecord,1)) & @CRLF)
+;	Return
+;EndIf
+;$TestChunk2 = StringMid($last_lsn_tmp_mod,16-$LsnSignatureLength)
+;ConsoleWrite("$TestChunk2: " & $TestChunk2 & @CRLF)
+If ($this_lsn_tmp > $max_last_lsn) Or ($client_previous_lsn_tmp > $max_last_lsn) Or ($client_undo_next_lsn_tmp > $max_last_lsn) Or ($this_lsn_tmp < $last_lsn_tmp_refdown) Or ($client_previous_lsn_tmp < $last_lsn_tmp_refdown And $client_previous_lsn_tmp <> 0) Or ($client_undo_next_lsn_tmp < $last_lsn_tmp_refdown And $client_undo_next_lsn_tmp <> 0) Then
+	_DumpOutput("Scanning for LSN signature from RCRD offset: 0x" & Hex($RCRDOffset,8) & @CRLF)
+;	_DumpOutput("$DoNotReturnData: " & $DoNotReturnData & @CRLF)
+;	_DumpOutput("$OffsetAdjustment: " & $OffsetAdjustment & @CRLF)
+;	_DumpOutput("$last_lsn_tmp: " & $last_lsn_tmp & @CRLF);
+;	_DumpOutput("$last_end_lsn_tmp: " & $last_end_lsn_tmp & @CRLF)
+;	_DumpOutput("$max_last_lsn: " & $max_last_lsn & @CRLF)
+;	_DumpOutput("$last_lsn_tmp_refup: " & $last_lsn_tmp_refup & @CRLF)
+;	_DumpOutput("$last_lsn_tmp_refdown: " & $last_lsn_tmp_refdown & @CRLF)
+;	_DumpOutput("$NextOffset: " & $NextOffset & @CRLF)
+;	_DumpOutput("$CharsToMove: " & $CharsToMove & @CRLF)
+	While 1
+		If $CharsToMove+$NextOffset > $TotalSizeOfRCRD Then ExitLoop
+;		_DumpOutput("0x"&Hex(Int(($NextOffset+$CharsToMove-3)/2),8) & @CRLF)
+		$TestChunk1 = StringMid($RCRDRecord,$NextOffset+$CharsToMove,16)
+		$TestChunk1 = Dec(_SwapEndian($TestChunk1),2)
+;		_DumpOutput("$TestChunk1: " & $TestChunk1 & @CRLF)
+
+		If ($TestChunk1 > $last_lsn_tmp_refdown) And ($TestChunk1 < $last_lsn_tmp_refup) Then
+			$TestChunk2 = StringMid($RCRDRecord,$NextOffset+$CharsToMove+16,16)
+			$TestChunk2 = Dec(_SwapEndian($TestChunk2),2)
+;			_DumpOutput("$TestChunk2: " & $TestChunk2 & @CRLF)
+			$TestChunk3 = StringMid($RCRDRecord,$NextOffset+$CharsToMove+16+16,16)
+			$TestChunk3 = Dec(_SwapEndian($TestChunk3),2)
+;			_DumpOutput("$TestChunk3: " & $TestChunk3 & @CRLF)
+			If (($TestChunk2 > $last_lsn_tmp_refdown) And ($TestChunk2 < $last_lsn_tmp_refup)) Or ($TestChunk2 = 0) Then
+				If (($TestChunk3 > $last_lsn_tmp_refdown) And ($TestChunk3 < $last_lsn_tmp_refup)) Or ($TestChunk3 = 0) Then
+	;				ConsoleWrite("Match1!!!" & @CRLF)
+					$LsnSignatureFound=1
+					ExitLoop
+				Else
+	;				ConsoleWrite("False positive" & @CRLF)
+					$CharsToMove+=16
+					ContinueLoop
+				EndIf
+			Else
+	;			ConsoleWrite("False positive" & @CRLF)
+				$CharsToMove+=16
+				ContinueLoop
+			EndIf
+;			ConsoleWrite("Match2!!!" & @CRLF)
+;			ExitLoop
+		EndIf
+		$CharsToMove+=16
+		If $CharsToMove+$NextOffset > $TotalSizeOfRCRD Then ExitLoop
+	WEnd
+	If Not $LsnSignatureFound Then
+		_DumpOutput("Error: LSN signature not found:" & @CRLF)
+		_DumpOutput(_HexEncode("0x"&StringMid($RCRDRecord,$NextOffset)) & @CRLF)
+		Return ""
+	Else
+		If $CharsToMove > 0 Then
+			If $DoNotReturnData > 0 And $OffsetAdjustment > 0 Then ;This check should not be necessary?????????????????????????
+				$RecordOffset = "0x" & Hex(Int($RCRDOffset-$OffsetAdjustment/2),8)
+;				_DumpOutput("Unknown slack space found at record offset 0x" & Hex(Int($RCRDOffset-$OffsetAdjustment+($NextOffset-3)/2),8) & " - 0x" & Hex(Int($RCRDOffset-$OffsetAdjustment+($NextOffset+$CharsToMove-3)/2),8) & @CRLF)
+				_DumpOutput("Unknown slack space found at record offset 0x" & Hex(Int($RCRDOffset-$OffsetAdjustment/2),8) & " - 0x" & Hex(Int($RCRDOffset-$OffsetAdjustment+$CharsToMove/2),8) & @CRLF)
+			Else
+				$RecordOffset = "0x" & Hex(Int($RCRDOffset+($NextOffset-3)/2),8)
+				_DumpOutput("Unknown slack space found at record offset 0x" & Hex(Int($RCRDOffset+($NextOffset-3)/2),8) & " - 0x" & Hex(Int($RCRDOffset+($NextOffset+$CharsToMove-3)/2),8) & @CRLF)
+			EndIf
+			_DumpOutput(_HexEncode("0x"&StringMid($RCRDRecord,$NextOffset,$CharsToMove)) & @CRLF)
+			If $DoRebuildBrokenHeader And $CharsToMove >= $MinSizeBrokenTransaction Then
+				_DumpOutput("Attempting a repair of possible broken header 1.." & @CRLF)
+				$ClientData = _CheckAndRepairTransactionHeader(StringMid($RCRDRecord,$NextOffset,$CharsToMove))
+				If Not @Error Then
+					$RebuiltLsn = StringMid($ClientData,1,16)
+					$RebuiltLsn = Dec(_SwapEndian($RebuiltLsn),2)
+					$IncompleteTransaction=1
+					_DecodeLSNRecord($ClientData,$RebuiltLsn)
+				EndIf
+			EndIf
+		EndIf
+		_DumpOutput("Found LSN signature match at record offset 0x"&Hex(Int($RCRDOffset+($NextOffset+$CharsToMove-3)/2),8) & @CRLF)
+		$NextOffset += $CharsToMove
 	EndIf
-	_DecodeLSNRecord($NextClientData)
-	$NextOffset+=96+$SizeOfNextClientData
+	$FromRcrdSlack=1
+else
+	$FromRcrdSlack=0
+EndIf
+
+$SizeOfClientData = StringMid($RCRDRecord,$NextOffset+48,8)
+$SizeOfClientData = Dec(_SwapEndian($SizeOfClientData),2)
+;_DumpOutput("RCRD Offset: 0x" & Hex($RCRDOffset,8) & @CRLF)
+;_DumpOutput("$SizeOfClientData: 0x" & Hex(Int($SizeOfClientData),8) & @CRLF)
+If Not $DoNotReturnData Then
+	If 96+($SizeOfClientData*2) > $TotalSizeOfRCRD-$NextOffset Then
+;		_DumpOutput("Data returned 0 (" & $GlobalDataKeepCounter & ")" & @CRLF)
+;		_DumpOutput("Returned data:" & @CRLF)
+;		_DumpOutput(_HexEncode("0x"&StringMid($RCRDRecord,$NextOffset)) & @CRLF)
+		Return StringMid($RCRDRecord,$NextOffset)
+	EndIf
+EndIf
+
+Do
+	If $DataPart And $GlobalRecordSpreadReset Then
+		$RecordOffset = $RCRDOffset+(($NextOffset-$OffsetAdjustment-3+(128*$GlobalRecordSpreadReset))/2)
+;		$RecordOffset = $RCRDOffset+(($NextOffset-$OffsetAdjustment-3)/2)
+		$RecordOffset = "0x"&Hex(Int($RecordOffset))
+	ElseIf $DataPart Then
+		$RecordOffset = $RCRDOffset+(($NextOffset-$OffsetAdjustment-3)/2)
+		$RecordOffset = "0x"&Hex(Int($RecordOffset))
+	Else
+		$RecordOffset = $RCRDOffset+(($NextOffset-$OffsetAdjustment-3-(128*$GlobalDataKeepCounter))/2)
+		$RecordOffset = "0x"&Hex(Int($RecordOffset))
+	EndIf
+
+	If $NextOffset-$OffsetAdjustment >= $next_record_offset*2 Then
+;		_DumpOutput("RCRD Offset: 0x" & Hex($RCRDOffset,8) & @CRLF)
+		If Not $DoNotReturnData Then
+;			_DumpOutput("Data returned 1 (" & $GlobalDataKeepCounter & ")" & @CRLF)
+;			_DumpOutput("Return data (split record) at end of RCRD at 0x" & Hex(Int($next_record_offset),4) & @CRLF)
+;			_DumpOutput("Bytes returned: 0x" & Hex(Int((($TotalSizeOfRCRD-3-$OffsetAdjustment)/2)-$next_record_offset),8) & @CRLF)
+;			_DumpOutput("$NextOffset: " & $NextOffset & @CRLF)
+;			_DumpOutput("$OffsetAdjustment: " & $OffsetAdjustment & @CRLF)
+;			_DumpOutput("$NextOffset-$OffsetAdjustment: " & $NextOffset-$OffsetAdjustment & @CRLF)
+;			_DumpOutput("$next_record_offset: " & $next_record_offset*2 & @CRLF)
+;			_DumpOutput("$next_record_offset: 0x" & Hex(Int($next_record_offset),4) & @CRLF)
+	;		_DumpOutput(_HexEncode("0x"&StringMid($RCRDRecord,3+($next_record_offset*2))) & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&StringMid($RCRDRecord,$NextOffset)) & @CRLF)
+			Return StringMid($RCRDRecord,$NextOffset)
+		Else
+			_DumpOutput("Analyzing slack space starting at " & $RecordOffset & @CRLF)
+			_TestSlackSpace(StringMid($RCRDRecord,$NextOffset),$max_last_lsn,$RecordOffset)
+			Return ""
+		EndIf
+	EndIf
+	$SizeOfClientData = StringMid($RCRDRecord,$NextOffset+48,8)
+	$SizeOfClientData = Dec(_SwapEndian($SizeOfClientData),2)
+	$SizeOfClientData = $SizeOfClientData*2
+
+	If $SizeOfClientData = 0 Then
+		_DumpOutput("Error: $SizeOfClientData was 0 at " & $RecordOffset & @CRLF)
+		_DumpOutput(_HexEncode("0x"&StringMid($RCRDRecord,$NextOffset)) & @CRLF)
+;		_TestSlackSpace(StringMid($RCRDRecord,$NextOffset),$last_lsn_tmp,$RecordOffset)
+		ExitLoop
+	EndIf
+#cs
+	If $RCRDOffset > 0x1A28000 Then
+		_DumpOutput("------------------------------------" & @CRLF)
+		_DumpOutput("RCRD Offset: 0x" & Hex($RCRDOffset,8) & @CRLF)
+		_DumpOutput("$SizeOfClientData: 0x" & Hex(Int($SizeOfClientData/2),8) & @CRLF)
+		_DumpOutput("$SizeOfClientData: " & $SizeOfClientData & @CRLF)
+		_DumpOutput("$NextOffset: " & $NextOffset & @CRLF)
+		_DumpOutput("$OffsetAdjustment: " & $OffsetAdjustment & @CRLF)
+		_DumpOutput("$TotalSizeOfRCRD: " & $TotalSizeOfRCRD & @CRLF)
+	EndIf
+#ce
+	$ClientData = StringMid($RCRDRecord,$NextOffset,96+$SizeOfClientData) ; 48 bytes header + data
+	If $NextOffset-1-$OffsetAdjustment+96+$SizeOfClientData > $TotalSizeOfRCRD Then ; We need to return the incomplete record, and attach it to the beginning of the next RCRD and continue processing
+		If Not $DoNotReturnData Then
+;			_DumpOutput("Data returned 2 (" & $GlobalDataKeepCounter & ")" & @CRLF)
+;			Return $ClientData
+			Return StringMid($RCRDRecord,$NextOffset)
+		Else
+			_DumpOutput("Error should not really be here: " & $RecordOffset & @CRLF)
+			_DumpOutput("$NextOffset: " & $NextOffset & @CRLF)
+			_DumpOutput("$OffsetAdjustment: " & $OffsetAdjustment & @CRLF)
+			_DumpOutput("$SizeOfClientData: " & $SizeOfClientData & @CRLF)
+			_DumpOutput("Part 1: " & $NextOffset-$OffsetAdjustment+96+$SizeOfClientData & @CRLF)
+			_DumpOutput("Part 2: " & $TotalSizeOfRCRD & @CRLF)
+			_TestSlackSpace($ClientData,$max_last_lsn,$RecordOffset)
+			Return ""
+		EndIf
+	EndIf
+;	_DumpOutput("Transaction: " & @CRLF)
+;	_DumpOutput(_HexEncode("0x"&$ClientData) & @CRLF)
+	_DecodeLSNRecord($ClientData,$max_last_lsn)
+	$NextOffset += 96+$SizeOfClientData
+	$DataPart += 1
 Until $NextOffset >= $TotalSizeOfRCRD
+If Not $DoNotReturnData Then
+	_DumpOutput("Error: Something must be wrong" & @CRLF)
+	_DumpOutput(_HexEncode("0x"&StringMid($RCRDRecord,$NextOffset)) & @CRLF)
+EndIf
 Return ""
 EndFunc
 
-Func _DecodeLSNRecord($InputData)
-Local $client_undo_next_lsn, $client_data_length, $client_index, $record_type, $flags, $redo_offset, $undo_offset, $target_attribute, $lcns_to_follow, $redo_operation_hex, $undo_operation_hex,$MftClusterIndex, $target_vcn
-Local $target_lcn,$DecodeOk=False,$UsnOk=False,$TestAttributeType,$ResolvedAttributeOffset
+Func _TestSlackSpace($InputData,$last_lsn_tmp,$Offset)
+	;$InputData = SlackSpace data in RCRD
+	;$last_lsn_tmp = From header of RCRD
+	Local $CharsToMove=0, $LsnSignatureFound=0, $TotalSizeOfRCRD=StringLen($InputData), $NextOffset = 1, $last_lsn_tmp_refup, $last_lsn_tmp_refdown
+	$FromRcrdSlack += 1
+
+	$last_lsn_tmp_refup = $last_lsn_tmp*(1+$LsnValidationLevel)
+	$last_lsn_tmp_refdown = $last_lsn_tmp*(1-$LsnValidationLevel)
+
+	If $TotalSizeOfRCRD < $MinSizeBrokenTransaction Then
+		_DumpOutput("SlackSpace: The size of input data was too small for a valid record header:" & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+		Return
+	Else
+;		_DumpOutput("SlackSpace: Size of input data: 0x" & Hex(Int($TotalSizeOfRCRD/2),8) & @CRLF)
+	EndIf
+;	_DumpOutput("$last_lsn_tmp: 0x" & _SwapEndian(Hex($last_lsn_tmp,16)) & @CRLF)
+;	_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+	$this_lsn_tmp = StringMid($InputData,1,16)
+	$this_lsn_tmp = Dec(_SwapEndian($this_lsn_tmp),2)
+	$client_previous_lsn_tmp = StringMid($InputData,$NextOffset+16,16)
+	$client_previous_lsn_tmp = Dec(_SwapEndian($client_previous_lsn_tmp),2)
+	$client_undo_next_lsn_tmp = StringMid($InputData,$NextOffset+32,16)
+	$client_undo_next_lsn_tmp = Dec(_SwapEndian($client_undo_next_lsn_tmp),2)
+	If ($this_lsn_tmp > $last_lsn_tmp) Or ($client_previous_lsn_tmp > $last_lsn_tmp) Or ($client_undo_next_lsn_tmp > $last_lsn_tmp) Or ($this_lsn_tmp < $last_lsn_tmp_refdown) Or ($client_previous_lsn_tmp < $last_lsn_tmp_refdown And $client_previous_lsn_tmp <> 0) Or ($client_undo_next_lsn_tmp < $last_lsn_tmp_refdown And $client_undo_next_lsn_tmp <> 0) Then
+		_DumpOutput("SlackSpace: Scanning for LSN signature" & @CRLF)
+		While 1
+			If $CharsToMove+$NextOffset > $TotalSizeOfRCRD Then ExitLoop
+			$TestChunk1 = StringMid($InputData,$NextOffset+$CharsToMove,16)
+			$TestChunk1 = Dec(_SwapEndian($TestChunk1),2)
+	;		ConsoleWrite("0x"&Hex(Int(($NextOffset+$CharsToMove-3)/2),8) & " $TestChunk1: " & $TestChunk1 & @CRLF)
+			If ($TestChunk1 > $last_lsn_tmp_refdown) And ($TestChunk1 < $last_lsn_tmp_refup) Then
+;			If $last_lsn_tmp_mod = $TestChunk Then
+				$TestChunk2 = StringMid($InputData,$NextOffset+$CharsToMove+16,16)
+				$TestChunk2 = Dec(_SwapEndian($TestChunk2),2)
+	;			ConsoleWrite("$TestChunk2: " & $TestChunk2 & @CRLF)
+				$TestChunk3 = StringMid($InputData,$NextOffset+$CharsToMove+16+16,16)
+				$TestChunk3 = Dec(_SwapEndian($TestChunk3),2)
+	;			ConsoleWrite("$TestChunk3: " & $TestChunk3 & @CRLF)
+				If (($TestChunk2 > $last_lsn_tmp_refdown) And ($TestChunk2 < $last_lsn_tmp_refup)) Or ($TestChunk2 = 0) Then
+					If (($TestChunk3 > $last_lsn_tmp_refdown) And ($TestChunk3 < $last_lsn_tmp_refup)) Or ($TestChunk3 = 0) Then
+		;				ConsoleWrite("Match1!!!" & @CRLF)
+						$LsnSignatureFound=1
+						ExitLoop
+					Else
+		;				ConsoleWrite("False positive" & @CRLF)
+						$CharsToMove+=16
+						ContinueLoop
+					EndIf
+				Else
+		;			ConsoleWrite("False positive" & @CRLF)
+					$CharsToMove+=16
+					ContinueLoop
+				EndIf
+	;			ConsoleWrite("Match2!!!" & @CRLF)
+	;			ExitLoop
+			EndIf
+			$CharsToMove+=16
+			If $CharsToMove+$NextOffset > $TotalSizeOfRCRD Then ExitLoop
+		WEnd
+		If Not $LsnSignatureFound Then
+			_DumpOutput("SlackSpace: Error: LSN signature not found." & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+			If $DoRebuildBrokenHeader And $CharsToMove >= $MinSizeBrokenTransaction Then
+				$RecordOffset = "0x" & Hex(Int($Offset),8)
+				_DumpOutput("Attempting a repair of possible broken header 2.." & @CRLF)
+				$ClientData = _CheckAndRepairTransactionHeader(StringMid($InputData,$NextOffset,$CharsToMove))
+				If Not @Error Then
+					$RebuiltLsn = StringMid($ClientData,1,16)
+					$RebuiltLsn = Dec(_SwapEndian($RebuiltLsn),2)
+					$IncompleteTransaction=1
+					_DecodeLSNRecord($ClientData,$RebuiltLsn)
+				EndIf
+			EndIf
+			Return
+		Else
+			If $CharsToMove > 0 Then
+				_DumpOutput("Unknown slack space found at record offset 0x" & Hex(Int($Offset+($NextOffset)/2),8) & " - 0x" & Hex(Int($Offset+($NextOffset+$CharsToMove)/2),8) & @CRLF)
+				_DumpOutput(_HexEncode("0x"&StringMid($InputData,$NextOffset,$CharsToMove)) & @CRLF)
+				If $DoRebuildBrokenHeader And $CharsToMove >= $MinSizeBrokenTransaction Then
+					$RecordOffset = "0x" & Hex(Int($Offset+($NextOffset)/2),8)
+					_DumpOutput("Attempting a repair of possible broken header 3.." & @CRLF)
+					$ClientData = _CheckAndRepairTransactionHeader(StringMid($InputData,$NextOffset,$CharsToMove))
+					If Not @Error Then
+						$RebuiltLsn = StringMid($ClientData,1,16)
+						$RebuiltLsn = Dec(_SwapEndian($RebuiltLsn),2)
+						$IncompleteTransaction=1
+						_DecodeLSNRecord($ClientData,$RebuiltLsn)
+					EndIf
+				EndIf
+			EndIf
+;			_DumpOutput(_HexEncode("0x"&StringMid($InputData,$NextOffset,$CharsToMove)) & @CRLF)
+			_DumpOutput("SlackSpace: Found LSN signature match at record offset 0x"&Hex(Int($Offset+($NextOffset+$CharsToMove)/2),8) & @CRLF)
+			$NextOffset += $CharsToMove
+		EndIf
+	EndIf
+
+	Do
+		If $NextOffset >= $TotalSizeOfRCRD Then
+			Return
+		EndIf
+		$RecordOffset = Int(Dec(StringRight($Offset,8),2) + ($NextOffset/2))
+		$RecordOffset = "0x"&Hex($RecordOffset)
+
+		$this_lsn_tmp = StringMid($InputData,$NextOffset,16)
+		$this_lsn_tmp = Dec(_SwapEndian($this_lsn_tmp),2)
+		$client_previous_lsn_tmp = StringMid($InputData,$NextOffset+16,16)
+		$client_previous_lsn_tmp = Dec(_SwapEndian($client_previous_lsn_tmp),2)
+		$client_undo_next_lsn_tmp = StringMid($InputData,$NextOffset+32,16)
+		$client_undo_next_lsn_tmp = Dec(_SwapEndian($client_undo_next_lsn_tmp),2)
+		;We need some sanity checking on the next bytes
+		If ($this_lsn_tmp > $last_lsn_tmp) Or ($client_previous_lsn_tmp > $last_lsn_tmp) Or ($client_undo_next_lsn_tmp > $last_lsn_tmp) Or ($this_lsn_tmp < $last_lsn_tmp_refdown) Or ($client_previous_lsn_tmp < $last_lsn_tmp_refdown And $client_previous_lsn_tmp <> 0) Or ($client_undo_next_lsn_tmp < $last_lsn_tmp_refdown And $client_undo_next_lsn_tmp <> 0) Then
+			_DumpOutput("SlackSpace: Error in record header at 0x" & Hex(Int($Offset+($NextOffset/2))) & @CRLF)
+			_DumpOutput("SlackSpace: Rescanning for LSN signature." & @CRLF)
+			_TestSlackSpace(StringMid($InputData,$NextOffset),$last_lsn_tmp,$Offset+($NextOffset/2))
+			Return
+		EndIf
+
+		$SizeOfClientData = StringMid($InputData,$NextOffset+48,8)
+		$SizeOfClientData = Dec(_SwapEndian($SizeOfClientData),2)
+		$SizeOfClientData = $SizeOfClientData*2
+		If $SizeOfClientData = 0 Then
+;			MsgBox(0,"Info","$SizeOfClientData = 0 at " & $RecordOffset)
+			_DumpOutput("SlackSpace: Error $SizeOfClientData = 0 at 0x" & Hex(Int($Offset+($NextOffset/2))) & @CRLF)
+;			_TestSlackSpace(StringMid($InputData,$NextOffset),$last_lsn_tmp,$Offset+($NextOffset/2))
+			ExitLoop
+		EndIf
+
+		$ClientData = StringMid($InputData,$NextOffset,96+$SizeOfClientData)
+		If $NextOffset-1+96+$SizeOfClientData > $TotalSizeOfRCRD Then ; Or maybe we should attempt parsing incomplete records as this is record slack space..
+			_DumpOutput("SlackSpace: Warning incomplete record at 0x" & Hex(Int($Offset+($NextOffset/2))) & @CRLF)
+;			_DumpOutput("SlackSpace: $NextOffset: " & $NextOffset & @CRLF)
+;			_DumpOutput("SlackSpace: $SizeOfClientData: " & $SizeOfClientData & @CRLF)
+;			_DumpOutput("SlackSpace: Part 1: " & $NextOffset+96+$SizeOfClientData & @CRLF)
+;			_DumpOutput("SlackSpace: Part 2: " & $TotalSizeOfRCRD & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$ClientData) & @CRLF)
+			_DecodeLSNRecord($ClientData,$this_lsn_tmp)
+			Return
+		EndIf
+
+		_DumpOutput("SlackSpace: Parsing identified record at " & $RecordOffset & @CRLF)
+;		_DumpOutput("$RecordOffset: " & $RecordOffset & @CRLF)
+;		_DumpOutput(_HexEncode("0x"&$ClientData) & @CRLF)
+		_DecodeLSNRecord($ClientData,$this_lsn_tmp)
+		$NextOffset+=96+$SizeOfClientData
+	Until $NextOffset >= $TotalSizeOfRCRD
+EndFunc
+
+Func _DecodeLSNRecord($InputData,$last_lsn_tmp)
+;Local $target_lcn, $client_undo_next_lsn, $client_data_length, $client_index, $record_type, $flags, $redo_offset, $undo_offset, $target_attribute, $lcns_to_follow, $redo_operation_hex, $undo_operation_hex,$MftClusterIndex, $target_vcn
+Local $client_undo_next_lsn, $client_data_length, $redo_offset, $undo_offset, $redo_operation_hex, $undo_operation_hex
+Local $DecodeOk=False,$UsnOk=False,$TestAttributeType,$ResolvedAttributeOffset,$FoundInTable=0,$FoundInTableDummy=0,$AttrNameTmp,$last_lsn_tmp_refup,$last_lsn_tmp_refdown
 Global $AttributeString
-_ClearVar()
+
+;_ClearVar()
+
 $this_lsn = StringMid($InputData,1,16)
 $this_lsn = Dec(_SwapEndian($this_lsn),2)
+
+$last_lsn_tmp_refup = $last_lsn_tmp*(1+$LsnValidationLevel)
+$last_lsn_tmp_refdown = $last_lsn_tmp*(1-$LsnValidationLevel)
+;<Test for valid lsn>
+If ($this_lsn > $last_lsn_tmp) Or ($this_lsn < $last_lsn_tmp_refdown) Then
+	_DumpOutput("Error: RCRD seems corrupt at offset: " & $RecordOffset & @CRLF)
+	_DumpOutput("$last_lsn_tmp: " & $last_lsn_tmp & @CRLF)
+	_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+	_DumpOutput(_HexEncode("0x"&StringMid($InputData,1)) & @CRLF)
+	_ClearVar()
+	Return
+EndIf
+;</Test for valid lsn>
+
 $client_previous_lsn = StringMid($InputData,17,16)
 $client_previous_lsn = Dec(_SwapEndian($client_previous_lsn),2)
 $client_undo_next_lsn = StringMid($InputData,33,16)
 $client_undo_next_lsn = Dec(_SwapEndian($client_undo_next_lsn),2)
 $client_data_length = StringMid($InputData,49,8)
-$client_data_length = _SwapEndian($client_data_length)
+$client_data_length = Dec(_SwapEndian($client_data_length),2)
 $client_index = StringMid($InputData,57,8)
-$client_index = _SwapEndian($client_index)
+$client_index = "0x"&_SwapEndian($client_index)
 $record_type = StringMid($InputData,65,8)
-$record_type = _SwapEndian($record_type)
+$record_type = "0x"&_SwapEndian($record_type)
 $transaction_id = StringMid($InputData,73,8)
-$transaction_id = _SwapEndian($transaction_id)
-$flags = StringMid($InputData,81,4)
-$flags = _SwapEndian($flags)
+$transaction_id = "0x"&_SwapEndian($transaction_id)
+$lf_flags = StringMid($InputData,81,4)
+$lf_flags = "0x"&_SwapEndian($lf_flags)
 ;$alignment_or_reserved0 = StringMid($InputData,85,12)
-$redo_operation = StringMid($InputData,97,4)
-$redo_operation_hex = $redo_operation
-$undo_operation = StringMid($InputData,101,4)
-$undo_operation_hex = $undo_operation
-$redo_operation = _SolveUndoRedoCodes(StringLeft($redo_operation,2))
-$undo_operation = _SolveUndoRedoCodes(StringLeft($undo_operation,2))
+$redo_operation_hex = StringMid($InputData,97,4)
+$redo_operation = Dec(_SwapEndian($redo_operation_hex),2)
+$redo_operation = _SolveUndoRedoCodes($redo_operation)
+$undo_operation_hex = StringMid($InputData,101,4)
+$undo_operation = Dec(_SwapEndian($undo_operation_hex),2)
+$undo_operation = _SolveUndoRedoCodes($undo_operation)
 $redo_offset = StringMid($InputData,105,4)
 $redo_offset = Dec(_SwapEndian($redo_offset),2)
 $redo_length = StringMid($InputData,109,4)
@@ -821,9 +1389,86 @@ $undo_offset = Dec(_SwapEndian($undo_offset),2)
 $undo_length = StringMid($InputData,117,4)
 $undo_length = Dec(_SwapEndian($undo_length),2)
 $target_attribute = StringMid($InputData,121,4)
-$target_attribute = _SwapEndian($target_attribute)
+$target_attribute = "0x"&_SwapEndian($target_attribute)
+
+;Align tmp sizes to 8 bytes
+$redo_length_tmp = $redo_length
+If Mod($redo_length_tmp,8) Then
+	While 1
+		$redo_length_tmp+=1
+		If Mod($redo_length_tmp,8) = 0 Then ExitLoop
+	WEnd
+EndIf
+
+$undo_length_tmp = $undo_length
+If Mod($undo_length_tmp,8) Then
+	While 1
+		$undo_length_tmp+=1
+		If Mod($undo_length_tmp,8) = 0 Then ExitLoop
+	WEnd
+EndIf
+;Validation check of header values
+Local $ValidationTest1 = $redo_operation = "SetNewAttributeSizes" And $client_data_length < $undo_offset+$undo_length_tmp
+Local $ValidationTest2 = $client_data_length <> $undo_offset+$undo_length_tmp And $redo_operation <> "CompensationlogRecord" And $redo_operation <> "SetNewAttributeSizes" And $redo_operation <> "ForgetTransaction" And ($redo_operation <> "Noop" And $undo_operation <> "Noop")
+Local $ValidationTest3 = $client_data_length <> $redo_offset+$redo_length_tmp And $redo_operation <> "CompensationlogRecord" And $redo_operation <> "SetNewAttributeSizes" And $redo_operation <> "ForgetTransaction" And ($redo_operation <> "Noop" And $undo_operation <> "Noop")
+Local $ValidationTest4 = $redo_operation = "UNKNOWN"
+Local $ValidationTest5 = $undo_operation = "UNKNOWN"
+;Local $ValidationTest6 = $client_data_length <> $redo_offset+$redo_length_tmp And $client_data_length <> $undo_offset+$undo_length_tmp And $redo_operation <> "CompensationlogRecord" And $redo_operation <> "SetNewAttributeSizes"
+If $ValidationTest1 Or ($ValidationTest2 And $ValidationTest3) Or $ValidationTest4 Or $ValidationTest5 Then
+;If (($client_data_length <> $undo_offset+$undo_length_tmp And $redo_operation <> "CompensationlogRecord") And ($client_data_length <> $redo_offset+$redo_length_tmp And $redo_operation <> "CompensationlogRecord")) Or $redo_operation = "UNKNOWN"  Or $undo_operation = "UNKNOWN" Then
+	_DumpOutput("Error: Validation of header values failed at offset: " & $RecordOffset & @CRLF)
+	_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+	_DumpOutput("$client_data_length: 0x" & Hex($client_data_length) & @CRLF)
+	_DumpOutput("$redo_offset: 0x" & Hex($redo_offset,4) & @CRLF)
+	_DumpOutput("$redo_length_tmp: 0x" & Hex($redo_length_tmp,4) & @CRLF)
+	_DumpOutput("$undo_offset: 0x" & Hex($undo_offset,4) & @CRLF)
+	_DumpOutput("$undo_length_tmp: 0x" & Hex($undo_length_tmp,4) & @CRLF)
+	_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+	_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+	_DumpOutput(_HexEncode("0x"&StringMid($InputData,1)) & @CRLF)
+	_ClearVar()
+	Return
+EndIf
+
+;Test for incomplete records grabbed from slack space
+If ((48 + $client_data_length) > (StringLen($InputData)/2)) Then
+	_DumpOutput("Error: Incomplete record recovered at offset: " & $RecordOffset & @CRLF)
+	_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+;	_DumpOutput("Part 1: " & 48 + $client_data_length & " 0x" & Hex(Int(48 + $client_data_length)) & @CRLF)
+;	_DumpOutput("Part 2: " & StringLen($InputData)/2 & " 0x" & Hex(Int(StringLen($InputData)/2)) & @CRLF)
+	_DumpOutput(_HexEncode("0x"&StringMid($InputData,1)) & @CRLF)
+;	MsgBox(0,"Info","Check output")
+	$TextInformation &= ";Incomplete record recovered"
+	$IncompleteTransaction = 1
+EndIf
+If Not $FromRcrdSlack Then
+	If $this_lsn > $lsn_openattributestable Then
+		If Not ($target_attribute = 0x0000 Or $target_attribute = 0x0017 Or $target_attribute = 0x0018) Then
+			If Ubound($OpenAttributesArray) > 1 Then
+				$FoundInTable = _ArraySearch($OpenAttributesArray,$target_attribute,0,0,0,2,1,0)
+		;		ConsoleWrite("$FoundInTable: " & $FoundInTable & @CRLF)
+				If Not $FoundInTable > 0 Then
+					$InOpenAttributeTable=0
+					_DumpOutput("Could not find $target_attribute in $OpenAttributesArray: " & $target_attribute & " for $this_lsn: " & $this_lsn & @CRLF)
+					_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+		;			$FoundInTable = _ArraySearch($OpenAttributesArray2,$target_attribute,0,0,0,2,1,0)
+		;			ConsoleWrite("Attempt 2 $FoundInTable: " & $FoundInTable & @CRLF)
+				Else
+					$InOpenAttributeTable=$lsn_openattributestable
+				EndIf
+			Else
+				$InOpenAttributeTable=0
+		;		MsgBox(0,"Error","$target_attribute was not found because array is empty")
+			EndIf
+		EndIf
+	EndIf
+EndIf
+;If $this_lsn=102077767547 or $this_lsn=102093572805 Then
+;	ConsoleWrite("$target_attribute was not found in array: " & $target_attribute & @CRLF)
+;	_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+;EndIf
 $lcns_to_follow = StringMid($InputData,125,4)
-$lcns_to_follow = _SwapEndian($lcns_to_follow)
+$lcns_to_follow = "0x"&_SwapEndian($lcns_to_follow)
 $record_offset_in_mft = StringMid($InputData,129,4)
 $record_offset_in_mft = Dec(_SwapEndian($record_offset_in_mft),2)
 $attribute_offset = StringMid($InputData,133,4)
@@ -835,19 +1480,66 @@ $target_vcn = StringMid($InputData,145,8)
 $target_vcn = _SwapEndian($target_vcn)
 ;$alignment_or_reserved2 = StringMid($InputData,153,8)
 $target_lcn = StringMid($InputData,161,8)
-$target_lcn = _SwapEndian($target_lcn)
+$target_lcn = "0x"&_SwapEndian($target_lcn)
 ;$alignment_or_reserved3 = StringMid($InputData,169,8)
 $PredictedRefNumber = ((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size)
 ;ConsoleWrite("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
 ;Need to research more on how to calculate correct MFT ref
-If ($redo_operation_hex = "0000" And $undo_operation_hex <> "0000") Or $redo_operation_hex = "0200" Or $redo_operation_hex = "0300" Or $redo_operation_hex = "0500" Or $redo_operation_hex = "0600" Or $redo_operation_hex = "0700" Or ($redo_operation_hex = "0800" And $PreviousRedoOp = "1c00") Or $redo_operation_hex = "0900" Or $redo_operation_hex = "0b00" Or $redo_operation_hex = "0c00" Or $redo_operation_hex = "0d00" Or $redo_operation_hex = "1100" Or $redo_operation_hex = "1300" Or $redo_operation_hex = "1c00" Then
-	$KeptRefTmp = $PredictedRefNumber
-	$KeptRef = $PredictedRefNumber
-ElseIf $client_previous_lsn<>0 And ($redo_operation_hex = "0e00" Or $redo_operation_hex = "0f00" Or $redo_operation_hex = "1000" Or $redo_operation_hex = "1200" Or $redo_operation_hex = "1400" Or ($redo_operation_hex = "0800" And ($redo_operation_hex = "0800" Or $PreviousRedoOp = "0b00"))) Then
-	$PredictedRefNumber = $KeptRef
-;	$KeptRefTmp = $KeptRef
+If ($redo_operation_hex = "0000" And $undo_operation_hex <> "0000") Or $redo_operation_hex = "0200" Or $redo_operation_hex = "0300" Or $redo_operation_hex = "0400" Or $redo_operation_hex = "0500" Or $redo_operation_hex = "0600" Or $redo_operation_hex = "0700" Or ($redo_operation_hex = "0800" And $PreviousRedoOp = "1c00") Or $redo_operation_hex = "0900" Or $redo_operation_hex = "0b00" Or $redo_operation_hex = "0c00" Or $redo_operation_hex = "0d00" Or $redo_operation_hex = "1100" Or $redo_operation_hex = "1300" Or $redo_operation_hex = "1c00" Then
+	If Not $FromRcrdSlack Then
+		$KeptRefTmp = $PredictedRefNumber
+		$KeptRef = $PredictedRefNumber
+	EndIf
+	ElseIf $client_previous_lsn<>0 And ($redo_operation_hex = "0e00" Or $redo_operation_hex = "0f00" Or $redo_operation_hex = "1000" Or $redo_operation_hex = "1200" Or $redo_operation_hex = "1400" Or ($redo_operation_hex = "0800" And ($redo_operation_hex = "0800" Or $PreviousRedoOp = "0b00"))) Then
+	If Not $FromRcrdSlack Then
+		$PredictedRefNumber = $KeptRef
+;		$KeptRefTmp = $KeptRef
+	Else
+		$PredictedRefNumber = -1 ;Not possible from slack
+	EndIf
 Else
 	$PredictedRefNumber = -1 ;Not related to any particular MFT ref
+EndIf
+
+$target_vcn = "0x"&$target_vcn
+$MftClusterIndex = "0x"&$MftClusterIndex
+
+
+If Not $FromRcrdSlack Then
+	FileWriteLine($LogFileTransactionHeaderCsv, $RecordOffset & $de & $this_lsn & $de & $client_previous_lsn & $de & $client_undo_next_lsn & $de & $client_index & $de & $record_type & $de & $transaction_id & $de & $lf_flags & $de & $redo_operation & $de & $undo_operation & $de & $redo_offset & $de & $redo_length_tmp & $de & $undo_offset & $de & $undo_length_tmp & $de & $client_data_length & $de & $target_attribute & $de & $lcns_to_follow & $de & $record_offset_in_mft & $de & $attribute_offset & $de & $MftClusterIndex & $de & $target_vcn & $de & $target_lcn & @crlf)
+EndIf
+
+If Not $FromRcrdSlack Then
+	If $FoundInTable > 0 Then
+	;	ConsoleWrite("ubound($OpenAttributesArray): " & ubound($OpenAttributesArray) & @CRLF)
+		$AttributeStringTmp = _ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTable][5],3,4))
+		If $AttributeStringTmp <> "UNKNOWN" And $OpenAttributesArray[$FoundInTable][9] <> 0 Then ;Why do these sometimes point to offsets in OpenAttributeTable containing invalid data?
+			$AttributeString = $AttributeStringTmp
+			If $OpenAttributesArray[$FoundInTable][12] <> "" Then
+				$AttributeString &= ":"&$OpenAttributesArray[$FoundInTable][12]
+			EndIf
+	;		$PredictedRefNumber = $OpenAttributesArray[$FoundInTable][7]
+			$RealMftRef = $OpenAttributesArray[$FoundInTable][7]
+			If $PredictedRefNumber = -1 Then $PredictedRefNumber = $RealMftRef
+		Else
+			$InOpenAttributeTable = "-" & $InOpenAttributeTable ;Will indicate an offset match in OpenAttributeTable that contains invalid data.
+		EndIf
+	EndIf
+	If $PredictedRefNumber = 0 Then
+		If $target_attribute = 0x0018 And Ubound($OpenAttributesArray) > 1 Then
+			$FoundInTable = _ArraySearch($OpenAttributesArray,$target_attribute,0,0,0,2,1,0)
+	;		ConsoleWrite("$FoundInTable: " & $FoundInTable & @CRLF)
+			If $FoundInTable > 0 Then
+				$AttributeString = _ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTable][5],3,4))
+				If $OpenAttributesArray[$FoundInTable][12] <> "" Then
+					$AttributeString &= ":"&$OpenAttributesArray[$FoundInTable][12]
+				EndIf
+			Else
+				ConsoleWrite("$target_attribute was not found in array: " & $target_attribute & @CRLF)
+				_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+			EndIf
+		EndIf
+	EndIf
 EndIf
 ;if $redo_operation_hex="1b00" Then
 ;	MsgBox(0,"lsn: " & $this_lsn,"Ref: " & ((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size))
@@ -860,45 +1552,49 @@ Else
 	$VerboseOn=0
 EndIf
 #ce
-#cs
-If $this_lsn=1050781 or $this_lsn=1050856 or $this_lsn=1057451 or $this_lsn=1057496  or $this_lsn=1057521 or $this_lsn=1057631 or $this_lsn=1057647 or $this_lsn=1058513 or $this_lsn=1059209 Then
-;If $this_lsn=1059209 Then ;56375452416,56375452487,56375452507
-	$VerboseOn=1
-Else
-	$VerboseOn=0
-EndIf
-#ce
+;#cs
+;If $this_lsn=102092945091 or $this_lsn=102092945130 or $this_lsn=102092946307 or $this_lsn=102093057739  or $this_lsn=102093057761  Then
+;If $this_lsn = 7892979208  Then ;56375452416,56375452487,56375452507
+;	$VerboseOn=1
+;	MsgBox(0,"Info","Check output: " & $this_lsn)
+;	ConsoleWrite("Exiting" & @CRLF)
+;	Exit
+;Else
+;	$VerboseOn=0
+;EndIf
+;#ce
+;_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+;_DumpOutput("$target_attribute: " & $target_attribute & @CRLF)
 If $VerboseOn Then
 ;If Dec($client_undo_next_lsn) <> $client_previous_lsn Then
 ;If $redo_operation_hex="1b00" Then
-	ConsoleWrite("Calculated RefNumber: " & ((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size) & @CRLF)
-	ConsoleWrite("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
-	ConsoleWrite("$KeptRef: " & $KeptRef & @CRLF)
-	ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-	ConsoleWrite("$client_previous_lsn: " & $client_previous_lsn & @CRLF)
-;	ConsoleWrite("$client_undo_next_lsn: 0x" & $client_undo_next_lsn & @CRLF)
-	ConsoleWrite("$client_undo_next_lsn: " & Dec($client_undo_next_lsn,2) & @CRLF)
-	ConsoleWrite("$client_data_length: 0x" & $client_data_length & @CRLF)
-	ConsoleWrite("$client_index: 0x" & $client_index & @CRLF)
-	ConsoleWrite("$record_type: 0x" & $record_type & @CRLF)
-	ConsoleWrite("$transaction_id: 0x" & $transaction_id & @CRLF)
-	ConsoleWrite("$flags: 0x" & $flags & @CRLF)
-	ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
-	ConsoleWrite("$redo_operation_hex: 0x" & $redo_operation_hex & @CRLF)
-	ConsoleWrite("$undo_operation: " & $undo_operation & @CRLF)
-	ConsoleWrite("$undo_operation_hex: 0x" & $undo_operation_hex & @CRLF)
-	ConsoleWrite("$redo_offset: " & $redo_offset & @CRLF)
-	ConsoleWrite("$redo_length: " & $redo_length & @CRLF)
-	ConsoleWrite("$undo_offset: " & $undo_offset & @CRLF)
-	ConsoleWrite("$undo_length: " & $undo_length & @CRLF)
-	ConsoleWrite("$target_attribute: 0x" & $target_attribute & @CRLF)
-	ConsoleWrite("$lcns_to_follow: 0x" & $lcns_to_follow & @CRLF)
-	ConsoleWrite("$record_offset_in_mft: 0x" & Hex($record_offset_in_mft,8) & @CRLF)
-	ConsoleWrite("$attribute_offset: 0x" & Hex($attribute_offset,8) & @CRLF)
-	ConsoleWrite("$MftClusterIndex: 0x" & $MftClusterIndex & @CRLF)
-	ConsoleWrite("$target_vcn: 0x" & $target_vcn & @CRLF)
-	ConsoleWrite("$target_lcn: 0x" & $target_lcn & @CRLF)
-	ConsoleWrite(@CRLF)
+	_DumpOutput("Calculated RefNumber: " & ((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size) & @CRLF)
+	_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+	_DumpOutput("$KeptRef: " & $KeptRef & @CRLF)
+	_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+	_DumpOutput("$client_previous_lsn: " & $client_previous_lsn & @CRLF)
+	_DumpOutput("$client_undo_next_lsn: " & $client_undo_next_lsn & @CRLF)
+	_DumpOutput("$client_data_length: 0x" & Hex($client_data_length,8) & @CRLF)
+	_DumpOutput("$client_index: " & $client_index & @CRLF)
+	_DumpOutput("$record_type: " & $record_type & @CRLF)
+	_DumpOutput("$transaction_id: " & $transaction_id & @CRLF)
+	_DumpOutput("$lf_flags: " & $lf_flags & @CRLF)
+	_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+	_DumpOutput("$redo_operation_hex: 0x" & $redo_operation_hex & @CRLF)
+	_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+	_DumpOutput("$undo_operation_hex: 0x" & $undo_operation_hex & @CRLF)
+	_DumpOutput("$redo_offset: " & $redo_offset & @CRLF)
+	_DumpOutput("$redo_length: " & $redo_length & @CRLF)
+	_DumpOutput("$undo_offset: " & $undo_offset & @CRLF)
+	_DumpOutput("$undo_length: " & $undo_length & @CRLF)
+	_DumpOutput("$target_attribute: " & $target_attribute & @CRLF)
+	_DumpOutput("$lcns_to_follow: " & $lcns_to_follow & @CRLF)
+	_DumpOutput("$record_offset_in_mft: 0x" & Hex($record_offset_in_mft,8) & @CRLF)
+	_DumpOutput("$attribute_offset: 0x" & Hex($attribute_offset,8) & @CRLF)
+	_DumpOutput("$MftClusterIndex: " & $MftClusterIndex & @CRLF)
+	_DumpOutput("$target_vcn: " & $target_vcn & @CRLF)
+	_DumpOutput("$target_lcn: " & $target_lcn & @CRLF)
+	_DumpOutput(@CRLF)
 EndIf
 ;If $undo_operation_hex="0100" And (((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size) <> 0) Then MsgBox(0,"Info","Check CompensationlogRecord")
 ;ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
@@ -906,8 +1602,8 @@ EndIf
 If $redo_length > 0 Then
 	$redo_chunk = StringMid($InputData,97+($redo_offset*2),$redo_length*2)
 	If $VerboseOn Then
-		ConsoleWrite("Redo: " & $redo_operation & @CRLF)
-		ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+		_DumpOutput("Redo: " & $redo_operation & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 	EndIf
 	$RedoChunkSize = StringLen($redo_chunk)/2
 	Select
@@ -915,6 +1611,11 @@ If $redo_length > 0 Then
 			_ParserCodeOldVersion($redo_chunk)
 		Case $redo_operation_hex="0300" ;DeallocateFileRecordSegment
 			_RemoveAllOffsetOfAttribute($PredictedRefNumber)
+		Case $redo_operation_hex="0400" ;WriteEndOfFileRecordSegment
+;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+;			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case $redo_operation_hex="0500" ; CreateAttribute
 			$TestAttributeType = _Decode_AttributeType($redo_chunk)
 			If $TestAttributeType <> '' Then _UpdateSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $RedoChunkSize, $TestAttributeType)
@@ -932,29 +1633,38 @@ If $redo_length > 0 Then
 		Case $redo_operation_hex="0800" ; UpdateNonResidentValue
 			If StringLeft($redo_chunk,8) = "494e4458" Then ;INDX
 				$TextInformation &= ";INDX"
-				If $KeptRefTmp = 24 Then
+
+				If $KeptRefTmp = 24 And Not $FromRcrdSlack Then
 					$AttributeString = "$INDEX_ALLOCATION($Quota?)"
 					$PredictedRefNumber = $KeptRefTmp
 					$KeptRef = $KeptRefTmp
-				ElseIf $KeptRefTmp = 25 Then
+				ElseIf $KeptRefTmp = 25 And Not $FromRcrdSlack Then
 					$AttributeString = "$INDEX_ALLOCATION($ObjId?)"
 					$PredictedRefNumber = $KeptRefTmp
 					$KeptRef = $KeptRefTmp
-				ElseIf $KeptRefTmp = 26 Then
+				ElseIf $KeptRefTmp = 26 And Not $FromRcrdSlack Then
 					$AttributeString = "$INDEX_ALLOCATION($Reparse?)"
 					$PredictedRefNumber = $KeptRefTmp
 					$KeptRef = $KeptRefTmp
 				Else
 					$DecodeOk=0
 					$DecodeOk = _Decode_INDX($redo_chunk)
-					If Not $DecodeOk Then
-						ConsoleWrite("_Decode_INDX() failed for $this_lsn: " & $this_lsn & @CRLF)
-						ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+					If Not $DecodeOk Then ;Possibly $Secure:$SDH or $Secure:$SII
+;						ConsoleWrite("_Decode_INDX() failed for $this_lsn: " & $this_lsn & @CRLF)
+;						ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+						$Indx = _GetIndxWoFixup($redo_chunk)
+						If StringMid($Indx,89,8) = "49004900" Then ;SDH signature
+							_DecodeIndxEntriesSDH($Indx)
+							$TextInformation &= ";See LogFile_SecureSDH.csv"
+						Else
+							_DecodeIndxEntriesSII($Indx)
+							$TextInformation &= ";See LogFile_SecureSII.csv"
+						EndIf
 					Else
 						$TextInformation &= ";See LogFile_INDX.csv"
 					EndIf
 				EndIf
-				If $PreviousRedoOp = "1c00" Then
+				If $PreviousRedoOp = "1c00" And Not $FromRcrdSlack Then
 					$AttributeString = $PreviousAttribute
 					$PredictedRefNumber = $KeptRef
 				EndIf
@@ -969,17 +1679,22 @@ If $redo_length > 0 Then
 						If Int($undo_length) = 0 And $undo_operation_hex = "0000" And Int($record_offset_in_mft) + Int($redo_length) = 4096 Then
 							$TextInformation &= ";$UsnJrnl;Filling of zeros to page boundary"
 							$AttributeString = "$DATA:$J"
+						ElseIf Int($undo_length) >= 32 And $undo_operation_hex="0800" Then
+							_MainSecure($redo_chunk)
+							$TextInformation &= ";$Secure:$SDS;See LogFile_SecurityDescriptors.csv"
 						ElseIf Int($undo_length) > 0 And $undo_operation_hex="0800" Then
 							$TextInformation &= ";$Secure"
-							ConsoleWrite("_UsnDecodeRecord2() unresolved $Secure: " & $this_lsn & @CRLF)
-							ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+							_DumpOutput("Error in UpdateNonResidentValue: unresolved $Secure: " & $this_lsn & @CRLF)
+							_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 						Else
-							ConsoleWrite("_UsnDecodeRecord2() failed and probably not Filling of zeros to page boundary for $this_lsn: " & $this_lsn & @CRLF)
-							ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+							_DumpOutput("_UsnDecodeRecord2() failed and probably not Filling of zeros to page boundary for $this_lsn: " & $this_lsn & @CRLF)
+							_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 						EndIf
-					Else
-						ConsoleWrite("_UsnDecodeRecord2() failed and $PreviousRedoOp <> 0b00 for $this_lsn: " & $this_lsn & @CRLF)
-						ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+					Else ;Likely $Secure:$SDS
+;						ConsoleWrite("_UsnDecodeRecord2() failed and $PreviousRedoOp <> 0b00 for $this_lsn: " & $this_lsn & @CRLF)
+;						ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+						_MainSecure($redo_chunk)
+						$TextInformation &= ";$Secure:$SDS;See LogFile_SecurityDescriptors.csv"
 					EndIf
 ;					ConsoleWrite("_UsnDecodeRecord2() failed for $this_lsn: " & $this_lsn & @CRLF)
 ;					ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
@@ -995,6 +1710,11 @@ If $redo_length > 0 Then
 ;				$AttributeString&= '->('&$ResolvedAttributeOffset&')'
 				$AttributeString = $ResolvedAttributeOffset
 			EndIf
+		Case $redo_operation_hex="0a00" ;DeleteDirtyClusters
+			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case $redo_operation_hex="0b00" ; SetNewAttributeSizes
 			_Decode_SetNewAttributeSize($redo_chunk)
 			If ($RealMftRef = $UsnJrnlRef) And ($UsnJrnlRef <> "") Then
@@ -1007,40 +1727,67 @@ If $redo_length > 0 Then
 ;					$AttributeString&= '->('&$ResolvedAttributeOffset&')'
 					$AttributeString = $ResolvedAttributeOffset
 				EndIf
+			Else
+;				_DumpOutput("Error at LSN: " & $this_lsn & @CRLF)
+;				_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+;				_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 			EndIf
 		Case $redo_operation_hex="0c00" Or $redo_operation_hex="0d00" Or $redo_operation_hex="0e00" Or $redo_operation_hex="0f00" ;AddindexEntryRoot,DeleteindexEntryRoot,AddIndexEntryAllocation,DeleteIndexEntryAllocation
+			If $redo_operation_hex="0c00" Or $redo_operation_hex="0d00" Then $AttributeString = "$INDEX_ROOT"
+;			If $redo_operation_hex="0e00" Or $redo_operation_hex="0f00" Then $AttributeString = "$INDEX_ALLOCATION"
 ;			if $redo_operation_hex="0f00" Then ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-			If $redo_length*2>168 Then
-				$DecodeOk=0
-				$DecodeOk = _Decode_IndexEntry($redo_chunk,$redo_operation_hex,1)
-				If Not $DecodeOk Then
-					If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
-					ConsoleWrite("_Decode_IndexEntry() failed for $this_lsn: " & $this_lsn & @CRLF)
-					ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-				Else
-					If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
-				EndIf
-			Else
-;				if $PredictedRefNumber = 9 Then $AttributeString = "$INDEX_ALLOCATION"
-				If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
-				ConsoleWrite("Unresolved: " & $redo_operation & @CRLF)
-				ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-				ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-			EndIf
-			If $PreviousRedoOp = "1c00" Then $AttributeString = $PreviousAttribute
-		Case $redo_operation_hex="1000" ; ResetAllocation
+			Select
+				Case $PredictedRefNumber = 9 Or $RealMftRef = 9 ;$Secure
+					If $redo_length = 40 Then ;$SII
+						_DecodeIndxEntriesSII($redo_chunk)
+						$TextInformation &= ";$Secure:$SII;See LogFile_SecureSII.csv"
+						$AttributeString &= ":$SII"
+					ElseIf $redo_length = 48 Then  ;$SDH
+						_DecodeIndxEntriesSDH($redo_chunk)
+						$TextInformation &= ";$Secure:$SDH;See LogFile_SecureSDH.csv"
+						$AttributeString &= ":$SDH"
+					EndIf
+
+				Case $PredictedRefNumber = 24 Or $RealMftRef = 24 ;$Quota
+					If $redo_length > 68 Then
+						_Decode_Quota_Q($redo_chunk)
+						$TextInformation &= ";See LogFile_QuotaQ.csv"
+					Else
+						_Decode_Quota_O($redo_chunk)
+						$TextInformation &= ";See LogFile_QuotaO.csv"
+					EndIf
+
+				Case $PredictedRefNumber = 25 Or $RealMftRef = 25 ;$ObjId
+					If $redo_length = 88 Then
+						_Decode_ObjId_O($redo_chunk)
+						$TextInformation &= ";See LogFile_ObjIdO.csv"
+					EndIf
+
+				Case Else
+					$DecodeOk=0
+					$DecodeOk = _Decode_IndexEntry($redo_chunk,$redo_operation_hex,1)
+					If Not $DecodeOk Then
+						If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
+						_DumpOutput("_Decode_IndexEntry() failed for $this_lsn: " & $this_lsn & @CRLF)
+						_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+					Else
+						If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
+					EndIf
+			EndSelect
+		Case $redo_operation_hex="1000" ; WriteEndOfIndexBuffer -> always 0 but check undo
 			$AttributeString = "$INDEX_ALLOCATION"
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
 ;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-			$AttributeString = "$INDEX_ALLOCATION"
-		Case $redo_operation_hex="1100" ; ResetRoot
+		Case $redo_operation_hex="1100" ; SetIndexEntryVcnRoot
+			_Decode_SetIndexEntryVcn($redo_chunk)
 			$AttributeString = "$INDEX_ROOT"
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
 ;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case $redo_operation_hex="1200" ; SetIndexEntryVcnAllocation
-			_Decode_SetIndexEntryVcnAllocation($redo_chunk)
+			_Decode_SetIndexEntryVcn($redo_chunk)
+			$AttributeString = "$INDEX_ALLOCATION"
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
 ;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
@@ -1054,9 +1801,11 @@ If $redo_length > 0 Then
 			EndIf
 		Case $redo_operation_hex="1400" ; UpdateFileNameAllocation
 ;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-			If $KeptRefTmp > 0 And $client_previous_lsn = 0 Then
-				$PredictedRefNumber = $KeptRefTmp
-				$KeptRef = $KeptRefTmp
+			If Not $FromRcrdSlack Then
+				If $KeptRefTmp > 0 And $client_previous_lsn = 0 Then
+					$PredictedRefNumber = $KeptRefTmp
+					$KeptRef = $KeptRefTmp
+				EndIf
 			EndIf
 			_Decode_FileName($redo_chunk)
 			If $PreviousRedoOp = "1c00" Then
@@ -1066,78 +1815,119 @@ If $redo_length > 0 Then
 				$RealMftRef = "Parent"
 			EndIf
 		Case $redo_operation_hex="1500" ;SetBitsInNonresidentBitMap
-;			_Decode_SetBitsInNonresidentBitMap($redo_chunk,"")
+			_Decode_BitsInNonresidentBitMap2($redo_chunk)
 		Case $redo_operation_hex="1600"  ;ClearBitsInNonresidentBitMap
-;			_Decode_ClearBitsInNonresidentBitMap($redo_chunk,"")
+;			_Decode_BitsInNonresidentBitMap2($redo_chunk)
+		Case $redo_operation_hex="1700" ;HotFix
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+		Case $redo_operation_hex="1800" ;EndTopLevelAction
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+		Case $redo_operation_hex="1900" ;PrepareTransaction
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case $redo_operation_hex="1c00" ; OpenNonresidentAttribute
-			_Decode_OpenNonresidentAttribute($redo_chunk)
+			If Not $FromRcrdSlack Then $FoundInTableDummy = _Decode_OpenNonresidentAttribute($redo_chunk)
 ;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-		Case $redo_operation_hex="1D00"
+		Case $redo_operation_hex="1D00" ;OpenAttributeTableDump
+;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+;			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+			If Not $FromRcrdSlack Then
+				_Decode_OpenAttributeTableDump($redo_chunk)
+				$TextInformation &= ";See LogFile_OpenAttributeTable.csv"
+			Else
+				_Decode_SlackOpenAttributeTableDump($redo_chunk)
+				$TextInformation &= ";See LogFile_SlackOpenAttributeTable.csv"
+			EndIf
+		Case $redo_operation_hex="1E00" ;AttributeNamesDump
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
 ;			ConsoleWrite("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
 ;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-		Case $redo_operation_hex="1E00"
+			If Not $FromRcrdSlack Then
+				_Decode_AttributeNamesDump($redo_chunk)
+			Else
+				_Decode_SlackAttributeNamesDump($redo_chunk)
+			EndIf
+		Case $redo_operation_hex="1F00" ;DirtyPageTableDump
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
 ;			ConsoleWrite("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
 ;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-		Case $redo_operation_hex="1F00"
-;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-;			ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
-;			ConsoleWrite("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
-;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-		Case $redo_operation_hex="2000"
-;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-;			ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
-;			ConsoleWrite("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
-;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+			_Decode_DirtyPageTableDump($redo_chunk)
+			$TextInformation &= ";See LogFile_DirtyPageTable.csv"
+		Case $redo_operation_hex="2000" ;TransactionTableDump
+;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+;			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+			_Decode_TransactionTableDump($redo_chunk)
+			$TextInformation &= ";See LogFile_TransactionTable.csv"
+		Case $redo_operation_hex="2100" ;UpdateRecordDataRoot
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+		Case $redo_operation_hex="2200" ;UpdateRecordDataAllocation
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case $redo_operation = "UNKNOWN"
 			$TextInformation &= ";RedoOperation="&$redo_operation_hex
-;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-;			ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
-;			ConsoleWrite("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
-;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case Else
-;			ConsoleWrite("Missed transaction!" & @CRLF)
-;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-;			ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
-;			ConsoleWrite("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
-;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+			_DumpOutput("Missed transaction!" & @CRLF)
+			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 	EndSelect
-;	if $redo_operation_hex="0b00" And StringLen($redo_chunk) > 50 Then
-;	if $redo_operation_hex="1200" Then
-;		ConsoleWrite("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
-;		ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-;		ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
-;		ConsoleWrite("$target_attribute: 0x" & $target_attribute & @CRLF)
-;		ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-;	EndIf
 Else
 	$RedoChunkSize = 0
 EndIf
-;If $redo_operation_hex="0c00" Then MsgBox(0,"Info","Check record")
-;If $this_lsn=1067203  Then MsgBox(0,"Info","Check record")
-;#cs
-;ConsoleWrite("$undo_operation: " & $undo_operation & @CRLF)
+
 If $undo_length > 0 Then ; Not needed I guess
 	$undo_chunk = StringMid($InputData,97+($undo_offset*2),$undo_length*2)
 	If $VerboseOn Then
-		ConsoleWrite("Undo: " & $undo_operation & @CRLF)
-		ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
-
+		_DumpOutput("Undo: " & $undo_operation & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 	endif
 	$UndoChunkSize = StringLen($undo_chunk)/2
-;	If $this_lsn=100676915  Then ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
 	Select
 		Case $undo_operation_hex="0000" ; NoOp
-			If Int($undo_offset)+Int($undo_length) > StringLen($InputData) Then
-;				MsgBox(0,"Error","$undo_offset > StringLen($InputData) for LSN: " & $this_lsn)
-			Else
-				_Decode_AttributeName($undo_chunk)
+			If Not $FromRcrdSlack Then
+				If Int($undo_offset)+Int($undo_length) > StringLen($InputData) Then
+	;				MsgBox(0,"Error","$undo_offset > StringLen($InputData) for LSN: " & $this_lsn)
+				Else
+					$AttrNameTmp = _Decode_AttributeName($undo_chunk)
+					If $FoundInTableDummy > 0 Then
+	;					MsgBox(0,"Info","Writing entry")
+						$OpenAttributesArray[$FoundInTableDummy][12] = $AttrNameTmp
+						FileWriteLine($LogFileOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$OpenAttributesArray[$FoundInTableDummy][0]&$de&$OpenAttributesArray[$FoundInTableDummy][12]&$de&$OpenAttributesArray[$FoundInTableDummy][1]&$de&$OpenAttributesArray[$FoundInTableDummy][2]&$de&$OpenAttributesArray[$FoundInTableDummy][3]&$de&$OpenAttributesArray[$FoundInTableDummy][4]&$de&$OpenAttributesArray[$FoundInTableDummy][5]&$de&_ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTableDummy][5],3,4))&$de&$OpenAttributesArray[$FoundInTableDummy][6]&$de&$OpenAttributesArray[$FoundInTableDummy][7]&$de&$OpenAttributesArray[$FoundInTableDummy][8]&$de&$OpenAttributesArray[$FoundInTableDummy][9]&$de&$OpenAttributesArray[$FoundInTableDummy][10]&$de&$OpenAttributesArray[$FoundInTableDummy][11]&@crlf)
+	;					FileWriteLine($LogFileOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$OpenAttributesArray[$FoundInTableDummy][0]&$de&$OpenAttributesArray[$FoundInTableDummy][12]&$de&$OpenAttributesArray[$FoundInTableDummy][1]&$de&$OpenAttributesArray[$FoundInTableDummy][2]&$de&$OpenAttributesArray[$FoundInTableDummy][3]&$de&$OpenAttributesArray[$FoundInTableDummy][4]&$de&$OpenAttributesArray[$FoundInTableDummy][5]&$de&_ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTableDummy][5],3,4))&$de&$OpenAttributesArray[$FoundInTableDummy][6]&$de&$OpenAttributesArray[$FoundInTableDummy][7]&$de&$OpenAttributesArray[$FoundInTableDummy][8]&$de&$OpenAttributesArray[$FoundInTableDummy][9]&$de&$OpenAttributesArray[$FoundInTableDummy][10]&$de&"0xDEADBEEF"&@crlf)
+					EndIf
+				EndIf
 			EndIf
 		Case $undo_operation_hex="0200" ;InitializeFileRecordSegment
 ;			_ParserCodeOldVersion($undo_chunk)
+		Case $undo_operation_hex="0400" ; WriteEndOfFileRecordSegment
+;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+;			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 		Case $undo_operation_hex="0500" ; CreateAttribute
 			$TestAttributeType = _Decode_AttributeType($undo_chunk)
 			If $TestAttributeType <> '' Then _RemoveSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $UndoChunkSize, $TestAttributeType)
@@ -1152,30 +1942,36 @@ If $undo_length > 0 Then ; Not needed I guess
 ;			_Decode_SetNewAttributeSize($undo_chunk)
 		Case $undo_operation_hex="0c00" Or $undo_operation_hex="0e00"
 			If $undo_length*2>168 Then
-				_Decode_IndexEntry($undo_chunk,$undo_operation_hex,0)
+				$DecodeOk = _Decode_IndexEntry($undo_chunk,$undo_operation_hex,0)
+				If Not $DecodeOk Then
+					_DumpOutput("_Decode_IndexEntry() failed at undo for $this_lsn: " & $this_lsn & @CRLF)
+					_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+				EndIf
 			Else
-				ConsoleWrite("Unresolved: " & $undo_operation & @CRLF)
-				ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-				ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
+				_DumpOutput(@CRLF & "Unresolved: " & $undo_operation & @CRLF)
+				_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+				_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 			EndIf
-		Case $undo_operation_hex="1000" ; ClearIndex
-			If $undo_length*2>168 Then
+		Case $undo_operation_hex="1000" ; WriteEndOfIndexBuffer
+			If Not ($PredictedRefNumber = 9 Or $PredictedRefNumber = 24 Or $PredictedRefNumber = 25 Or $PredictedRefNumber = 26 Or $RealMftRef = 9 Or $RealMftRef = 24 Or $RealMftRef = 25 Or $RealMftRef = 26) Then
+;			If ($PredictedRefNumber <> 9 And $PredictedRefNumber <> 24 And $PredictedRefNumber <> 25 And $PredictedRefNumber <> 26) Or ($RealMftRef <> 9 And $RealMftRef <> 24 And $RealMftRef <> 25 And $RealMftRef <> 26) Then
+;			If $undo_length*2>168 Then
 				$DecodeOk=0
 				$DecodeOk = _Decode_UndoWipeINDX($undo_chunk)
 				If Not $DecodeOk Then
-					ConsoleWrite("_Decode_UndoWipeINDX() failed for $this_lsn: " & $this_lsn & @CRLF)
-					ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
-				Else
-					$TextInformation &= ";INDX"
+					_DumpOutput(@CRLF & "_Decode_UndoWipeINDX() failed for $this_lsn: " & $this_lsn & @CRLF)
+					_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+;				Else
+;					$TextInformation &= ";INDX"
 				EndIf
 			Else
-;				if $PredictedRefNumber = 9 Then $AttributeString = "$INDEX_ALLOCATION"
-				ConsoleWrite("Unresolved: " & $undo_operation & @CRLF)
-				ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-				ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
-				MsgBox(0,"Info","Check output of this transaction")
+				_DumpOutput("Unresolved: " & $undo_operation & @CRLF)
+				_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+				_DumpOutput("Though it is probably ok to not bother with undo of indexes that are not of type $I30." & @CRLF)
+				_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+;				MsgBox(0,"Info","Check output of transaction with lsn: " & $this_lsn)
 			EndIf
-		Case $undo_operation_hex="1100"
+		Case $undo_operation_hex="1100" ; SetIndexEntryVcnRoot
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
 ;			ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
@@ -1185,69 +1981,132 @@ If $undo_length > 0 Then ; Not needed I guess
 		Case $undo_operation_hex="1400" ; UpdateFileNameAllocation
 ;			_Decode_FileName($undo_chunk)
 		Case $undo_operation_hex="1500" ; SetBitsInNonresidentBitMap
-;			_Decode_SetBitsInNonresidentBitMap($undo_chunk,";")
+			_Decode_BitsInNonresidentBitMap($redo_chunk,$redo_operation,$undo_chunk,$undo_operation)
+			$TextInformation &= ";See LogFile_BitsInNonresidentBitMap.csv"
 		Case $undo_operation_hex="1600" ; ClearBitsInNonresidentBitMap
-;			_Decode_ClearBitsInNonresidentBitMap($undo_chunk,";")
-		Case $undo_operation_hex="1D00"
+			_Decode_BitsInNonresidentBitMap($redo_chunk,$redo_operation,$undo_chunk,$undo_operation)
+			$TextInformation &= ";See LogFile_BitsInNonresidentBitMap.csv"
+		Case $undo_operation_hex="1700" ;HotFix
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+		Case $undo_operation_hex="1800" ;EndTopLevelAction
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+		Case $undo_operation_hex="1900" ;PrepareTransaction
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+		Case $undo_operation_hex="1D00" ;OpenAttributeTableDump
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$undo_operation: " & $undo_operation & @CRLF)
 ;			ConsoleWrite("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
 ;			ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
-		Case $undo_operation_hex="1E00"
+		Case $undo_operation_hex="1E00" ;AttributeNamesDump
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$undo_operation: " & $undo_operation & @CRLF)
 ;			ConsoleWrite("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
 ;			ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
-		Case $undo_operation_hex="1F00"
+		Case $undo_operation_hex="1F00" ;DirtyPageTableDump
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$undo_operation: " & $undo_operation & @CRLF)
 ;			ConsoleWrite("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
 ;			ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
+		Case $undo_operation_hex="2000" ;TransactionTableDump
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+		Case $undo_operation_hex="2100" ;UpdateRecordDataRoot
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+		Case $undo_operation_hex="2200" ;UpdateRecordDataAllocation
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 		Case $undo_operation = "UNKNOWN"
-;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-;			ConsoleWrite("$undo_operation: " & $undo_operation & @CRLF)
-;			ConsoleWrite("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
-;			ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
+			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 		Case Else
-;			ConsoleWrite("Missed transaction!" & @CRLF)
-;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-;			ConsoleWrite("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
-;			ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
+			_DumpOutput("Missed transaction!" & @CRLF)
+			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 	EndSelect
 Else
 	$UndoChunkSize = 0
 EndIf
-;If $VerboseOn Then
-;	_ArrayDisplay($AttrArray,"$AttrArray")
-;	MsgBox(0,"Info","Read output")
-;EndIf
-If $SI_USN = $PreviousUsn And $SI_USN <> "" Then
-;	MsgBox(0,"Usn:","$PreviousUsn: " & $PreviousUsn & ", $PreviousUsnFileName: " & $PreviousUsnFileName)
-	$FN_Name = $PreviousUsnFileName
+
+If Not $FromRcrdSlack Then
+	If $SI_USN = $PreviousUsn And $SI_USN <> "" Then
+	;	MsgBox(0,"Usn:","$PreviousUsn: " & $PreviousUsn & ", $PreviousUsnFileName: " & $PreviousUsnFileName)
+		$FN_Name = $PreviousUsnFileName
+	EndIf
+	If $client_previous_lsn=0 Then
+		$PreviousRealRef=""
+	EndIf
+	If $undo_operation = "UNKNOWN" Then $TextInformation &= ";UndoOperation="&$undo_operation_hex
+
+	$PreviousRedoOp = $redo_operation_hex
+	$PreviousAttribute = $AttributeString
+	If $UsnOk Then
+		$PreviousUsn = $UsnJrnlUsn
+		$PreviousUsnFileName = $UsnJrnlFileName
+		$PreviousUsnReason = $UsnJrnlReason
+	EndIf
+	If $FoundInTable > 0 Then
+	;	ConsoleWrite("ubound($OpenAttributesArray): " & ubound($OpenAttributesArray) & @CRLF)
+		$AttributeStringTmp = _ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTable][5],3,4))
+		If $AttributeStringTmp <> "UNKNOWN" And $OpenAttributesArray[$FoundInTable][9] <> 0 Then ;Why do these sometimes point to offsets in OpenAttributeTable containing invalid data?
+			$AttributeString = $AttributeStringTmp
+			If $OpenAttributesArray[$FoundInTable][12] <> "" Then
+				$AttributeString &= ":"&$OpenAttributesArray[$FoundInTable][12]
+			EndIf
+	;		$PredictedRefNumber = $OpenAttributesArray[$FoundInTable][7]
+			$RealMftRef = $OpenAttributesArray[$FoundInTable][7]
+			If $PredictedRefNumber = -1 Then $PredictedRefNumber = $RealMftRef
+		Else
+			$InOpenAttributeTable = "-" & $InOpenAttributeTable ;Will indicate an offset match in OpenAttributeTable that contains invalid data.
+		EndIf
+	EndIf
+	If $PredictedRefNumber = 0 Then
+		If $target_attribute = 0x0018 And Ubound($OpenAttributesArray) > 1 Then
+			$FoundInTable = _ArraySearch($OpenAttributesArray,$target_attribute,0,0,0,2,1,0)
+	;		ConsoleWrite("$FoundInTable: " & $FoundInTable & @CRLF)
+			If $FoundInTable > 0 Then
+				$AttributeString = _ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTable][5],3,4))
+				If $OpenAttributesArray[$FoundInTable][12] <> "" Then
+					$AttributeString &= ":"&$OpenAttributesArray[$FoundInTable][12]
+				EndIf
+			Else
+				ConsoleWrite("$target_attribute was not found in array: " & $target_attribute & @CRLF)
+				_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+			EndIf
+		EndIf
+	EndIf
 EndIf
-If $client_previous_lsn=0 Then
-	$PreviousRealRef=""
-EndIf
-If $undo_operation = "UNKNOWN" Then $TextInformation &= ";UndoOperation="&$undo_operation_hex
-;If $undo_operation_hex="0f00" Then MsgBox(0,"Info","Check record")
-;If $redo_operation_hex="0c00" Then MsgBox(0,"Info","Check record")
-;#ce
-$PreviousRedoOp = $redo_operation_hex
-$PreviousAttribute = $AttributeString
-If $UsnOk Then
-	$PreviousUsn = $UsnJrnlUsn
-	$PreviousUsnFileName = $UsnJrnlFileName
-	$PreviousUsnReason = $UsnJrnlReason
-EndIf
+
 _SetNameOnSystemFiles()
 _WriteLogFileCsv()
 If $DoSplitCsv Then _WriteCSVExtra()
+_ClearVar()
 EndFunc
 
 Func _DecodeRSTR($RSTRRecord)
 Local $Startpos=3
 $RSTRRecord = _DoFixup($RSTRRecord)
 If $RSTRRecord = "" then Return ""  ;corrupt, failed fixup
+_DumpOutput("------------- RSTR -------------" & @CRLF)
+;_DumpOutput(_HexEncode($RSTRRecord) & @CRLF)
 $usa_ofs = StringMid($RSTRRecord,$Startpos+8,4)              ; 2 bytes
 $usa_count = StringMid($RSTRRecord,$Startpos+12,4)           ; 2 bytes
 $chkdsk_lsn = StringMid($RSTRRecord,$Startpos+16,16)         ; 8 bytes
@@ -1259,16 +2118,14 @@ $log_page_size = _SwapEndian($log_page_size)
 $restart_area_offset = StringMid($RSTRRecord,$Startpos+48,4) ; 2 bytes
 $minor_ver = StringMid($RSTRRecord,$Startpos+52,4)           ; 2 bytes
 $major_ver = StringMid($RSTRRecord,$Startpos+56,4)           ; 2 bytes
-If $VerboseOn Then
-;	ConsoleWrite("$usa_ofs: " & $usa_ofs & @CRLF)
-;	ConsoleWrite("$usa_count: " & $usa_count & @CRLF)
-	ConsoleWrite("$chkdsk_lsn: " & Dec($chkdsk_lsn,2) & @CRLF)
-	ConsoleWrite("$system_page_size: 0x" & $system_page_size & @CRLF)
-	ConsoleWrite("$log_page_size: 0x" & $log_page_size & @CRLF)
-;	ConsoleWrite("$restart_area_offset: " & $restart_area_offset & @CRLF)
-	ConsoleWrite("$minor_ver: 0x" & _SwapEndian($minor_ver) & @CRLF)
-	ConsoleWrite("$major_ver: 0x" & _SwapEndian($major_ver) & @CRLF)
-EndIf
+;_DumpOutput("$usa_ofs: " & $usa_ofs & @CRLF)
+;_DumpOutput("$usa_count: " & $usa_count & @CRLF)
+_DumpOutput("$chkdsk_lsn: " & Dec($chkdsk_lsn,2) & @CRLF)
+_DumpOutput("$system_page_size: 0x" & $system_page_size & @CRLF)
+_DumpOutput("$log_page_size: 0x" & $log_page_size & @CRLF)
+;_DumpOutput("$restart_area_offset: " & $restart_area_offset & @CRLF)
+_DumpOutput("$minor_ver: 0x" & _SwapEndian($minor_ver) & @CRLF)
+_DumpOutput("$major_ver: 0x" & _SwapEndian($major_ver) & @CRLF)
 ; End -> size = 30 bytes
 ;----------------------------------
 $restart_area_offset = $Startpos+(Dec(_SwapEndian($restart_area_offset),2)*2)
@@ -1300,25 +2157,23 @@ $log_page_data_offset = _SwapEndian($log_page_data_offset)
 $restart_log_open_count = StringMid($RSTRRecord,$restart_area_offset+80,8)
 $restart_log_open_count = _SwapEndian($restart_log_open_count)
 $reserved = StringMid($RSTRRecord,$restart_area_offset+88,8)
-If Dec($file_size,2) <> $InputFileSize Then ConsoleWrite("Error: The size of the $LogFile as specified in RSTR is not the same as the filesize of input" & @CRLF)
-If $VerboseOn Then
-	ConsoleWrite("-------------------- RSTR: Log file restart area record" & @CRLF)
-	ConsoleWrite("$restart_area_offset: " & $restart_area_offset & @CRLF)
-	ConsoleWrite("$current_lsn: " & Dec($current_lsn,2) & @CRLF)
-	ConsoleWrite("$log_clients: 0x" & $log_clients & @CRLF)
-	ConsoleWrite("$client_free_list: 0x" & $client_free_list & @CRLF)
-	ConsoleWrite("$client_in_use_list: 0x" & $client_in_use_list & @CRLF)
-	ConsoleWrite("$RESTART_AREA_FLAGS: 0x" & $RESTART_AREA_FLAGS & @CRLF)
-	ConsoleWrite("$seq_number_bits: 0x" & $seq_number_bits & @CRLF)
-	ConsoleWrite("$restart_area_length: 0x" & $restart_area_length & @CRLF)
-	ConsoleWrite("$client_array_offset: " & $client_array_offset & @CRLF)
-	ConsoleWrite("$file_size: 0x" & $file_size & @CRLF)
-	ConsoleWrite("$last_lsn_data_length: 0x" & $last_lsn_data_length & @CRLF)
-	ConsoleWrite("$log_record_header_length: 0x" & $log_record_header_length & @CRLF)
-	ConsoleWrite("$log_page_data_offset: 0x" & $log_page_data_offset & @CRLF)
-	ConsoleWrite("$restart_log_open_count: 0x" & $restart_log_open_count & @CRLF)
-;ConsoleWrite("$reserved: " & $reserved & @CRLF)
-EndIf
+
+_DumpOutput("--- RSTR: Log file restart area record:" & @CRLF)
+If Dec($file_size,2) <> $InputFileSize Then _DumpOutput("Error: The size of the $LogFile as specified in RSTR is not the same as the filesize of input" & @CRLF)
+_DumpOutput("$restart_area_offset: " & $restart_area_offset & @CRLF)
+_DumpOutput("$current_lsn: " & Dec($current_lsn,2) & @CRLF)
+_DumpOutput("$log_clients: 0x" & $log_clients & @CRLF)
+_DumpOutput("$client_free_list: 0x" & $client_free_list & @CRLF)
+_DumpOutput("$client_in_use_list: 0x" & $client_in_use_list & @CRLF)
+_DumpOutput("$RESTART_AREA_FLAGS: 0x" & $RESTART_AREA_FLAGS & @CRLF)
+_DumpOutput("$seq_number_bits: 0x" & $seq_number_bits & @CRLF)
+_DumpOutput("$restart_area_length: 0x" & $restart_area_length & @CRLF)
+_DumpOutput("$client_array_offset: " & $client_array_offset & @CRLF)
+_DumpOutput("$file_size: 0x" & $file_size & @CRLF)
+_DumpOutput("$last_lsn_data_length: 0x" & $last_lsn_data_length & @CRLF)
+_DumpOutput("$log_record_header_length: 0x" & $log_record_header_length & @CRLF)
+_DumpOutput("$log_page_data_offset: 0x" & $log_page_data_offset & @CRLF)
+_DumpOutput("$restart_log_open_count: 0x" & $restart_log_open_count & @CRLF)
 ; End RESTART_AREA -> size = 48 bytes
 ;---------------------------
 ; Log client record
@@ -1335,21 +2190,20 @@ $seq_number = StringMid($RSTRRecord,$ClientRecordOffset+40,4)
 $seq_number = _SwapEndian($seq_number)
 $reserved2 = StringMid($RSTRRecord,$ClientRecordOffset+44,12)
 $client_name_length = StringMid($RSTRRecord,$ClientRecordOffset+56,8)
-$client_name_length = _SwapEndian($client_name_length)
-$client_name = StringMid($RSTRRecord,$ClientRecordOffset+64,16)   ; Actually 8 bytes (NTFS in unicode) + 120 bytes of 00's
-If $VerboseOn Then
-	ConsoleWrite("-------------------- RSTR: Log client record" & @CRLF)
-	ConsoleWrite("$ClientRecordOffset: " & $ClientRecordOffset & @CRLF)
-	ConsoleWrite("$oldest_lsn: " & Dec($oldest_lsn,2) & @CRLF)
-	ConsoleWrite("$client_restart_lsn: " & Dec($client_restart_lsn,2) & @CRLF)
-	ConsoleWrite("$prev_client: 0x" & $prev_client & @CRLF)
-	ConsoleWrite("$next_client: 0x" & $next_client & @CRLF)
-	ConsoleWrite("$seq_number: 0x" & $seq_number & @CRLF)
-;	ConsoleWrite("$reserved2: " & $reserved2 & @CRLF)
-	ConsoleWrite("$client_name_length (unicode): 0x" & $client_name_length & @CRLF)
-	ConsoleWrite("$client_name: " & BinaryToString("0x"&$client_name,2) & @CRLF)
-EndIf
+$client_name_length = Dec(_SwapEndian($client_name_length),2)
+$client_name = StringMid($RSTRRecord,$ClientRecordOffset+64,$client_name_length*2)   ; Normally 8 bytes (NTFS in unicode) + 120 bytes of 00's
+_DumpOutput("--- RSTR: Log client record:" & @CRLF)
+_DumpOutput("$ClientRecordOffset: " & $ClientRecordOffset & @CRLF)
+_DumpOutput("$oldest_lsn: " & Dec($oldest_lsn,2) & @CRLF)
+_DumpOutput("$client_restart_lsn: " & Dec($client_restart_lsn,2) & @CRLF)
+_DumpOutput("$prev_client: 0x" & $prev_client & @CRLF)
+_DumpOutput("$next_client: 0x" & $next_client & @CRLF)
+_DumpOutput("$seq_number: 0x" & $seq_number & @CRLF)
+;_DumpOutput("$reserved2: " & $reserved2 & @CRLF)
+_DumpOutput("$client_name_length (unicode): " & $client_name_length & @CRLF)
+_DumpOutput("$client_name: " & BinaryToString("0x"&$client_name,2) & @CRLF)
 ; End -> size = 160 bytes, 32 bytes + name (128)
+_DumpOutput("------------- END RSTR -------------" & @CRLF)
 EndFunc
 
 Func _DoFixup($record)
@@ -1384,70 +2238,76 @@ EndFunc
 Func _SolveUndoRedoCodes($OpCode)
 Local $InterpretedCode
 Select
-	Case $OpCode = "00"
+	Case $OpCode = 0 ;"00"
 		$InterpretedCode = "Noop"
-	Case $OpCode = "01"
+	Case $OpCode = 1 ;"01"
 		$InterpretedCode = "CompensationlogRecord"
-	Case $OpCode = "02"
+	Case $OpCode = 2 ;"02"
 		$InterpretedCode = "InitializeFileRecordSegment"
-	Case $OpCode = "03"
+	Case $OpCode = 3 ;"03"
 		$InterpretedCode = "DeallocateFileRecordSegment"
-	Case $OpCode = "04"
+	Case $OpCode = 4 ;"04"
 		$InterpretedCode = "WriteEndofFileRecordSegement"
-	Case $OpCode = "05"
+	Case $OpCode = 5 ;"05"
 		$InterpretedCode = "CreateAttribute"
-	Case $OpCode = "06"
+	Case $OpCode = 6 ;"06"
 		$InterpretedCode = "DeleteAttribute"
-	Case $OpCode = "07"
+	Case $OpCode = 7 ;"07"
 		$InterpretedCode = "UpdateResidentValue"
-	Case $OpCode = "08"
+	Case $OpCode = 8 ;"08"
 		$InterpretedCode = "UpdateNonResidentValue"
-	Case $OpCode = "09"
+	Case $OpCode = 9 ;"09"
 		$InterpretedCode = "UpdateMappingPairs"
-	Case $OpCode = "0a"
+	Case $OpCode = 10 ;"0a"
 		$InterpretedCode = "DeleteDirtyClusters"
-	Case $OpCode = "0b"
+	Case $OpCode = 11 ;"0b"
 		$InterpretedCode = "SetNewAttributeSizes"
-	Case $OpCode = "0c"
+	Case $OpCode = 12 ;"0c"
 		$InterpretedCode = "AddindexEntryRoot"
-	Case $OpCode = "0d"
+	Case $OpCode = 13 ;"0d"
 		$InterpretedCode = "DeleteindexEntryRoot"
-	Case $OpCode = "0e"
+	Case $OpCode = 14 ;"0e"
 		$InterpretedCode = "AddIndexEntryAllocation"
-	Case $OpCode = "0f"
+	Case $OpCode = 15 ;"0f"
 		$InterpretedCode = "DeleteIndexEntryAllocation"
-	Case $OpCode = "10"
-		$InterpretedCode = "ResetAllocation"
-	Case $OpCode = "11"
-		$InterpretedCode = "ResetRoot"
-	Case $OpCode = "12"
+	Case $OpCode = 16 ;"10"
+		$InterpretedCode = "WriteEndOfIndexBuffer"
+	Case $OpCode = 17 ;"11"
+		$InterpretedCode = "SetIndexEntryVcnRoot"
+	Case $OpCode = 18 ;"12"
 		$InterpretedCode = "SetIndexEntryVcnAllocation"
-	Case $OpCode = "13"
+	Case $OpCode = 19 ;"13"
 		$InterpretedCode = "UpdateFileNameRoot"
-	Case $OpCode = "14"
+	Case $OpCode = 20 ;"14"
 		$InterpretedCode = "UpdateFileNameAllocation"
-	Case $OpCode = "15"
+	Case $OpCode = 21 ;"15"
 		$InterpretedCode = "SetBitsInNonresidentBitMap"
-	Case $OpCode = "16"
+	Case $OpCode = 22 ;"16"
 		$InterpretedCode = "ClearBitsInNonresidentBitMap"
-	Case $OpCode = "19"
+	Case $OpCode = 23 ;"17"
+		$InterpretedCode = "HotFix"
+	Case $OpCode = 24 ;"18"
+		$InterpretedCode = "EndTopLevelAction"
+	Case $OpCode = 25 ;"19"
 		$InterpretedCode = "PrepareTransaction"
-	Case $OpCode = "1a"
+	Case $OpCode = 26 ;"1a"
 		$InterpretedCode = "CommitTransaction"
-	Case $OpCode = "1b"
+	Case $OpCode = 27 ;"1b"
 		$InterpretedCode = "ForgetTransaction"
-	Case $OpCode = "1c"
+	Case $OpCode = 28 ;"1c"
 		$InterpretedCode = "OpenNonresidentAttribute"
-	Case $OpCode = "1d"
-		$InterpretedCode = "UNKNOWN_1D"
-	Case $OpCode = "1e"
-		$InterpretedCode = "UNKNOWN_1E"
-	Case $OpCode = "1f"
+	Case $OpCode = 29 ;"1d"
+		$InterpretedCode = "OpenAttributeTableDump"
+	Case $OpCode = 30 ;"1e"
+		$InterpretedCode = "AttributeNamesDump"
+	Case $OpCode = 31 ;"1f"
 		$InterpretedCode = "DirtyPageTableDump"
-	Case $OpCode = "20"
+	Case $OpCode = 32 ;"20"
 		$InterpretedCode = "TransactionTableDump"
-	Case $OpCode = "21"
+	Case $OpCode = 33 ;"21"
 		$InterpretedCode = "UpdateRecordDataRoot"
+	Case $OpCode = 34 ;"22"
+		$InterpretedCode = "UpdateRecordDataAllocation"
 	Case Else
 		$InterpretedCode = "UNKNOWN"
 ;		MsgBox(0,"$OpCode",$OpCode)
@@ -1571,7 +2431,9 @@ Func _ParserCodeOldVersion($MFTEntry)
 	If $UpdSeqArrOffset = 48 Then
 		$HDR_MFTREcordNumber = StringMid($MFTEntry, 89, 8)
 		$HDR_MFTREcordNumber = Dec(_SwapEndian($HDR_MFTREcordNumber),2)
-		If $HDR_MFTREcordNumber <> $PredictedRefNumber And $redo_length > 24 And $undo_operation <> "CompensationlogRecord" Then MsgBox(0,"Error with LSN " & $this_lsn,"Predicted Reference number " & $PredictedRefNumber & " do not match Reference found in $MFT " & $HDR_MFTREcordNumber & ". Are you sure your SectorsPerCluster or MFT Record size configuration is correct?")
+		If $HDR_MFTREcordNumber <> $PredictedRefNumber And $redo_length > 24 And $undo_operation <> "CompensationlogRecord" Then
+			If MsgBox(4,"Error with LSN " & $this_lsn,"Predicted Reference number: " & $PredictedRefNumber & " do not match Reference found in $MFT: " & $HDR_MFTREcordNumber & ". Are you sure your SectorsPerCluster (" & $SectorsPerCluster & ") or MFT Record size configuration (" & $MFT_Record_Size & ") is correct?") = 7 Then Exit
+		EndIf
 	Else
 		$HDR_MFTREcordNumber = "NT style"
 	EndIf
@@ -2866,6 +3728,8 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 	If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0 And $Indx_CTime<>"-" And $Indx_ATime<>"-" And $Indx_MTime<>"-" And $Indx_RTime<>"-" Then
 		if $IsRedo Then
 			FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
+		Else
+			FileWriteLine($LogFileUndoWipeIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
 		EndIf
 		$DecodeOk=True
 		$RealMftRef = $MFTReferenceOfParent
@@ -3219,7 +4083,7 @@ Func _ResolveAttributeFromUsnReason($data)
 EndFunc
 
 Func _Decode_CreateAttribute($record,$IsRedo)
-	Local $RecordSize,$DecodeOk=False
+	Local $RecordSize,$DecodeOk=False,$CoreAttr,$CoreAttrName,$CoreAttrChunk
 	Global $CurrentAttribute
 	$AttributeTypeCheck = StringMid($record,1,4)
 	If $VerboseOn Then
@@ -3241,6 +4105,17 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				_Get_ObjectID($record, 1, $RecordSize)
 				$AttributeString = "$OBJECT_ID"
 			Case $AttributeTypeCheck = "5000"
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+;				ConsoleWrite("$SECURITY_DESCRIPTOR:" & @CRLF)
+;				ConsoleWrite(_HexEncode("0x"&$CoreAttrChunk) & @CRLF)
+				_DecodeSecurityDescriptorAttribute($CoreAttrChunk)
+				;Write information to csv
+				_WriteCsvSecureSDS()
+				;Make sure all global variables for csv are cleared
+				_ClearVarSecureSDS()
+				$TextInformation &= ";See LogFile_SecurityDescriptors.csv"
 				$AttributeString = "$SECURITY_DESCRIPTOR"
 			Case $AttributeTypeCheck = "6000"
 				_Get_VolumeName($record, 1, $RecordSize)
@@ -3252,49 +4127,49 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				_Get_Data($record, 1, $RecordSize, 1 )
 				$AttributeString = "$DATA"
 			Case $AttributeTypeCheck = "9000"
-				$CoreIndexRoot = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreIndexRootChunk = $CoreIndexRoot[0]
-				$CoreIndexRootName = $CoreIndexRoot[1]
-				If $CoreIndexRootName = "$I30" Then $DecodeOk = _Get_IndexRoot($CoreIndexRootChunk,1,$CoreIndexRootName)
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+				If $CoreAttrName = "$I30" Then $DecodeOk = _Get_IndexRoot($CoreAttrChunk,1,$CoreAttrName)
 				$AttributeString = "$INDEX_ROOT"
 			Case $AttributeTypeCheck = "A000"
-				$CoreIndexAllocation = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreIndexAllocationChunk = $CoreIndexAllocation[0]
-				$CoreIndexAllocationName = $CoreIndexAllocation[1]
-				If $CoreIndexAllocationName = "$I30" Then $DecodeOk = _Decode_INDX($CoreIndexAllocationChunk)
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+				If $CoreAttrName = "$I30" Then $DecodeOk = _Decode_INDX($CoreAttrChunk)
 				$AttributeString = "$INDEX_ALLOCATION"
 			Case $AttributeTypeCheck = "B000"
 ;				ConsoleWrite("Bitmap:" & @CRLF)
 ;				ConsoleWrite(_HexEncode("0x"&$record) & @CRLF)
-				$CoreBitmap = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreBitmapChunk = $CoreBitmap[0]
-				$CoreBitmapName = $CoreBitmap[1]
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
 				$AttributeString = "$BITMAP"
 			Case $AttributeTypeCheck = "C000"
-				$CoreReparsePoint = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreReparsePointChunk = $CoreReparsePoint[0]
-				$CoreReparsePointName = $CoreReparsePoint[1]
-				_Get_ReparsePoint($CoreReparsePointChunk,1,$CoreReparsePointName)
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+				_Get_ReparsePoint($CoreAttrChunk,1,$CoreAttrName)
 				$AttributeString = "$REPARSE_POINT"
 			Case $AttributeTypeCheck = "D000"
-				$CoreEaInformation = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreEaInformationChunk = $CoreEaInformation[0]
-				$CoreEaInformationName = $CoreEaInformation[1]
-				_Get_EaInformation($CoreEaInformationChunk,1,$CoreEaInformationName)
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+				_Get_EaInformation($CoreAttrChunk,1,$CoreAttrName)
 				$AttributeString = "$EA_INFORMATION"
 			Case $AttributeTypeCheck = "E000"
-				$CoreEa = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreEaChunk = $CoreEa[0]
-				$CoreEaName = $CoreEa[1]
-				_Get_Ea($CoreEaChunk,1,$CoreEaName)
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+				_Get_Ea($CoreAttrChunk,1,$CoreAttrName)
 				$AttributeString = "$EA"
 			Case $AttributeTypeCheck = "F000"
 				$AttributeString = "$PROPERTY_SET"
 			Case $AttributeTypeCheck = "0001"
-				$CoreLoggedUtilityStream = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreLoggedUtilityStreamChunk = $CoreLoggedUtilityStream[0]
-				$CoreLoggedUtilityStreamName = $CoreLoggedUtilityStream[1]
-				_Get_LoggedUtilityStream($CoreLoggedUtilityStreamChunk,1,$CoreLoggedUtilityStreamName)
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+				_Get_LoggedUtilityStream($CoreAttrChunk,1,$CoreAttrName)
 				$AttributeString = "$LOGGED_UTILITY_STREAM"
 		EndSelect
 	Else
@@ -3310,6 +4185,17 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				_Get_ObjectID($record, 1, $RecordSize)
 				$AttributeString = "$OBJECT_ID"
 			Case $AttributeTypeCheck = "5000"
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+;				ConsoleWrite("$SECURITY_DESCRIPTOR:" & @CRLF)
+;				ConsoleWrite(_HexEncode("0x"&$CoreAttrChunk) & @CRLF)
+				_DecodeSecurityDescriptorAttribute($CoreAttrChunk)
+				;Write information to csv
+				_WriteCsvSecureSDS()
+				;Make sure all global variables for csv are cleared
+				_ClearVarSecureSDS()
+				$TextInformation &= ";See LogFile_SecurityDescriptors.csv"
 				$AttributeString = "$SECURITY_DESCRIPTOR"
 			Case $AttributeTypeCheck = "6000"
 				_Get_VolumeName($record, 1, $RecordSize)
@@ -3320,44 +4206,51 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 			Case $AttributeTypeCheck = "8000"
 				$AttributeString = "$DATA"
 			Case $AttributeTypeCheck = "9000"
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
 				$AttributeString = "$INDEX_ROOT"
 			Case $AttributeTypeCheck = "A000"
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
 				$AttributeString = "$INDEX_ALLOCATION"
 			Case $AttributeTypeCheck = "B000"
 ;				ConsoleWrite("Bitmap:" & @CRLF)
 ;				ConsoleWrite(_HexEncode("0x"&$record) & @CRLF)
-				$CoreBitmap = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreBitmapChunk = $CoreBitmap[0]
-				$CoreBitmapName = $CoreBitmap[1]
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
 				$AttributeString = "$BITMAP"
 			Case $AttributeTypeCheck = "C000"
-				$CoreReparsePoint = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreReparsePointChunk = $CoreReparsePoint[0]
-				$CoreReparsePointName = $CoreReparsePoint[1]
-				_Get_ReparsePoint($CoreReparsePointChunk,1,$CoreReparsePointName)
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+				_Get_ReparsePoint($CoreAttrChunk,1,$CoreAttrName)
 				$AttributeString = "$REPARSE_POINT"
 			Case $AttributeTypeCheck = "D000"
-				$CoreEaInformation = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreEaInformationChunk = $CoreEaInformation[0]
-				$CoreEaInformationName = $CoreEaInformation[1]
-				_Get_EaInformation($CoreEaInformationChunk,1,$CoreEaInformationName)
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+				_Get_EaInformation($CoreAttrChunk,1,$CoreAttrName)
 				$AttributeString = "$EA_INFORMATION"
 			Case $AttributeTypeCheck = "E000"
-				$CoreEa = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreEaChunk = $CoreEa[0]
-				$CoreEaName = $CoreEa[1]
-				_Get_Ea($CoreEaChunk,1,$CoreEaName)
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+				_Get_Ea($CoreAttrChunk,1,$CoreAttrName)
 				$AttributeString = "$EA"
 			Case $AttributeTypeCheck = "F000"
 				$AttributeString = "$PROPERTY_SET"
 			Case $AttributeTypeCheck = "0001"
-				$CoreLoggedUtilityStream = _GetAttributeEntry(StringMid($record,1,$RecordSize))
-				$CoreLoggedUtilityStreamChunk = $CoreLoggedUtilityStream[0]
-				$CoreLoggedUtilityStreamName = $CoreLoggedUtilityStream[1]
-				_Get_LoggedUtilityStream($CoreLoggedUtilityStreamChunk,1,$CoreLoggedUtilityStreamName)
+				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
+				$CoreAttrChunk = $CoreAttr[0]
+				$CoreAttrName = $CoreAttr[1]
+				_Get_LoggedUtilityStream($CoreAttrChunk,1,$CoreAttrName)
 				$AttributeString = "$LOGGED_UTILITY_STREAM"
 		EndSelect
 	EndIf
+	If $CoreAttrName <> "" Then $AttributeString &= ":"&$CoreAttrName
 	Return $DecodeOk
 EndFunc
 
@@ -4309,6 +5202,16 @@ Func _ClearVar()
 	$undo_operation=""
 	$record_offset_in_mft=""
 	$attribute_offset=""
+	$record_type=""
+	$transaction_id=""
+	$lf_flags=""
+	$target_attribute=""
+	$lcns_to_follow=""
+	$MftClusterIndex=""
+	$target_vcn=""
+	$target_lcn=""
+	$InOpenAttributeTable=-1
+	$IncompleteTransaction=0
 	$DT_Flags=""
 	$DT_NonResidentFlag=""
 	$DT_ComprUnitSize=""
@@ -4452,6 +5355,126 @@ Func _PrepareOutput()
 		$csvextra = $ParserOutDir&"\LogFileExtra.csv"
 		_DebugOut("Created output file: " & $csvextra)
 	EndIf
+
+	$LogFileSecureSDSCsvFile = $ParserOutDir & "\LogFile_SecurityDescriptors.csv"
+	$LogFileSecureSDSCsv = FileOpen($LogFileSecureSDSCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileSecureSDSCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileSecureSDSCsvFile)
+
+	$LogFileSecureSDHCsvFile = $ParserOutDir & "\LogFile_SecureSDH.csv"
+	$LogFileSecureSDHCsv = FileOpen($LogFileSecureSDHCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileSecureSDHCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileSecureSDHCsvFile)
+
+	$LogFileSecureSIICsvFile = $ParserOutDir & "\LogFile_SecureSII.csv"
+	$LogFileSecureSIICsv = FileOpen($LogFileSecureSIICsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileSecureSIICsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileSecureSIICsvFile)
+
+	$LogFileOpenAttributeTableCsvFile = $ParserOutDir & "\LogFile_OpenAttributeTable.csv"
+	$LogFileOpenAttributeTableCsv = FileOpen($LogFileOpenAttributeTableCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileOpenAttributeTableCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileOpenAttributeTableCsvFile)
+
+	$LogFileDirtyPageTableCsvFile = $ParserOutDir & "\LogFile_DirtyPageTable.csv"
+	$LogFileDirtyPageTableCsv = FileOpen($LogFileDirtyPageTableCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileDirtyPageTableCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileDirtyPageTableCsvFile)
+
+	$LogFileBitsInNonresidentBitMapCsvFile = $ParserOutDir & "\LogFile_BitsInNonresidentBitMap.csv"
+	$LogFileBitsInNonresidentBitMapCsv = FileOpen($LogFileBitsInNonresidentBitMapCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileBitsInNonresidentBitMapCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileBitsInNonresidentBitMapCsvFile)
+
+	$LogFileObjIdOCsvFile = $ParserOutDir & "\LogFile_ObjIdO.csv"
+	$LogFileObjIdOCsv = FileOpen($LogFileObjIdOCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileObjIdOCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileObjIdOCsvFile)
+
+	$LogFileQuotaOCsvFile = $ParserOutDir & "\LogFile_QuotaO.csv"
+	$LogFileQuotaOCsv = FileOpen($LogFileQuotaOCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileQuotaOCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileQuotaOCsvFile)
+
+	$LogFileQuotaQCsvFile = $ParserOutDir & "\LogFile_QuotaQ.csv"
+	$LogFileQuotaQCsv = FileOpen($LogFileQuotaQCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileQuotaQCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileQuotaQCsvFile)
+
+	$LogFileReparseRCsvFile = $ParserOutDir & "\LogFile_ReparseR.csv"
+	$LogFileReparseRCsv = FileOpen($LogFileReparseRCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileReparseRCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileReparseRCsvFile)
+
+	$LogFileTransactionTableCsvFile = $ParserOutDir & "\LogFile_TransactionTable.csv"
+	$LogFileTransactionTableCsv = FileOpen($LogFileTransactionTableCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileTransactionTableCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileTransactionTableCsvFile)
+
+	$LogFileRCRDCsvFile = $ParserOutDir & "\LogFile_RCRD.csv"
+	$LogFileRCRDCsv = FileOpen($LogFileRCRDCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileRCRDCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileRCRDCsvFile)
+
+	$LogFileTransactionHeaderCsvFile = $ParserOutDir & "\LogFile_AllTransactionHeaders.csv"
+	$LogFileTransactionHeaderCsv = FileOpen($LogFileTransactionHeaderCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileTransactionHeaderCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileTransactionHeaderCsvFile)
+
+	$LogFileSlackOpenAttributeTableCsvFile = $ParserOutDir & "\LogFile_SlackOpenAttributeTable.csv"
+	$LogFileSlackOpenAttributeTableCsv = FileOpen($LogFileSlackOpenAttributeTableCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileSlackOpenAttributeTableCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileSlackOpenAttributeTableCsvFile)
+
+	$LogFileSlackAttributeNamesDumpCsvFile = $ParserOutDir & "\LogFile_SlackAttributeNamesDump.csv"
+	$LogFileSlackAttributeNamesDumpCsv = FileOpen($LogFileSlackAttributeNamesDumpCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileSlackAttributeNamesDumpCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileSlackAttributeNamesDumpCsvFile)
 EndFunc
 
 Func _WriteCSVExtraHeader()
@@ -4462,7 +5485,8 @@ Func _WriteCSVExtraHeader()
 EndFunc
 
 Func _WriteCSVHeader()
-	$LogFile_Csv_Header = "lf_Offset"&$de&"lf_MFTReference"&$de&"lf_RealMFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_LSN"&$de&"lf_LSNPrevious"&$de&"lf_RedoOperation"&$de&"lf_UndoOperation"&$de&"lf_OffsetInMft"&$de&"lf_FileName"&$de&"lf_CurrentAttribute"&$de&"lf_TextInformation"&$de&"lf_UsnJrnlFileName"&$de&"lf_UsnJrnlMFTReference"&$de&"lf_UsnJrnlMFTParentReference"&$de&"lf_UsnJrnlTimestamp"&$de&"lf_UsnJrnlReason"&$de&"lf_UsnJrnlUsn"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"&$de&"lf_FN_CTime"&$de&"lf_FN_ATime"&$de&"lf_FN_MTime"&$de&"lf_FN_RTime"&$de&"lf_FN_AllocSize"&$de&"lf_FN_RealSize"&$de&"lf_FN_Flags"&$de&"lf_FN_Namespace"&$de&"lf_DT_StartVCN"&$de&"lf_DT_LastVCN"&$de&"lf_DT_ComprUnitSize"&$de&"lf_DT_AllocSize"&$de&"lf_DT_RealSize"&$de&"lf_DT_InitStreamSize"&$de&"lf_DT_DataRuns"&$de&"lf_DT_Name"&$de&"lf_FileNameModified"&$de&"lf_RedoChunkSize"&$de&"lf_UndoChunkSize"
+;	$LogFile_Csv_Header = "lf_Offset"&$de&"lf_MFTReference"&$de&"lf_RealMFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_LSN"&$de&"lf_LSNPrevious"&$de&"lf_RedoOperation"&$de&"lf_UndoOperation"&$de&"lf_OffsetInMft"&$de&"lf_FileName"&$de&"lf_CurrentAttribute"&$de&"lf_TextInformation"&$de&"lf_UsnJrnlFileName"&$de&"lf_UsnJrnlMFTReference"&$de&"lf_UsnJrnlMFTParentReference"&$de&"lf_UsnJrnlTimestamp"&$de&"lf_UsnJrnlReason"&$de&"lf_UsnJrnlUsn"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"&$de&"lf_FN_CTime"&$de&"lf_FN_ATime"&$de&"lf_FN_MTime"&$de&"lf_FN_RTime"&$de&"lf_FN_AllocSize"&$de&"lf_FN_RealSize"&$de&"lf_FN_Flags"&$de&"lf_FN_Namespace"&$de&"lf_DT_StartVCN"&$de&"lf_DT_LastVCN"&$de&"lf_DT_ComprUnitSize"&$de&"lf_DT_AllocSize"&$de&"lf_DT_RealSize"&$de&"lf_DT_InitStreamSize"&$de&"lf_DT_DataRuns"&$de&"lf_DT_Name"&$de&"lf_FileNameModified"&$de&"lf_RedoChunkSize"&$de&"lf_UndoChunkSize"
+	$LogFile_Csv_Header = "lf_Offset"&$de&"lf_MFTReference"&$de&"lf_RealMFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_LSN"&$de&"lf_LSNPrevious"&$de&"lf_RedoOperation"&$de&"lf_UndoOperation"&$de&"lf_OffsetInMft"&$de&"lf_FileName"&$de&"lf_CurrentAttribute"&$de&"lf_TextInformation"&$de&"lf_UsnJrnlFileName"&$de&"lf_UsnJrnlMFTReference"&$de&"lf_UsnJrnlMFTParentReference"&$de&"lf_UsnJrnlTimestamp"&$de&"lf_UsnJrnlReason"&$de&"lf_UsnJrnlUsn"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"&$de&"lf_FN_CTime"&$de&"lf_FN_ATime"&$de&"lf_FN_MTime"&$de&"lf_FN_RTime"&$de&"lf_FN_AllocSize"&$de&"lf_FN_RealSize"&$de&"lf_FN_Flags"&$de&"lf_FN_Namespace"&$de&"lf_DT_StartVCN"&$de&"lf_DT_LastVCN"&$de&"lf_DT_ComprUnitSize"&$de&"lf_DT_AllocSize"&$de&"lf_DT_RealSize"&$de&"lf_DT_InitStreamSize"&$de&"lf_DT_DataRuns"&$de&"lf_DT_Name"&$de&"lf_FileNameModified"&$de&"lf_RedoChunkSize"&$de&"lf_UndoChunkSize"&$de&"lf_client_index"&$de&"lf_record_type"&$de&"lf_transaction_id"&$de&"lf_flags"&$de&"lf_target_attribute"&$de&"lf_lcns_to_follow"&$de&"lf_attribute_offset"&$de&"lf_MftClusterIndex"&$de&"lf_target_vcn"&$de&"lf_target_lcn"&$de&"InOpenAttributeTable"&$de&"FromRcrdSlack"&$de&"IncompleteTransaction"
 	FileWriteLine($LogFileCsv, $LogFile_Csv_Header & @CRLF)
 	$LogFile_Indx_Csv_Header = "lf_Offset"&$de&"lf_LSN"&$de&"lf_EntryNumber"&$de&"lf_MFTReference"&$de&"lf_MFTReferenceSeqNo"&$de&"lf_IndexFlags"&$de&"lf_MFTParentReference"&$de&"lf_MFTParentReferenceSeqNo"&$de&"lf_CTime"&$de&"lf_ATime"&$de&"lf_MTime"&$de&"lf_RTime"&$de&"lf_AllocSize"&$de&"lf_RealSize"&$de&"lf_FileFlags"&$de&"lf_FileName"&$de&"lf_FileNameModified"&$de&"lf_NameSpace"&$de&"lf_SubNodeVCN"
 	FileWriteLine($LogFileIndxCsv, $LogFile_Indx_Csv_Header & @CRLF)
@@ -4483,7 +5507,8 @@ Func _WriteCSVExtra()
 EndFunc
 
 Func _WriteLogFileCsv()
-	FileWriteLine($LogFileCsv, $RecordOffset & $de & $PredictedRefNumber & $de & $RealMftRef & $de & $HDR_BaseRecord & $de & $this_lsn & $de & $client_previous_lsn & $de & $redo_operation & $de & $undo_operation & $de & $record_offset_in_mft & $de & $FN_Name & $de & $AttributeString & $de & $TextInformation & $de & $UsnJrnlFileName & $de & $UsnJrnlFileReferenceNumber & $de & $UsnJrnlParentFileReferenceNumber & $de & $UsnJrnlTimestamp & $de & $UsnJrnlReason & $de & $UsnJrnlUsn & $de & $SI_CTime & $de & $SI_ATime & $de & $SI_MTime & $de & $SI_RTime & $de & $SI_FilePermission & $de & $SI_MaxVersions & $de & $SI_VersionNumber & $de & $SI_ClassID & $de & $SI_SecurityID & $de & $SI_QuotaCharged & $de & $SI_USN & $de & $SI_PartialValue & $de & $FN_CTime & $de & $FN_ATime & $de & $FN_MTime & $de & $FN_RTime & $de & $FN_AllocSize & $de & $FN_RealSize & $de & $FN_Flags & $de & $FN_NameType & $de & $DT_StartVCN & $de & $DT_LastVCN & $de & $DT_ComprUnitSize & $de & $DT_AllocSize & $de & $DT_RealSize & $de & $DT_InitStreamSize & $de & $DT_DataRuns & $de & $DT_Name & $de & $FileNameModified & $de & $RedoChunkSize & $de & $UndoChunkSize & @crlf)
+;	FileWriteLine($LogFileCsv, $RecordOffset & $de & $PredictedRefNumber & $de & $RealMftRef & $de & $HDR_BaseRecord & $de & $this_lsn & $de & $client_previous_lsn & $de & $redo_operation & $de & $undo_operation & $de & $record_offset_in_mft & $de & $FN_Name & $de & $AttributeString & $de & $TextInformation & $de & $UsnJrnlFileName & $de & $UsnJrnlFileReferenceNumber & $de & $UsnJrnlParentFileReferenceNumber & $de & $UsnJrnlTimestamp & $de & $UsnJrnlReason & $de & $UsnJrnlUsn & $de & $SI_CTime & $de & $SI_ATime & $de & $SI_MTime & $de & $SI_RTime & $de & $SI_FilePermission & $de & $SI_MaxVersions & $de & $SI_VersionNumber & $de & $SI_ClassID & $de & $SI_SecurityID & $de & $SI_QuotaCharged & $de & $SI_USN & $de & $SI_PartialValue & $de & $FN_CTime & $de & $FN_ATime & $de & $FN_MTime & $de & $FN_RTime & $de & $FN_AllocSize & $de & $FN_RealSize & $de & $FN_Flags & $de & $FN_NameType & $de & $DT_StartVCN & $de & $DT_LastVCN & $de & $DT_ComprUnitSize & $de & $DT_AllocSize & $de & $DT_RealSize & $de & $DT_InitStreamSize & $de & $DT_DataRuns & $de & $DT_Name & $de & $FileNameModified & $de & $RedoChunkSize & $de & $UndoChunkSize & @crlf)
+	FileWriteLine($LogFileCsv, $RecordOffset & $de & $PredictedRefNumber & $de & $RealMftRef & $de & $HDR_BaseRecord & $de & $this_lsn & $de & $client_previous_lsn & $de & $redo_operation & $de & $undo_operation & $de & $record_offset_in_mft & $de & $FN_Name & $de & $AttributeString & $de & $TextInformation & $de & $UsnJrnlFileName & $de & $UsnJrnlFileReferenceNumber & $de & $UsnJrnlParentFileReferenceNumber & $de & $UsnJrnlTimestamp & $de & $UsnJrnlReason & $de & $UsnJrnlUsn & $de & $SI_CTime & $de & $SI_ATime & $de & $SI_MTime & $de & $SI_RTime & $de & $SI_FilePermission & $de & $SI_MaxVersions & $de & $SI_VersionNumber & $de & $SI_ClassID & $de & $SI_SecurityID & $de & $SI_QuotaCharged & $de & $SI_USN & $de & $SI_PartialValue & $de & $FN_CTime & $de & $FN_ATime & $de & $FN_MTime & $de & $FN_RTime & $de & $FN_AllocSize & $de & $FN_RealSize & $de & $FN_Flags & $de & $FN_NameType & $de & $DT_StartVCN & $de & $DT_LastVCN & $de & $DT_ComprUnitSize & $de & $DT_AllocSize & $de & $DT_RealSize & $de & $DT_InitStreamSize & $de & $DT_DataRuns & $de & $DT_Name & $de & $FileNameModified & $de & $RedoChunkSize & $de & $UndoChunkSize & $de & $client_index & $de &$record_type & $de & $transaction_id & $de & $lf_flags & $de & $target_attribute & $de & $lcns_to_follow & $de & $attribute_offset & $de & $MftClusterIndex & $de & $target_vcn & $de & $target_lcn & $de & $InOpenAttributeTable & $de & $FromRcrdSlack & $de & $IncompleteTransaction & @crlf)
 EndFunc
 
 Func _WriteLogFileDataRunsCsv()
@@ -4491,52 +5516,131 @@ Func _WriteLogFileDataRunsCsv()
 EndFunc
 
 Func _Decode_OpenNonresidentAttribute($datachunk)
-	Local $Unknown1, $aMFTReference, $aMFTReferenceSeqNo, $aPreviousLsn, $aAttributeHex, $Unknown2
-;	ConsoleWrite("OpenNonresidentAttribute: " & @CRLF)
-;	ConsoleWrite(_HexEncode("0x"&$datachunk) & @CRLF)
+	Local $Unknown1, $aMFTReference, $aMFTReferenceSeqNo, $LsnOfOpenRecord, $aAttributeHex, $Unknown2, $AllocatedOrNextFree, $DirtyPagesSeen, $AttributeNamePresent, $UnknownPointer, $EndSignature, $RetVal=0
+;	_DumpOutput("OpenNonresidentAttribute: " & @CRLF)
+;	_DumpOutput("LSN: " & $this_lsn & @CRLF)
+;	_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
 	If StringLen($datachunk) = 88 Then
 		$Unknown1 = _SwapEndian(StringMid($datachunk,9,8))
 		$PredictedRefNumber = Dec(_SwapEndian(StringMid($datachunk,17,12)))
 		$KeptRef = $PredictedRefNumber
 		$aMFTReferenceSeqNo = Dec(_SwapEndian(StringMid($datachunk,29,4)))
-		$aPreviousLsn = Dec(_SwapEndian(StringMid($datachunk,33,16)))
-		if $client_previous_lsn <> $aPreviousLsn Then
+		$LsnOfOpenRecord = Dec(_SwapEndian(StringMid($datachunk,33,16)))
+		$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
+;		if $client_previous_lsn <> $LsnOfOpenRecord Then
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$client_previous_lsn: " & $client_previous_lsn & @CRLF)
-;			ConsoleWrite("$aPreviousLsn: " & $aPreviousLsn & @CRLF)
-			$TextInformation &= ";PreviousLsn="&$aPreviousLsn
-		EndIf
+;			ConsoleWrite("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+;			$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
+;		EndIf
 		$aAttributeHex = StringMid($datachunk,57,4)
 		$AttributeString = _ResolveAttributeType($aAttributeHex)
-	ElseIf StringLen($datachunk) = 80 Then
-		$Unknown1 = _SwapEndian(StringMid($datachunk,9,8))
-		$aAttributeHex = StringMid($datachunk,17,4)
-		$AttributeString = _ResolveAttributeType($aAttributeHex)
+	ElseIf StringLen($datachunk) = 80 Then ;OPEN_ATTRIBUTE_ENTRY
+		$AllocatedOrNextFree = _SwapEndian(StringMid($datachunk,1,8))
+		$DirtyPagesSeen = StringMid($datachunk, 9, 2)
+		$AttributeNamePresent = StringMid($datachunk, 11, 2)
+		$unknown1 = StringMid($datachunk, 13, 4)
+
+		$aAttributeHex = StringMid($datachunk,17,8)
+		$AttributeString = _ResolveAttributeType(StringLeft($aAttributeHex,4))
+
+		$unknown2 = StringMid($datachunk, 25, 8)
+
 		$PredictedRefNumber = Dec(_SwapEndian(StringMid($datachunk,33,12)))
 		$KeptRef = $PredictedRefNumber
 		$aMFTReferenceSeqNo = Dec(_SwapEndian(StringMid($datachunk,45,4)))
-		$aPreviousLsn = Dec(_SwapEndian(StringMid($datachunk,49,16)))
-		$Unknown2 = _SwapEndian(StringMid($datachunk,65,16))
-		if $client_previous_lsn <> $aPreviousLsn Then
-;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-;			ConsoleWrite("$client_previous_lsn: " & $client_previous_lsn & @CRLF)
-;			ConsoleWrite("$aPreviousLsn: " & $aPreviousLsn & @CRLF)
-			$TextInformation &= ";PreviousLsn="&$aPreviousLsn
-		EndIf
+		$LsnOfOpenRecord = Dec(_SwapEndian(StringMid($datachunk,49,16))) ;LsnOfOpenRecord
+		$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
 
+		$UnknownPointer = StringMid($datachunk, 65, 8)
+		$EndSignature = StringMid($datachunk,73,8)
+#cs
+		_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
+		_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
+		_DumpOutput("$AttributeNamePresent: " & $AttributeNamePresent & @CRLF)
+		_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+		_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+		_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
+		_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+		_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+		_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+		_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
+		_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
+#ce
+		$FoundInTable = _ArraySearch($OpenAttributesArray,$target_attribute,0,0,0,2,1,0)
+		If $FoundInTable > 0 Then
+			If $OpenAttributesArray[$FoundInTable][1] <> 0xffffffff Then
+;				_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+;				$OpenAttributesArray[$FoundInTable][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
+				$OpenAttributesArray[$FoundInTable][1] = "0xFFFFFFFF"
+				$OpenAttributesArray[$FoundInTable][2] = "0x" & $DirtyPagesSeen
+				$OpenAttributesArray[$FoundInTable][3] = "0x" & $AttributeNamePresent
+				$OpenAttributesArray[$FoundInTable][4] = "0x" & $unknown1
+				$OpenAttributesArray[$FoundInTable][5] = "0x" & $aAttributeHex
+				$OpenAttributesArray[$FoundInTable][6] = "0x" & $unknown2
+				$OpenAttributesArray[$FoundInTable][7] = $PredictedRefNumber
+				$OpenAttributesArray[$FoundInTable][8] = $aMFTReferenceSeqNo
+				$OpenAttributesArray[$FoundInTable][9] = $LsnOfOpenRecord
+				$OpenAttributesArray[$FoundInTable][10] = "0x" & $UnknownPointer
+				$OpenAttributesArray[$FoundInTable][11] = "0x" & $EndSignature
+;				$OpenAttributesArray[$FoundInTable][12] = "Attribute name in undo chunk"
+				$RetVal = $FoundInTable
+				$TextInformation &= ";Updated OpenAttributesArray"
+			Else
+				_DumpOutput("Error in OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+				_DumpOutput("AllocatedOrNextFree was 0xffffffff" & @CRLF)
+			EndIf
+		Else
+			#cs
+			_DumpOutput("Error in OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+			_DumpOutput("Could not update array with new entry" & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
+			_DumpOutput("$target_attribute: " & $target_attribute & @CRLF)
+			_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
+			_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
+			_DumpOutput("$AttributeNamePresent: " & $AttributeNamePresent & @CRLF)
+			_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+			_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+			_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
+			_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+			_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+			_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+			_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
+			_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
+			_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+			#ce
+			$ArrayEnd = UBound($OpenAttributesArray)
+			ReDim $OpenAttributesArray[$ArrayEnd+1][13]
+			$OpenAttributesArray[$ArrayEnd][0] = $target_attribute
+			$OpenAttributesArray[$ArrayEnd][1] = $AllocatedOrNextFree
+			$OpenAttributesArray[$ArrayEnd][2] = "0x" & $DirtyPagesSeen
+			$OpenAttributesArray[$ArrayEnd][3] = "0x" & $AttributeNamePresent
+			$OpenAttributesArray[$ArrayEnd][4] = "0x" & $unknown1
+			$OpenAttributesArray[$ArrayEnd][5] = "0x" & $aAttributeHex
+			$OpenAttributesArray[$ArrayEnd][6] = "0x" & $unknown2
+			$OpenAttributesArray[$ArrayEnd][7] = $PredictedRefNumber
+			$OpenAttributesArray[$ArrayEnd][8] = $aMFTReferenceSeqNo
+			$OpenAttributesArray[$ArrayEnd][9] = $LsnOfOpenRecord
+			$OpenAttributesArray[$ArrayEnd][10] = "0x" & $UnknownPointer
+			$OpenAttributesArray[$ArrayEnd][11] = "0x" & $EndSignature
+			$RetVal = $ArrayEnd
+			$TextInformation &= ";Updated OpenAttributesArray"
+		EndIf
 	Else
-		ConsoleWrite("Unresolved OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
-		ConsoleWrite(_HexEncode("0x"&$datachunk) & @CRLF)
+		_DumpOutput("Unresolved OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
 	EndIf
 	If $VerboseOn Then
-		ConsoleWrite("$Unknown1: " & $Unknown1 & @CRLF)
-		ConsoleWrite("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
-		ConsoleWrite("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
-		ConsoleWrite("$aPreviousLsn: " & $aPreviousLsn & @CRLF)
-		ConsoleWrite("$aAttributeHex: " & $aAttributeHex & @CRLF)
-		ConsoleWrite("$AttributeString: " & $AttributeString & @CRLF)
-		ConsoleWrite("$Unknown2: " & $Unknown2 & @CRLF)
+		_DumpOutput("_Decode_OpenNonresidentAttribute(): " & @CRLF)
+		_DumpOutput("$Unknown1: " & $Unknown1 & @CRLF)
+		_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+		_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+		_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+		_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+		_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+		_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
 	EndIf
+	Return $RetVal
 EndFunc
 
 Func _ResolveAttributeType($input)
@@ -4576,26 +5680,11 @@ Func _ResolveAttributeType($input)
 	EndSelect
 EndFunc
 
-Func _Decode_SetBitsInNonresidentBitMap($data,$prepend)
-	Local $Unknown1, $Unknown2
-	$Unknown1 = _SwapEndian(StringMid($data,1,8))
-	$Unknown2 = _SwapEndian(StringMid($data,9,8))
-	$TextInformation &= $prepend&"SetBits="&$Unknown1&"->"&$Unknown2
-EndFunc
-
-Func _Decode_ClearBitsInNonresidentBitMap($data,$prepend)
-	Local $Unknown1, $Unknown2
-	$Unknown1 = _SwapEndian(StringMid($data,1,8))
-	$Unknown2 = _SwapEndian(StringMid($data,9,8))
-	$TextInformation &= $prepend&"ClearBits="&$Unknown1&"->"&$Unknown2
-EndFunc
-
-Func _Decode_SetIndexEntryVcnAllocation($data)
-	Local $Unknown1, $Unknown2
-	$Unknown1 = Dec(_SwapEndian(StringMid($data,1,8)))
-	$Unknown2 = Dec(_SwapEndian(StringMid($data,9,8)))
-	$TextInformation &= ";IndexEntryVcnAllocation="&$Unknown1
-	$AttributeString = "$INDEX_ALLOCATION"
+Func _Decode_SetIndexEntryVcn($data)
+	Local $VCN
+	$VCN = "0x"&_SwapEndian(StringMid($data,1,16))
+;	$VCN = Dec(_SwapEndian(StringMid($data,1,16)),2)
+	$TextInformation &= ";VCN="&$VCN
 EndFunc
 
 Func _InjectTimeZoneInfo()
@@ -4699,6 +5788,36 @@ Func _TranslateTimestamp()
 	GUICtrlSetData($InputExampleTimestamp,$lTimestamp)
 EndFunc
 
+;$InputErrorLevel = GUICtrlCreateInput("0.1",390,170,40,20)
+;$InputErrorLevelTranslated = GUICtrlCreateInput("",450,170,90,20)
+Func _TranslateErrorLevel()
+#cs
+	Local $lPrecision,$lTimestamp,$lTimestampTmp
+	$DateTimeFormat = StringLeft(GUICtrlRead($ComboTimestampFormat),1)
+	$lPrecision = GUICtrlRead($ComboTimestampPrecision)
+	Select
+		Case $lPrecision = "None"
+			$TimestampPrecision = 1
+		Case $lPrecision = "MilliSec"
+			$TimestampPrecision = 2
+		Case $lPrecision = "NanoSec"
+			$TimestampPrecision = 3
+	EndSelect
+	$lTimestampTmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ExampleTimestampVal)
+	$lTimestamp = _WinTime_UTCFileTimeFormat(Dec($ExampleTimestampVal,2), $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$lTimestamp = "-"
+	ElseIf $TimestampPrecision = 3 Then
+		$lTimestamp = $lTimestamp & ":" & _FillZero(StringRight($lTimestampTmp, 4))
+	EndIf
+	GUICtrlSetData($InputExampleTimestamp,$lTimestamp)
+#ce
+	$ErrorLevel = GUICtrlRead($InputErrorLevel)
+	$LsnValidationLevel = Number($ErrorLevel)
+	$TextString = $LsnValidationLevel*100 & " % (up/down)"
+	GUICtrlSetData($InputErrorLevelTranslated,$TextString)
+EndFunc
+
 Func _DisplayInfo($DebugInfo)
 	GUICtrlSetData($myctredit, $DebugInfo, 1)
 EndFunc
@@ -4709,7 +5828,7 @@ Func _SelectLogFile()
 ;	_DisplayInfo("Selected $LogFile: " & $InputLogFile & @CRLF)
 	GUICtrlSetData($LogFileField,$InputLogFile)
 EndFunc
-
+#cs
 Func _SelectUsnJrnl()
 	$UsnJrnlFile = FileOpenDialog("Select $UsnJrnl",@ScriptDir,"All (*.*)")
 	If @error Then
@@ -4720,7 +5839,7 @@ Func _SelectUsnJrnl()
 		GUICtrlSetData($UsnJrnlField,$UsnJrnlFile)
 	EndIf
 EndFunc
-
+#ce
 Func _SelectMftCsv()
 	$TargetMftCsvFile = FileOpenDialog("Select MFT csv file",@ScriptDir,"All (*.*)")
 	If @error then Return
@@ -4729,7 +5848,7 @@ Func _SelectMftCsv()
 EndFunc
 
 Func _LogFileProgress()
-    GUICtrlSetData($ProgressStatus, "Processing LogFile transaction " & $CurrentRecord & " of " & $MaxRecords)
+    GUICtrlSetData($ProgressStatus, "Processing LogFile RCRD record " & $CurrentRecord & " of " & $MaxRecords)
     GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
 	GUICtrlSetData($ProgressLogFile, 100 * $CurrentRecord / $MaxRecords)
 EndFunc
@@ -5165,7 +6284,8 @@ Func _UsnDecodeRecord2($Record)
 		ConsoleWrite("$UsnJrnlFileAttributes: " & $UsnJrnlFileAttributes & @CRLF)
 		ConsoleWrite("$UsnJrnlFileName: " & $UsnJrnlFileName & @CRLF)
 	EndIf
-	If Int($UsnJrnlFileReferenceNumber) > 0 And Int($UsnJrnlMFTReferenceSeqNo) > 0 And Int($UsnJrnlParentFileReferenceNumber) > 4 And $UsnJrnlFileNameLength > 0  And $UsnJrnlTimestamp<>"-" And StringInStr($UsnJrnlTimestamp,"1601")=0 Then
+;	If Int($UsnJrnlFileReferenceNumber) > 0 And Int($UsnJrnlMFTReferenceSeqNo) > 0 And Int($UsnJrnlParentFileReferenceNumber) > 4 And $UsnJrnlFileNameLength > 0  And $UsnJrnlTimestamp<>"-" And StringInStr($UsnJrnlTimestamp,"1601")=0 Then
+	If Int($UsnJrnlFileReferenceNumber) > 0 And Int($UsnJrnlMFTReferenceSeqNo) > 0 And Int($UsnJrnlParentFileReferenceNumber) > 4 And $UsnJrnlFileNameLength > 0  And $UsnJrnlTimestamp<>"-" Then
 		$DecodeOk=True
 		FileWriteLine($LogFileUsnJrnlCsv, $UsnJrnlFileName&$de&$UsnJrnlUsn&$de&$UsnJrnlTimestamp&$de&$UsnJrnlReason&$de&$UsnJrnlFileReferenceNumber&$de&$UsnJrnlMFTReferenceSeqNo&$de&$UsnJrnlParentFileReferenceNumber&$de&$UsnJrnlParentReferenceSeqNo&$de&$UsnJrnlFileAttributes&@crlf)
 		$RealMftRef = $PredictedRefNumber
@@ -5175,6 +6295,19 @@ Func _UsnDecodeRecord2($Record)
 		$FN_Name = $UsnJrnlFileName
 		$AttributeString = "$DATA:$J"
 	Else
+		#cs
+		_DumpOutput("Error in _UsnDecodeRecord2(): " & @CRLF)
+		_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+		_DumpOutput("$UsnJrnlFileReferenceNumber: " & $UsnJrnlFileReferenceNumber & @CRLF)
+		_DumpOutput("$UsnJrnlMFTReferenceSeqNo: " & $UsnJrnlMFTReferenceSeqNo & @CRLF)
+		_DumpOutput("$UsnJrnlParentFileReferenceNumber: " & $UsnJrnlParentFileReferenceNumber & @CRLF)
+		_DumpOutput("$UsnJrnlParentReferenceSeqNo: " & $UsnJrnlParentReferenceSeqNo & @CRLF)
+		_DumpOutput("$UsnJrnlUsn: " & $UsnJrnlUsn & @CRLF)
+		_DumpOutput("$UsnJrnlTimestamp: " & $UsnJrnlTimestamp & @CRLF)
+		_DumpOutput("$UsnJrnlReason: " & $UsnJrnlReason & @CRLF)
+		_DumpOutput("$UsnJrnlFileAttributes: " & $UsnJrnlFileAttributes & @CRLF)
+		_DumpOutput("$UsnJrnlFileName: " & $UsnJrnlFileName & @CRLF)
+		#ce
 		$UsnJrnlFileReferenceNumber=""
 		$UsnJrnlParentFileReferenceNumber=""
 		$UsnJrnlTimestamp=""
@@ -5185,7 +6318,10 @@ Func _UsnDecodeRecord2($Record)
 EndFunc
 
 Func _Decode_AttributeName($data)
-	$AttributeString &= ":"&BinaryToString("0x"&$data,2)
+	Local $TmpName
+	$TmpName = BinaryToString("0x"&$data,2)
+	$AttributeString &= ":"&$TmpName
+	Return $TmpName
 EndFunc
 
 Func _SetNameOnSystemFiles()
@@ -5242,7 +6378,7 @@ Func _RemoveSingleOffsetOfAttribute($TestRef, $TestOffsetAttr, $TestSize, $TestS
 			EndIf
 			$TestOffset = StringInStr($AttrArraySplit[$i], $TestOffsetAttr)
 			If $TestOffset Then
-				ConsoleWrite("Found offset: " & $TestOffset & @CRLF)
+;				ConsoleWrite("Found offset: " & $TestOffset & @CRLF)
 				$check=1
 			EndIf
 ;			If Not $check Then ContinueLoop
@@ -5265,7 +6401,7 @@ Func _RemoveSingleOffsetOfAttribute($TestRef, $TestOffsetAttr, $TestSize, $TestS
 		Next
 		$AttrArray[$RefIndex][1] = $ConcatString
 	Else
-		ConsoleWrite("Error: Ref not found" & @CRLF)
+;		ConsoleWrite("Error: Ref not found" & @CRLF)
 	EndIf
 EndFunc
 
@@ -5276,7 +6412,7 @@ Func _RemoveAllOffsetOfAttribute($TestRef)
 		ConsoleWrite("Ref already exist in array" & @CRLF)
 		$AttrArray[$RefIndex][1] = ''
 	Else
-		ConsoleWrite("Error: Ref not found" & @CRLF)
+;		ConsoleWrite("Error: Ref not found" & @CRLF)
 	EndIf
 EndFunc
 
@@ -5307,7 +6443,7 @@ Func _UpdateSingleOffsetOfAttribute($TestRef, $TestOffsetAttr, $TestSize, $TestS
 			EndIf
 			$TestOffset = StringInStr($AttrArraySplit[$i], $TestOffsetAttr)
 			If $TestOffset Then
-				ConsoleWrite("Found offset: " & $TestOffset & @CRLF)
+;				ConsoleWrite("Found offset: " & $TestOffset & @CRLF)
 			EndIf
 			If Not StringIsDigit($FoundOffset) Then MsgBox(0,"Not number:",$FoundOffset)
 			If Int($TestOffsetAttr) > Int($FoundOffset) Then ContinueLoop
@@ -5366,13 +6502,13 @@ Func _CheckOffsetOfAttribute($TestRef, $TestString)
 	If $VerboseOn Then
 		ConsoleWrite("_CheckOffsetOfAttribute()" & @CRLF)
 		ConsoleWrite("$TestString: " & $TestString & @CRLF)
-		_ArrayDisplay($AttrArraySplit,"$AttrArraySplit")
+;		_ArrayDisplay($AttrArraySplit,"$AttrArraySplit")
 	EndIf
 	$RefIndex = _ArraySearch($AttrArray, $TestRef)
 	If $RefIndex <> -1 Or Not @error Then
 		$AttrArraySplit = StringSplit($AttrArray[$RefIndex][1], ',')
 		If $VerboseOn Then
-			_ArrayDisplay($AttrArraySplit,"$AttrArraySplit")
+;			_ArrayDisplay($AttrArraySplit,"$AttrArraySplit")
 		EndIf
 		For $i = 1 To $AttrArraySplit[0]
 			$TestOffset = StringInStr($AttrArraySplit[$i], $TestString)
@@ -5384,15 +6520,15 @@ Func _CheckOffsetOfAttribute($TestRef, $TestString)
 				If Not StringIsDigit(StringMid($AttrArraySplit[$i],$TestOffset-1,1)) Then
 					If StringMid($AttrArraySplit[$i],$TestOffset-1,1) <> '?' Then MsgBox(0,"Error in _CheckOffsetOfAttribute()",$AttrArraySplit[$i] & " -> " & StringMid($AttrArraySplit[$i],$TestOffset-1,1))
 					$FoundAttr = StringMid($AttrArraySplit[$i], 1, $TestOffset-2)
-					ConsoleWrite("$FoundAttr: " & $FoundAttr & @CRLF)
+;					ConsoleWrite("$FoundAttr: " & $FoundAttr & @CRLF)
 					Return $FoundAttr
 				EndIf
 			EndIf
 		Next
-		ConsoleWrite("Error: Attribute offset not found" & @CRLF)
+;		ConsoleWrite("Error: Attribute offset not found" & @CRLF)
 		Return SetError(1,0,$FoundAttr)
 	Else
-		ConsoleWrite("Error: Ref not found" & @CRLF)
+;		ConsoleWrite("Error: Ref not found" & @CRLF)
 		Return SetError(1,0,$FoundAttr)
 	EndIf
 EndFunc
@@ -5441,4 +6577,2619 @@ Func _Decode_AttributeType($record)
 			$AttributeString = "$LOGGED_UTILITY_STREAM"
 	EndSelect
 	Return $AttributeString
+EndFunc
+
+;--------------Security------------------
+Func _IsSmallAceStruct($input)
+	Select
+		Case $input=$ACCESS_ALLOWED_ACE_TYPE Or $input=$ACCESS_DENIED_ACE_TYPE Or $input=$SYSTEM_AUDIT_ACE_TYPE
+			Return 1
+		Case $input=$ACCESS_ALLOWED_CALLBACK_ACE_TYPE Or $input=$ACCESS_DENIED_CALLBACK_ACE_TYPE Or $input=$SYSTEM_AUDIT_CALLBACK_ACE_TYPE
+			Return 1
+		Case $input=$SYSTEM_MANDATORY_LABEL_ACE_TYPE Or $input=$SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE Or $input=$SYSTEM_SCOPED_POLICY_ID_ACE_TYPE Or $input=$SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE
+			Return 1
+		Case $input=$ACCESS_ALLOWED_OBJECT_ACE_TYPE Or $input=$ACCESS_DENIED_OBJECT_ACE_TYPE Or $input=$SYSTEM_AUDIT_OBJECT_ACE_TYPE
+			Return 0
+		Case $input=$ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE Or $input=$ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE Or $input=$SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE
+			Return 0
+	EndSelect
+EndFunc
+
+Func _DecodeAceFlags($input)
+	Local $output = ""
+	If $input = 0x00 Then Return 'ZERO'
+	If BitAND($input, $CONTAINER_INHERIT_ACE) Then $output &= 'CONTAINER_INHERIT_ACE+'
+	If BitAND($input, $FAILED_ACCESS_ACE_FLAG) Then $output &= 'FAILED_ACCESS_ACE_FLAG+'
+	If BitAND($input, $INHERIT_ONLY_ACE) Then $output &= 'INHERIT_ONLY_ACE+'
+	If BitAND($input, $INHERITED_ACE) Then $output &= 'INHERITED_ACE+'
+	If BitAND($input, $NO_PROPAGATE_INHERIT_ACE) Then $output &= 'NO_PROPAGATE_INHERIT_ACE+'
+	If BitAND($input, $OBJECT_INHERIT_ACE) Then $output &= 'OBJECT_INHERIT_ACE+'
+	If BitAND($input, $SUCCESSFUL_ACCESS_ACE_FLAG) Then $output &= 'SUCCESSFUL_ACCESS_ACE_FLAG+'
+	$output = StringTrimRight($output, 1)
+	Return $output
+EndFunc
+
+Func _DecodeAceType($input)
+	Local $output = ""
+	If $input = $ACCESS_ALLOWED_ACE_TYPE Then Return 'ACCESS_ALLOWED_ACE_TYPE'
+	If $input = $ACCESS_DENIED_ACE_TYPE Then Return 'ACCESS_DENIED_ACE_TYPE'
+	If $input = $SYSTEM_AUDIT_ACE_TYPE Then Return 'SYSTEM_AUDIT_ACE_TYPE'
+	If $input = $SYSTEM_ALARM_ACE_TYPE Then Return 'SYSTEM_ALARM_ACE_TYPE'
+	If $input = $ACCESS_ALLOWED_COMPOUND_ACE_TYPE Then Return 'ACCESS_ALLOWED_COMPOUND_ACE_TYPE'
+	If $input = $ACCESS_ALLOWED_OBJECT_ACE_TYPE Then Return 'ACCESS_ALLOWED_OBJECT_ACE_TYPE'
+	If $input = $ACCESS_DENIED_OBJECT_ACE_TYPE Then Return 'ACCESS_DENIED_OBJECT_ACE_TYPE'
+	If $input = $SYSTEM_AUDIT_OBJECT_ACE_TYPE Then Return 'SYSTEM_AUDIT_OBJECT_ACE_TYPE'
+	If $input = $SYSTEM_ALARM_OBJECT_ACE_TYPE Then Return 'SYSTEM_ALARM_OBJECT_ACE_TYPE'
+	If $input = $ACCESS_ALLOWED_CALLBACK_ACE_TYPE Then Return 'ACCESS_ALLOWED_CALLBACK_ACE_TYPE'
+	If $input = $ACCESS_DENIED_CALLBACK_ACE_TYPE Then Return 'ACCESS_DENIED_CALLBACK_ACE_TYPE'
+	If $input = $ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE Then Return 'ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE'
+	If $input = $ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE Then Return 'ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE'
+	If $input = $SYSTEM_AUDIT_CALLBACK_ACE_TYPE Then Return 'SYSTEM_AUDIT_CALLBACK_ACE_TYPE'
+	If $input = $SYSTEM_ALARM_CALLBACK_ACE_TYPE Then Return 'SYSTEM_ALARM_CALLBACK_ACE_TYPE'
+	If $input = $SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE Then Return 'SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE'
+	If $input = $SYSTEM_ALARM_CALLBACK_OBJECT_ACE_TYPE Then Return 'SYSTEM_ALARM_CALLBACK_OBJECT_ACE_TYPE'
+	If $input = $SYSTEM_MANDATORY_LABEL_ACE_TYPE Then Return 'SYSTEM_MANDATORY_LABEL_ACE_TYPE'
+	If $input = $SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE Then Return 'SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE'
+	If $input = $SYSTEM_SCOPED_POLICY_ID_ACE_TYPE Then Return 'SYSTEM_SCOPED_POLICY_ID_ACE_TYPE'
+	If $input = $SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE Then Return 'SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE'
+;	$output = StringTrimRight($output, 1)
+	Return "UNKNOWN"
+EndFunc
+
+Func _SecurityDescriptorControl($input)
+	Local $output = ""
+	If BitAND($input, $SE_OWNER_DEFAULTED) Then $output &= 'SE_OWNER_DEFAULTED+'
+	If BitAND($input, $SE_GROUP_DEFAULTED) Then $output &= 'SE_GROUP_DEFAULTED+'
+	If BitAND($input, $SE_DACL_PRESENT) Then $output &= 'SE_DACL_PRESENT+'
+	If BitAND($input, $SE_DACL_DEFAULTED) Then $output &= 'SE_DACL_DEFAULTED+'
+	If BitAND($input, $SE_SACL_PRESENT) Then $output &= 'SE_SACL_PRESENT+'
+	If BitAND($input, $SE_SACL_DEFAULTED) Then $output &= 'SE_SACL_DEFAULTED+'
+	If BitAND($input, $SE_DACL_UNTRUSTED) Then $output &= 'SE_DACL_UNTRUSTED+'
+	If BitAND($input, $SE_SERVER_SECURITY) Then $output &= 'SE_SERVER_SECURITY+'
+	If BitAND($input, $SE_DACL_AUTO_INHERIT_REQ) Then $output &= 'SE_DACL_AUTO_INHERIT_REQ+'
+	If BitAND($input, $SE_SACL_AUTO_INHERIT_REQ) Then $output &= 'SE_SACL_AUTO_INHERIT_REQ+'
+	If BitAND($input, $SE_DACL_AUTO_INHERITED) Then $output &= 'SE_DACL_AUTO_INHERITED+'
+	If BitAND($input, $SE_SACL_AUTO_INHERITED) Then $output &= 'SE_SACL_AUTO_INHERITED+'
+	If BitAND($input, $SE_DACL_PROTECTED) Then $output &= 'SE_DACL_PROTECTED+'
+	If BitAND($input, $SE_SACL_PROTECTED) Then $output &= 'SE_SACL_PROTECTED+'
+	If BitAND($input, $SE_RM_CONTROL_VALID) Then $output &= 'SE_RM_CONTROL_VALID+'
+	If BitAND($input, $SE_SELF_RELATIVE) Then $output &= 'SE_SELF_RELATIVE+'
+	$output = StringTrimRight($output, 1)
+	Return $output
+EndFunc
+
+Func _DecodeAceObjectFlag($input)
+	Local $output = ""
+	If $input = $ACE_NO_VALID_OBJECT_TYPE_PRESENT Then Return 'ACE_NO_VALID_OBJECT_TYPE_PRESENT'
+	If $input = $ACE_OBJECT_TYPE_PRESENT Then Return 'ACE_OBJECT_TYPE_PRESENT'
+	If $input = $ACE_INHERITED_OBJECT_TYPE_PRESENT Then Return 'ACE_INHERITED_OBJECT_TYPE_PRESENT'
+	Return "UNKNOWN"
+;	If BitAND($input, $ACE_OBJECT_TYPE_PRESENT) Then $output &= 'ACE_OBJECT_TYPE_PRESENT+'
+;	If BitAND($input, $ACE_INHERITED_OBJECT_TYPE_PRESENT) Then $output &= 'ACE_INHERITED_OBJECT_TYPE_PRESENT+'
+;	$output = StringTrimRight($output, 1)
+;	Return $output
+EndFunc
+
+Func _DecodeSecurityDescriptorAttribute($InputData)
+	;http://0cch.net/ntfsdoc/attributes/security_descriptor.html
+	Local $StartOffset = 1
+	Global $SecurityDescriptorHash,$SecurityId,$ControlText,$SidOwner,$SidGroup
+;	ConsoleWrite("_DecodeSDSChunk() " & @CRLF)
+;	ConsoleWrite(_HexEncode("0x"&$InputData))
+
+;	Start SelfrelativeSecurityDescriptor
+	$Revision = StringMid($InputData, $StartOffset, 2)
+
+	$Revision = Dec($Revision)
+	If $Revision <> 1 Then
+;		ConsoleWrite("Error: Revision invalid: " & $Revision & @CRLF)
+;		Return
+	EndIf
+	$Sbz1 = StringMid($InputData, $StartOffset + 2, 2)
+
+	$SECURITY_DESCRIPTOR_CONTROL = StringMid($InputData, $StartOffset + 4, 4)
+	$SECURITY_DESCRIPTOR_CONTROL = _SwapEndian($SECURITY_DESCRIPTOR_CONTROL)
+
+	$ControlText = _SecurityDescriptorControl("0x"&$SECURITY_DESCRIPTOR_CONTROL)
+
+	If Not BitAND("0x"&$SECURITY_DESCRIPTOR_CONTROL, $SE_SELF_RELATIVE) Then
+		ConsoleWrite("Error: Descriptor not self relative. Nothing to do" & @CRLF)
+		Return
+	EndIf
+	$PSidOwner = StringMid($InputData, $StartOffset + 8, 8)
+	$PSidOwner = _SwapEndian($PSidOwner)
+
+	$PSidOwner = Dec($PSidOwner)
+	$PSidGroup = StringMid($InputData, $StartOffset + 16, 8)
+	$PSidGroup = _SwapEndian($PSidGroup)
+
+	$PSidGroup = Dec($PSidGroup)
+	$PSacl = StringMid($InputData, $StartOffset + 24, 8)
+	$PSacl = _SwapEndian($PSacl)
+
+	$PSacl = Dec($PSacl)
+	$PDacl = StringMid($InputData, $StartOffset + 32, 8)
+	$PDacl = _SwapEndian($PDacl)
+
+	$PDacl = Dec($PDacl)
+	If $PSidOwner > 0 Then
+		$SidOwner = _DecodeSID(StringMid($InputData,$StartOffset+$PSidOwner*2))
+	EndIf
+	If $PSidGroup > 0 Then
+		$SidGroup = _DecodeSID(StringMid($InputData,$StartOffset+$PSidGroup*2))
+	EndIf
+	If $PSacl > 0 Then
+		_DecodeAcl_S(StringMid($InputData,$StartOffset+$PSacl*2))
+	EndIf
+	If $PDacl > 0 Then
+		_DecodeAcl_D(StringMid($InputData,$StartOffset+$PDacl*2))
+	EndIf
+	#cs
+	ConsoleWrite("$SecurityDescriptorHash: " & $SecurityDescriptorHash & @CRLF)
+	ConsoleWrite("$SecurityId: " & $SecurityId & @CRLF)
+	ConsoleWrite("$EntryOffset: " & $EntryOffset & @CRLF)
+	ConsoleWrite("$EntrySize: " & $EntrySize & @CRLF)
+	ConsoleWrite("$Revision: " & $Revision & @CRLF)
+	ConsoleWrite("$Sbz1: " & $Sbz1 & @CRLF)
+	ConsoleWrite("$SECURITY_DESCRIPTOR_CONTROL: " & $SECURITY_DESCRIPTOR_CONTROL & @CRLF)
+	ConsoleWrite("$ControlText: " & $ControlText & @CRLF)
+	ConsoleWrite("$PSidOwner: " & $PSidOwner & @CRLF)
+	ConsoleWrite("$PSidGroup: " & $PSidGroup & @CRLF)
+	ConsoleWrite("$PSacl: " & $PSacl & @CRLF)
+	ConsoleWrite("$PDacl: " & $PDacl & @CRLF)
+	#ce
+EndFunc
+
+Func _DecodeSDSChunk($InputData, $Hash)
+	;https://msdn.microsoft.com/en-us/library/cc230366.aspx
+	Local $StartOffset = 1
+	Global $SecurityDescriptorHash,$SecurityId,$ControlText,$SidOwner,$SidGroup
+;	ConsoleWrite("_DecodeSDSChunk() " & @CRLF)
+;	ConsoleWrite(_HexEncode("0x"&$InputData))
+	$SecurityDescriptorHash = StringMid($InputData, $StartOffset, 8)
+;	$SecurityDescriptorHash = _SwapEndian($SecurityDescriptorHash)
+	If $SecurityDescriptorHash <> $Hash Then
+		ConsoleWrite("Error: Hash mismatch" & @CRLF)
+		Return
+	EndIf
+	$SecurityDescriptorHash = "0x" & $SecurityDescriptorHash
+
+	$SecurityId = StringMid($InputData, $StartOffset + 8, 8)
+	$SecurityId = _SwapEndian($SecurityId)
+	$SecurityId = Dec($SecurityId,2)
+
+	$EntryOffset = StringMid($InputData, $StartOffset + 16, 16)
+	$EntryOffset = _SwapEndian($EntryOffset)
+
+	$EntrySize = StringMid($InputData, $StartOffset + 32, 8)
+	$EntrySize = _SwapEndian($EntrySize)
+
+;	Start SelfrelativeSecurityDescriptor
+	$Revision = StringMid($InputData, $StartOffset + 40, 2)
+
+	$Revision = Dec($Revision)
+	If $Revision <> 1 Then
+;		ConsoleWrite("Error: Revision invalid: " & $Revision & @CRLF)
+;		Return
+	EndIf
+	$Sbz1 = StringMid($InputData, $StartOffset + 42, 2)
+
+	$SECURITY_DESCRIPTOR_CONTROL = StringMid($InputData, $StartOffset + 44, 4)
+	$SECURITY_DESCRIPTOR_CONTROL = _SwapEndian($SECURITY_DESCRIPTOR_CONTROL)
+
+	$ControlText = _SecurityDescriptorControl("0x"&$SECURITY_DESCRIPTOR_CONTROL)
+
+	If Not BitAND("0x"&$SECURITY_DESCRIPTOR_CONTROL, $SE_SELF_RELATIVE) Then
+		ConsoleWrite("Error: Descriptor not self relative. Nothing to do" & @CRLF)
+		Return
+	EndIf
+	$PSidOwner = StringMid($InputData, $StartOffset + 48, 8)
+	$PSidOwner = _SwapEndian($PSidOwner)
+
+	$PSidOwner = Dec($PSidOwner)
+	$PSidGroup = StringMid($InputData, $StartOffset + 56, 8)
+	$PSidGroup = _SwapEndian($PSidGroup)
+
+	$PSidGroup = Dec($PSidGroup)
+	$PSacl = StringMid($InputData, $StartOffset + 64, 8)
+	$PSacl = _SwapEndian($PSacl)
+
+	$PSacl = Dec($PSacl)
+	$PDacl = StringMid($InputData, $StartOffset + 72, 8)
+	$PDacl = _SwapEndian($PDacl)
+
+	$PDacl = Dec($PDacl)
+	If $PSidOwner > 0 Then
+		$SidOwner = _DecodeSID(StringMid($InputData,$StartOffset+40+$PSidOwner*2))
+	EndIf
+	If $PSidGroup > 0 Then
+		$SidGroup = _DecodeSID(StringMid($InputData,$StartOffset+40+$PSidGroup*2))
+	EndIf
+	If $PSacl > 0 Then
+		_DecodeAcl_S(StringMid($InputData,$StartOffset+40+$PSacl*2))
+	EndIf
+	If $PDacl > 0 Then
+		_DecodeAcl_D(StringMid($InputData,$StartOffset+40+$PDacl*2))
+	EndIf
+	#cs
+	ConsoleWrite("$SecurityDescriptorHash: " & $SecurityDescriptorHash & @CRLF)
+	ConsoleWrite("$SecurityId: " & $SecurityId & @CRLF)
+	ConsoleWrite("$EntryOffset: " & $EntryOffset & @CRLF)
+	ConsoleWrite("$EntrySize: " & $EntrySize & @CRLF)
+	ConsoleWrite("$Revision: " & $Revision & @CRLF)
+	ConsoleWrite("$Sbz1: " & $Sbz1 & @CRLF)
+	ConsoleWrite("$SECURITY_DESCRIPTOR_CONTROL: " & $SECURITY_DESCRIPTOR_CONTROL & @CRLF)
+	ConsoleWrite("$ControlText: " & $ControlText & @CRLF)
+	ConsoleWrite("$PSidOwner: " & $PSidOwner & @CRLF)
+	ConsoleWrite("$PSidGroup: " & $PSidGroup & @CRLF)
+	ConsoleWrite("$PSacl: " & $PSacl & @CRLF)
+	ConsoleWrite("$PDacl: " & $PDacl & @CRLF)
+	#ce
+EndFunc
+
+Func _DecodeAcl_S($InputData)
+	;https://msdn.microsoft.com/en-us/library/cc230297.aspx
+	Local $StartOffset = 1, $AceDataCounter = 0
+	Global $SAclRevision,$SAceCount,$SAceTypeText,$SAceFlagsText,$SAceMask,$SAceObjectFlagsText,$SAceObjectType,$SAceInheritedObjectType,$SAceSIDString
+;	ConsoleWrite("_DecodeAcl_S() " & @CRLF)
+;	ConsoleWrite(_HexEncode("0x"&$InputData))
+	; ACL header 8 bytes
+	$SAclRevision = StringMid($InputData, $StartOffset, 2)
+
+	If $SAclRevision <> "02" And $SAclRevision <> "04" Then
+		ConsoleWrite("Error: Invalid SAclRevision: " & $SAclRevision & @CRLF)
+	EndIf
+	$Sbz1 = StringMid($InputData, $StartOffset + 2, 2)
+
+	$AclSize = StringMid($InputData, $StartOffset + 4, 4)
+	$AclSize = _SwapEndian($AclSize)
+
+	$AclSize = Dec($AclSize)
+	$SAceCount = StringMid($InputData, $StartOffset + 8, 4)
+	$SAceCount = _SwapEndian($SAceCount)
+
+	$SAceCount = Dec($SAceCount)
+	$Sbz2 = StringMid($InputData, $StartOffset + 12, 4)
+	#cs
+	ConsoleWrite("$SAclRevision: " & $SAclRevision & @CRLF)
+	ConsoleWrite("$Sbz1: " & $Sbz1 & @CRLF)
+	ConsoleWrite("$AclSize: " & $AclSize & @CRLF)
+	ConsoleWrite("$SAceCount: " & $SAceCount & @CRLF)
+	ConsoleWrite("$Sbz2: " & $Sbz2 & @CRLF)
+	#ce
+	If $SAceCount < 1 Then Return
+	For $j = 1 To $SAceCount
+
+		;ACE_HEADER 4 bytes
+		;https://msdn.microsoft.com/en-us/library/cc230296.aspx
+		$AceType = StringMid($InputData, $StartOffset + $AceDataCounter + 16, 2)
+
+		$AceTypeText = _DecodeAceType(Number("0x"&$AceType))
+		If $AceTypeText = "" Then
+			ConsoleWrite("Error: AceType invalid" & @CRLF)
+;			ContinueLoop
+		EndIf
+		If $AceTypeText = "UNKNOWN" Then ConsoleWrite("Unknown ace flags: " & $AceType & @CRLF)
+
+		$AceFlags = StringMid($InputData, $StartOffset + $AceDataCounter + 18, 2)
+
+		$AceFlagsText = _DecodeAceFlags(Number("0x"&$AceFlags))
+
+		If $j > 1 Then
+			$SAceTypeText &= $de2 & $AceTypeText
+			$SAceFlagsText &= $de2 & $AceFlagsText
+		Else
+			$SAceTypeText = $AceTypeText
+			$SAceFlagsText = $AceFlagsText
+		EndIf
+		$AceSize = StringMid($InputData, $StartOffset + $AceDataCounter + 20, 4)
+		$AceSize = _SwapEndian($AceSize)
+
+		$AceSize = Dec($AceSize)
+		;Remaining bytes of ACE depends on AceType
+		$Mask=""
+		$Flags=""
+		$ObjectType=""
+		$InheritedObjectType=""
+		$SIDString=""
+		If _IsSmallAceStruct("0x"&$AceType) Then
+;			ConsoleWrite("Small struct " & @CRLF)
+			;"dword Mask;dword SidStart"
+			;https://msdn.microsoft.com/en-us/library/windows/desktop/aa374902(v=vs.85).aspx
+			$Mask = StringMid($InputData, $StartOffset + $AceDataCounter + 24, 8)
+			$Mask = "0x"&_SwapEndian($Mask)
+
+			$SIDString = _DecodeSID(StringMid($InputData,$StartOffset + $AceDataCounter + 32, $AceSize*2))
+			If $j > 1 Then
+				$SAceMask &= $de2 & $Mask
+				$SAceSIDString &= $de2 & $SIDString
+			Else
+				$SAceMask = $Mask
+				$SAceSIDString = $SIDString
+			EndIf
+		Else
+;			ConsoleWrite("Big struct " & @CRLF)
+			;"dword Mask;dword Flags;GUID ObjectType;GUID InheritedObjectType;dword SidStart"
+			$Mask = StringMid($InputData, $StartOffset + $AceDataCounter + 24, 8)
+			$Mask = "0x"&_SwapEndian($Mask)
+
+			$ObjectFlags = StringMid($InputData, $StartOffset + $AceDataCounter + 32, 8)
+			$ObjectFlags = _SwapEndian($ObjectFlags)
+			$ObjectFlagsText = _DecodeAceObjectFlag($ObjectFlags)
+
+			$ObjectType = StringMid($InputData, $StartOffset + $AceDataCounter + 40, 32)
+			$ObjectType = _HexToGuidStr($ObjectType,1)
+			$InheritedObjectType = StringMid($InputData, $StartOffset + $AceDataCounter + 72, 32)
+			$InheritedObjectType = _HexToGuidStr($InheritedObjectType,1)
+
+			$SIDString = _DecodeSID(StringMid($InputData,$StartOffset + $AceDataCounter + 104, $AceSize*2))
+			If $j > 1 Then
+				$SAceMask &= $de2 & $Mask
+				$SAceObjectFlagsText &= $de2 & $ObjectFlagsText
+				$SAceObjectType &= $de2 & $ObjectType
+				$SAceInheritedObjectType &= $de2 & $InheritedObjectType
+				$SAceSIDString &= $de2 & $SIDString
+			Else
+				$SAceMask = $Mask
+				$SAceObjectFlagsText = $ObjectFlagsText
+				$SAceObjectType = $ObjectType
+				$SAceInheritedObjectType = $InheritedObjectType
+				$SAceSIDString = $SIDString
+			EndIf
+		EndIf
+		#cs
+		ConsoleWrite(@CRLF & "Ace number: " & $j & @CRLF)
+		ConsoleWrite("$AceType: " & $AceType & @CRLF)
+		ConsoleWrite("$AceTypeText: " & $AceTypeText & @CRLF)
+		ConsoleWrite("$AceFlags: " & $AceFlags & @CRLF)
+		ConsoleWrite("$AceFlagsText: " & $AceFlagsText & @CRLF)
+		ConsoleWrite("$AceSize: " & $AceSize & @CRLF)
+		ConsoleWrite("$Mask: " & $Mask & @CRLF)
+		ConsoleWrite("$Flags: " & $Flags & @CRLF)
+		ConsoleWrite("$ObjectType: " & $ObjectType & @CRLF)
+		ConsoleWrite("$InheritedObjectType: " & $InheritedObjectType & @CRLF)
+		ConsoleWrite("$SIDString: " & $SIDString & @CRLF)
+		#ce
+		$AceDataCounter += $AceSize*2
+	Next
+EndFunc
+
+Func _DecodeAcl_D($InputData)
+	;https://msdn.microsoft.com/en-us/library/cc230297.aspx
+	Local $StartOffset = 1, $AceDataCounter = 0
+	Global $DAclRevision,$DAceCount,$DAceTypeText,$DAceFlagsText,$DAceMask,$DAceObjectFlagsText,$DAceObjectType,$DAceInheritedObjectType,$DAceSIDString
+;	ConsoleWrite("_DecodeAcl_D() " & @CRLF)
+;	ConsoleWrite(_HexEncode("0x"&$InputData))
+	; ACL header 8 bytes
+	$DAclRevision = StringMid($InputData, $StartOffset, 2)
+
+	If $DAclRevision <> "02" And $DAclRevision <> "04" Then
+		ConsoleWrite("Error: Invalid DAclRevision: " & $DAclRevision & @CRLF)
+	EndIf
+	$Sbz1 = StringMid($InputData, $StartOffset + 2, 2)
+
+	$AclSize = StringMid($InputData, $StartOffset + 4, 4)
+	$AclSize = _SwapEndian($AclSize)
+
+	$AclSize = Dec($AclSize)
+	$DAceCount = StringMid($InputData, $StartOffset + 8, 4)
+	$DAceCount = _SwapEndian($DAceCount)
+
+	$DAceCount = Dec($DAceCount)
+	$Sbz2 = StringMid($InputData, $StartOffset + 12, 4)
+	#cs
+	ConsoleWrite("$DAclRevision: " & $DAclRevision & @CRLF)
+	ConsoleWrite("$Sbz1: " & $Sbz1 & @CRLF)
+	ConsoleWrite("$AclSize: " & $AclSize & @CRLF)
+	ConsoleWrite("$DAceCount: " & $DAceCount & @CRLF)
+	ConsoleWrite("$Sbz2: " & $Sbz2 & @CRLF)
+	#ce
+	If $DAceCount < 1 Then Return
+	For $j = 1 To $DAceCount
+
+		;ACE_HEADER 4 bytes
+		;https://msdn.microsoft.com/en-us/library/cc230296.aspx
+		$AceType = StringMid($InputData, $StartOffset + $AceDataCounter + 16, 2)
+
+		$AceTypeText = _DecodeAceType(Number("0x"&$AceType))
+		If $AceTypeText = "" Then
+			ConsoleWrite("Error: AceType invalid" & @CRLF)
+;			ContinueLoop
+		EndIf
+
+		$AceFlags = StringMid($InputData, $StartOffset + $AceDataCounter + 18, 2)
+
+		$AceFlagsText = _DecodeAceFlags(Number("0x"&$AceFlags))
+
+		If $j > 1 Then
+			$DAceTypeText &= $de2 & $AceTypeText
+			$DAceFlagsText &= $de2 & $AceFlagsText
+		Else
+			$DAceTypeText = $AceTypeText
+			$DAceFlagsText = $AceFlagsText
+		EndIf
+		$AceSize = StringMid($InputData, $StartOffset + $AceDataCounter + 20, 4)
+		$AceSize = _SwapEndian($AceSize)
+
+		$AceSize = Dec($AceSize)
+		;Remaining bytes of ACE depends on AceType
+		$Mask=""
+		$Flags=""
+		$ObjectType=""
+		$InheritedObjectType=""
+		$SIDString=""
+		If _IsSmallAceStruct("0x"&$AceType) Then
+;			ConsoleWrite("Small struct " & @CRLF)
+			;"dword Mask;dword SidStart"
+			;https://msdn.microsoft.com/en-us/library/windows/desktop/aa374902(v=vs.85).aspx
+			$Mask = StringMid($InputData, $StartOffset + $AceDataCounter + 24, 8)
+			$Mask = "0x"&_SwapEndian($Mask)
+
+			$SIDString = _DecodeSID(StringMid($InputData,$StartOffset + $AceDataCounter + 32, $AceSize*2))
+
+			If $j > 1 Then
+				$DAceMask &= $de2 & $Mask
+				$DAceSIDString &= $de2 & $SIDString
+			Else
+				$DAceMask = $Mask
+				$DAceSIDString = $SIDString
+			EndIf
+		Else
+;			ConsoleWrite("Big struct " & @CRLF)
+			;"dword Mask;dword Flags;GUID ObjectType;GUID InheritedObjectType;dword SidStart"
+			$Mask = StringMid($InputData, $StartOffset + $AceDataCounter + 24, 8)
+			$Mask = "0x"&_SwapEndian($Mask)
+
+			$ObjectFlags = StringMid($InputData, $StartOffset + $AceDataCounter + 32, 8)
+			$ObjectFlags = _SwapEndian($ObjectFlags)
+			$ObjectFlagsText = _DecodeAceObjectFlag($ObjectFlags)
+
+			$ObjectType = StringMid($InputData, $StartOffset + $AceDataCounter + 40, 32)
+			$ObjectType = _HexToGuidStr($ObjectType,1)
+			$InheritedObjectType = StringMid($InputData, $StartOffset + $AceDataCounter + 72, 32)
+			$InheritedObjectType = _HexToGuidStr($InheritedObjectType,1)
+
+			$SIDString = _DecodeSID(StringMid($InputData,$StartOffset + $AceDataCounter + 104, $AceSize*2))
+
+			If $j > 1 Then
+				$DAceMask &= $de2 & $Mask
+				$DAceObjectFlagsText &= $de2 & $ObjectFlagsText
+				$DAceObjectType &= $de2 & $ObjectType
+				$DAceInheritedObjectType &= $de2 & $InheritedObjectType
+				$DAceSIDString &= $de2 & $SIDString
+			Else
+				$DAceMask = $Mask
+				$DAceObjectFlagsText = $ObjectFlagsText
+				$DAceObjectType = $ObjectType
+				$DAceInheritedObjectType = $InheritedObjectType
+				$DAceSIDString = $SIDString
+			EndIf
+		EndIf
+		#cs
+		ConsoleWrite(@CRLF & "Ace number: " & $j & @CRLF)
+		ConsoleWrite("$AceType: " & $AceType & @CRLF)
+		ConsoleWrite("$AceTypeText: " & $AceTypeText & @CRLF)
+		ConsoleWrite("$AceFlags: " & $AceFlags & @CRLF)
+		ConsoleWrite("$AceFlagsText: " & $AceFlagsText & @CRLF)
+		ConsoleWrite("$AceSize: " & $AceSize & @CRLF)
+		ConsoleWrite("$Mask: " & $Mask & @CRLF)
+		ConsoleWrite("$Flags: " & $Flags & @CRLF)
+		ConsoleWrite("$ObjectType: " & $ObjectType & @CRLF)
+		ConsoleWrite("$InheritedObjectType: " & $InheritedObjectType & @CRLF)
+		ConsoleWrite("$SIDString: " & $SIDString & @CRLF)
+		#ce
+		$AceDataCounter += $AceSize*2
+	Next
+EndFunc
+
+Func _DecodeSID($InputData)
+	;https://msdn.microsoft.com/en-us/library/cc230371.aspx
+	Local $StartOffset = 1, $SIDString = "S"
+;	ConsoleWrite("_DecodeSID() " & @CRLF)
+	$Revision = StringMid($InputData, $StartOffset, 2)
+	$Revision = Dec($Revision)
+	If $Revision <> 1 Then
+		ConsoleWrite("Error: Revision invalid: " & $Revision & @CRLF)
+		Return SetError(1,0,0)
+	EndIf
+	$SIDString &= "-" & $Revision
+	$SubAuthorityCount = StringMid($InputData, $StartOffset + 2, 2)
+	$SubAuthorityCount = Dec($SubAuthorityCount)
+	If $SubAuthorityCount > 15 Then
+		ConsoleWrite("Error: SubAuthorityCount invalid: " & $SubAuthorityCount & @CRLF)
+		Return SetError(1,0,0)
+	EndIf
+	;SID_IDENTIFIER_AUTHORITY
+	$IdentifierAuthority = StringMid($InputData, $StartOffset + 4, 12)
+;	ConsoleWrite("$IdentifierAuthority: " & $IdentifierAuthority & @CRLF)
+	$IdentifierAuthorityString = _DecodeSidIdentifierAuthorityString($IdentifierAuthority)
+
+	$IdentifierAuthority = _DecodeSidIdentifierAuthority($IdentifierAuthority)
+
+	$SIDString &= "-" & $IdentifierAuthority
+	;SubAuthority (variable)
+	If $SubAuthorityCount < 1 Or $SubAuthorityCount > 15 Then
+		ConsoleWrite("Error: $SubAuthorityCount seems invalid: " & $SubAuthorityCount & @CRLF)
+		Return SetError(1,0,0)
+	EndIf
+	For $j = 1 To $SubAuthorityCount
+		$SubAuthority = StringMid($InputData, $StartOffset + (($j-1)*8) + 16, 8)
+;		ConsoleWrite("$SubAuthority: " & $SubAuthority & @CRLF)
+		$SIDString &= "-" & Dec(_SwapEndian($SubAuthority),2)
+	Next
+	#cs
+	ConsoleWrite("$Revision: " & $Revision & @CRLF)
+	ConsoleWrite("$SubAuthorityCount: " & $SubAuthorityCount & @CRLF)
+	ConsoleWrite("$IdentifierAuthorityString: " & $IdentifierAuthorityString & @CRLF)
+	ConsoleWrite("$IdentifierAuthority: " & $IdentifierAuthority & @CRLF)
+	ConsoleWrite("$SIDString: " & $SIDString & @CRLF)
+	#ce
+	Return $SIDString
+EndFunc
+
+Func _DecodeSidIdentifierAuthority($InputData)
+;	ConsoleWrite("_DecodeSidIdentifierAuthority() " & @CRLF)
+	Select
+		Case $InputData = "000000000000"
+			Return Dec($InputData)
+;			Return "0"
+		Case $InputData = "000000000001"
+			Return Dec($InputData)
+;			Return "1"
+		Case $InputData = "000000000002"
+			Return Dec($InputData)
+;			Return "2"
+		Case $InputData = "000000000003"
+			Return Dec($InputData)
+;			Return "3"
+		Case $InputData = "000000000004"
+			Return Dec($InputData)
+;			Return "4"
+		Case $InputData = "000000000005"
+			Return Dec($InputData)
+;			Return "5"
+		Case $InputData = "00000000000F"
+			Return Dec($InputData)
+;			Return "F"
+		Case $InputData = "000000000010"
+			Return Dec($InputData)
+;			Return "10"
+		Case $InputData = "000000000011"
+			Return Dec($InputData)
+;			Return "11"
+		Case $InputData = "000000000012"
+			Return Dec($InputData)
+;			Return "12"
+		Case $InputData = "000000000013"
+			Return Dec($InputData)
+;			Return "13"
+		Case Else
+			Return "UNKNOWN"
+	EndSelect
+EndFunc
+
+Func _DecodeSidIdentifierAuthorityString($InputData)
+;	ConsoleWrite("_DecodeSidIdentifierAuthorityString() " & @CRLF)
+	Select
+		Case $InputData = "000000000000"
+			Return "NULL_SID_AUTHORITY"
+		Case $InputData = "000000000001"
+			Return "WORLD_SID_AUTHORITY"
+		Case $InputData = "000000000002"
+			Return "LOCAL_SID_AUTHORITY"
+		Case $InputData = "000000000003"
+			Return "CREATOR_SID_AUTHORITY"
+		Case $InputData = "000000000004"
+			Return "NON_UNIQUE_AUTHORITY"
+		Case $InputData = "000000000005"
+			Return "SECURITY_NT_AUTHORITY"
+		Case $InputData = "00000000000F"
+			Return "SECURITY_APP_PACKAGE_AUTHORITY"
+		Case $InputData = "000000000010"
+			Return "SECURITY_MANDATORY_LABEL_AUTHORITY"
+		Case $InputData = "000000000011"
+			Return "SECURITY_SCOPED_POLICY_ID_AUTHORITY"
+		Case $InputData = "000000000012"
+			Return "SECURITY_AUTHENTICATION_AUTHORITY"
+		Case $InputData = "000000000013"
+			Return "SECURITY_PROCESS_TRUST_AUTHORITY"
+		Case Else
+			Return "UNKNOWN"
+	EndSelect
+EndFunc
+
+Func _DecodeIndxEntriesSDH($InputData)
+	Local $StartOffset = 1, $Counter = 0
+	Local $InputDataSize = BinaryLen("0x"&$InputData)
+	ReDim $SDHArray[100+1+$InputDataSize/48][6]
+	$SDHArray[0][0] = "OffsetInSDS"
+	$SDHArray[0][1] = "SizeInSDS"
+	$SDHArray[0][2] = "SecurityDescriptorHashKey"
+	$SDHArray[0][3] = "SecurityIdKey"
+	$SDHArray[0][4] = "SecurityDescriptorHashData"
+	$SDHArray[0][5] = "SecurityIdData"
+
+;	_ArrayDisplay($SDHArray,"$SDHArray")
+;	ConsoleWrite("_DecodeIndxEntriesSDH() " & @CRLF)
+;	ConsoleWrite("Input size: " & $InputDataSize & @CRLF)
+;	ConsoleWrite("$InputData: " & @CRLF)
+;	ConsoleWrite(_HexEncode("0x"&$InputData))
+
+	#cs
+	$MaxDescriptors=UBound($SDHArray)-101
+	$begin = TimerInit()
+	AdlibRegister("_SDHProgress", 500)
+	#ce
+	While 1
+		If $StartOffset >= $InputDataSize*2 Then ExitLoop
+		$Counter+=1
+		$CurrentDescriptor=$Counter
+
+		$DataOffset = StringMid($InputData, $StartOffset, 4)
+		$DataOffset = _SwapEndian($DataOffset)
+
+		$DataSize = StringMid($InputData, $StartOffset + 4, 4)
+		$DataSize = _SwapEndian($DataSize)
+
+		If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
+
+		;Padding 4 bytes
+		$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
+		$IndexEntrySize = _SwapEndian($IndexEntrySize)
+
+		$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
+		$IndexKeySize = _SwapEndian($IndexKeySize)
+
+		$Flags = StringMid($InputData, $StartOffset + 24, 4)
+		$Flags = "0x" & _SwapEndian($Flags)
+
+		;Padding 2 bytes
+		;Start of SDH index entry
+	;	$StartOffset = $StartOffset+24
+		$SecurityDescriptorHashKey = "0x" & StringMid($InputData, $StartOffset + 32, 8)
+;		$SecurityDescriptorHashKey = _SwapEndian($SecurityDescriptorHashKey)
+
+		$SecurityIdKey = StringMid($InputData, $StartOffset + 40, 8)
+		$SecurityIdKey = _SwapEndian($SecurityIdKey)
+		$SecurityIdKey = Dec($SecurityIdKey,2)
+
+		$SecurityDescriptorHashData = "0x" & StringMid($InputData, $StartOffset + 48, 8)
+;		$SecurityDescriptorHashData = _SwapEndian($SecurityDescriptorHashData)
+
+		$SecurityIdData = StringMid($InputData, $StartOffset + 56, 8)
+		$SecurityIdData = _SwapEndian($SecurityIdData)
+		$SecurityIdData = Dec($SecurityIdData,2)
+
+		$OffsetInSDS = StringMid($InputData, $StartOffset + 64, 16)
+		$OffsetInSDS = "0x" & _SwapEndian($OffsetInSDS)
+
+		$SizeInSDS = StringMid($InputData, $StartOffset + 80, 8)
+		$SizeInSDS = "0x" & _SwapEndian($SizeInSDS)
+
+		$EndPadding = StringMid($InputData, $StartOffset + 88, 8)
+		If $EndPadding <> "49004900" Then
+			ConsoleWrite("Wrong end padding (49004900): " & $EndPadding & @CRLF)
+			Return 0
+		EndIf
+
+		FileWriteLine($LogFileSecureSDHCsv, $RecordOffset&$de&$this_lsn&$de&$Flags&$de&$SecurityDescriptorHashKey&$de&$SecurityIdKey&$de&$SecurityDescriptorHashData&$de&$SecurityIdData&$de&$OffsetInSDS&$de&$SizeInSDS&@crlf)
+		$SDHArray[$Counter][0] = $OffsetInSDS
+		$SDHArray[$Counter][1] = $SizeInSDS
+		$SDHArray[$Counter][2] = $SecurityDescriptorHashKey
+		$SDHArray[$Counter][3] = $SecurityIdKey
+		$SDHArray[$Counter][4] = $SecurityDescriptorHashData
+		$SDHArray[$Counter][5] = $SecurityIdData
+		#cs
+		ConsoleWrite(@CRLF)
+		ConsoleWrite("$DataOffset: " & $DataOffset & @CRLF)
+		ConsoleWrite("$DataSize: " & $DataSize & @CRLF)
+		ConsoleWrite("$IndexEntrySize: " & $IndexEntrySize & @CRLF)
+		ConsoleWrite("$IndexKeySize: " & $IndexKeySize & @CRLF)
+		ConsoleWrite("$Flags: " & $Flags & @CRLF)
+		ConsoleWrite("$SecurityDescriptorHashKey: " & $SecurityDescriptorHashKey & @CRLF)
+		ConsoleWrite("$SecurityIdKey: " & $SecurityIdKey & @CRLF)
+		ConsoleWrite("$SecurityDescriptorHashData: " & $SecurityDescriptorHashData & @CRLF)
+		ConsoleWrite("$SecurityIdData: " & $SecurityIdData & @CRLF)
+		ConsoleWrite("$OffsetInSDS: " & $OffsetInSDS & @CRLF)
+		ConsoleWrite("$SizeInSDS: " & $SizeInSDS & @CRLF)
+		#ce
+		$StartOffset += 96
+	WEnd
+	#cs
+	$MaxDescriptors = $CurrentDescriptor
+	AdlibUnRegister("_SDHProgress")
+	GUICtrlSetData($ProgressStatus, "[$SDH] Processing security descriptor index entry " & $CurrentDescriptor & " of " & $MaxDescriptors)
+	GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
+	GUICtrlSetData($ProgressSDH, 100 * $CurrentDescriptor / $MaxDescriptors)
+	_DisplayInfo("$SDH processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
+	#ce
+	ReDim $SDHArray[$Counter+1][6]
+EndFunc
+
+Func _DecodeIndxEntriesSII($InputData)
+	Local $StartOffset = 1, $Counter = 0
+	Local $InputDataSize = BinaryLen("0x"&$InputData)
+	ReDim $SIIArray[100+1+$InputDataSize/40][5]
+	$SIIArray[0][0] = "OffsetInSDS"
+	$SIIArray[0][1] = "SizeInSDS"
+	$SIIArray[0][2] = "SecurityIdKey"
+	$SIIArray[0][3] = "SecurityDescriptorHashData"
+	$SIIArray[0][4] = "SecurityIdData"
+;	ConsoleWrite("_DecodeIndxEntriesSII() " & @CRLF)
+;	ConsoleWrite("Input size: " & BinaryLen("0x"&$InputData) & @CRLF)
+;	ConsoleWrite("$InputData: " & @CRLF)
+;	ConsoleWrite(_HexEncode("0x"&$InputData))
+
+	#cs
+	$MaxDescriptors=UBound($SIIArray)-101
+	$begin = TimerInit()
+	AdlibRegister("_SIIProgress", 500)
+	#ce
+	While 1
+		If $StartOffset >= BinaryLen("0x"&$InputData)*2 Then ExitLoop
+		$Counter+=1
+		$CurrentDescriptor=$Counter
+
+		$DataOffset = StringMid($InputData, $StartOffset, 4)
+		$DataOffset = _SwapEndian($DataOffset)
+
+		$DataSize = StringMid($InputData, $StartOffset + 4, 4)
+		$DataSize = _SwapEndian($DataSize)
+
+		If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
+
+		;Padding 4 bytes
+		$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
+		$IndexEntrySize = _SwapEndian($IndexEntrySize)
+
+		$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
+		$IndexKeySize = _SwapEndian($IndexKeySize)
+
+		$Flags = StringMid($InputData, $StartOffset + 24, 4)
+		$Flags = "0x" & _SwapEndian($Flags)
+
+		;Padding 2 bytes
+		$SecurityIdKey = StringMid($InputData, $StartOffset + 32, 8)
+		$SecurityIdKey = _SwapEndian($SecurityIdKey)
+		$SecurityIdKey = Dec($SecurityIdKey,2)
+
+		$SecurityDescriptorHashData = "0x" & StringMid($InputData, $StartOffset + 40, 8)
+;		$SecurityDescriptorHashData = _SwapEndian($SecurityDescriptorHashData)
+
+		$SecurityIdData = StringMid($InputData, $StartOffset + 48, 8)
+		$SecurityIdData = _SwapEndian($SecurityIdData)
+		$SecurityIdData = Dec($SecurityIdData,2)
+
+		$OffsetInSDS = StringMid($InputData, $StartOffset + 56, 16)
+		$OffsetInSDS = "0x" & _SwapEndian($OffsetInSDS)
+
+		$SizeInSDS = StringMid($InputData, $StartOffset + 72, 8)
+		$SizeInSDS = "0x" & _SwapEndian($SizeInSDS)
+
+		FileWriteLine($LogFileSecureSIICsv, $RecordOffset&$de&$this_lsn&$de&$Flags&$de&$SecurityIdKey&$de&$SecurityDescriptorHashData&$de&$SecurityIdData&$de&$OffsetInSDS&$de&$SizeInSDS&@crlf)
+		$SIIArray[$Counter][0] = $OffsetInSDS
+		$SIIArray[$Counter][1] = $SizeInSDS
+		$SIIArray[$Counter][2] = $SecurityIdKey
+		$SIIArray[$Counter][3] = $SecurityDescriptorHashData
+		$SIIArray[$Counter][4] = $SecurityIdData
+		#cs
+		ConsoleWrite(@CRLF)
+		ConsoleWrite("$DataOffset: " & $DataOffset & @CRLF)
+		ConsoleWrite("$DataSize: " & $DataSize & @CRLF)
+		ConsoleWrite("$IndexEntrySize: " & $IndexEntrySize & @CRLF)
+		ConsoleWrite("$IndexKeySize: " & $IndexKeySize & @CRLF)
+		ConsoleWrite("$Flags: " & $Flags & @CRLF)
+		ConsoleWrite("$SecurityIdKey: " & $SecurityIdKey & @CRLF)
+		ConsoleWrite("$SecurityDescriptorHashData: " & $SecurityDescriptorHashData & @CRLF)
+		ConsoleWrite("$SecurityIdData: " & $SecurityIdData & @CRLF)
+		ConsoleWrite("$OffsetInSDS: " & $OffsetInSDS & @CRLF)
+		ConsoleWrite("$SizeInSDS: " & $SizeInSDS & @CRLF)
+		#ce
+		$StartOffset += 80
+	WEnd
+	#cs
+	$MaxDescriptors = $CurrentDescriptor
+	AdlibUnRegister("_SIIProgress")
+	GUICtrlSetData($ProgressStatus, "[$SII] Processing security descriptor index entry " & $CurrentDescriptor & " of " & $MaxDescriptors)
+	GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
+	GUICtrlSetData($ProgressSII, 100 * $CurrentDescriptor / $MaxDescriptors)
+	_DisplayInfo("$SII processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
+	#ce
+	ReDim $SIIArray[$Counter+1][5]
+EndFunc
+
+Func _GetIndx($Entry)
+;	ConsoleWrite("Starting function _Get_IndexAllocation()" & @crlf)
+	Local $NextPosition = 3,$IndxHdrMagic,$IndxEntries,$TotalIndxEntries
+;	ConsoleWrite("StringLen of chunk = " & StringLen($Entry) & @crlf)
+;	ConsoleWrite("Expected records = " & StringLen($Entry)/8192 & @crlf)
+;	$NextPosition = 1
+	Do
+		$IndxHdrMagic = StringMid($Entry,$NextPosition,8)
+;		ConsoleWrite("$IndxHdrMagic = " & $IndxHdrMagic & @crlf)
+		$IndxHdrMagic = _HexToString($IndxHdrMagic)
+;		ConsoleWrite("$IndxHdrMagic = " & $IndxHdrMagic & @crlf)
+		If $IndxHdrMagic <> "INDX" Then
+;			ConsoleWrite("$IndxHdrMagic: " & $IndxHdrMagic & @crlf)
+			ConsoleWrite("Error: Record is not of type INDX, and this was not expected.." & @crlf)
+			$NextPosition += 8192
+			ContinueLoop
+		EndIf
+		$IndxEntries = _StripIndxRecord(StringMid($Entry,$NextPosition,8192))
+		$TotalIndxEntries &= $IndxEntries
+		$NextPosition += 8192
+	Until $NextPosition >= StringLen($Entry)+32
+;	ConsoleWrite("INDX record:" & @crlf)
+;	ConsoleWrite(_HexEncode("0x"& StringMid($Entry,1)) & @crlf)
+;	ConsoleWrite("Total chunk of stripped INDX entries:" & @crlf)
+;	ConsoleWrite(_HexEncode("0x"& StringMid($TotalIndxEntries,1)) & @crlf)
+;	_DecodeIndxEntriesSDH($TotalIndxEntries)
+	Return $TotalIndxEntries
+EndFunc
+
+Func _GetIndxWoFixup($Entry)
+;	ConsoleWrite("Starting function _Get_IndexAllocation()" & @crlf)
+	Local $NextPosition = 1,$IndxHdrMagic,$IndxEntries,$TotalIndxEntries
+;	ConsoleWrite("StringLen of chunk = " & StringLen($Entry) & @crlf)
+;	ConsoleWrite("Expected records = " & StringLen($Entry)/8192 & @crlf)
+;	$NextPosition = 1
+	Do
+		$IndxHdrMagic = StringMid($Entry,$NextPosition,8)
+;		ConsoleWrite("$IndxHdrMagic = " & $IndxHdrMagic & @crlf)
+		$IndxHdrMagic = _HexToString($IndxHdrMagic)
+;		ConsoleWrite("$IndxHdrMagic = " & $IndxHdrMagic & @crlf)
+		If $IndxHdrMagic <> "INDX" Then
+;			ConsoleWrite("$IndxHdrMagic: " & $IndxHdrMagic & @crlf)
+			ConsoleWrite("Error: Record is not of type INDX, and this was not expected.." & @crlf)
+			$NextPosition += 8192
+			ContinueLoop
+		EndIf
+		$IndxEntries = _StripIndxRecordWoFixup(StringMid($Entry,$NextPosition,8192))
+		$TotalIndxEntries &= $IndxEntries
+		$NextPosition += 8192
+	Until $NextPosition >= StringLen($Entry)+32
+;	ConsoleWrite("INDX record:" & @crlf)
+;	ConsoleWrite(_HexEncode("0x"& StringMid($Entry,1)) & @crlf)
+;	ConsoleWrite("Total chunk of stripped INDX entries:" & @crlf)
+;	ConsoleWrite(_HexEncode("0x"& StringMid($TotalIndxEntries,1)) & @crlf)
+;	_DecodeIndxEntriesSDH($TotalIndxEntries)
+	Return $TotalIndxEntries
+EndFunc
+
+Func _StripIndxRecordWoFixup($Entry)
+;	ConsoleWrite("Starting function _StripIndxRecord()" & @crlf)
+	Local $LocalAttributeOffset = 1,$IndxHdrUpdateSeqArrOffset,$IndxHdrUpdateSeqArrSize,$IndxHdrUpdSeqArr,$IndxHdrUpdSeqArrPart0,$IndxHdrUpdSeqArrPart1,$IndxHdrUpdSeqArrPart2,$IndxHdrUpdSeqArrPart3,$IndxHdrUpdSeqArrPart4,$IndxHdrUpdSeqArrPart5,$IndxHdrUpdSeqArrPart6,$IndxHdrUpdSeqArrPart7,$IndxHdrUpdSeqArrPart8
+	Local $IndxRecordEnd1,$IndxRecordEnd2,$IndxRecordEnd3,$IndxRecordEnd4,$IndxRecordEnd5,$IndxRecordEnd6,$IndxRecordEnd7,$IndxRecordEnd8,$IndxRecordSize,$IndxHeaderSize,$IsNotLeafNode
+;	ConsoleWrite("Unfixed INDX record:" & @crlf)
+;	ConsoleWrite(_HexEncode("0x"&$Entry) & @crlf)
+;	ConsoleWrite(_HexEncode("0x" & StringMid($Entry,1,4096)) & @crlf)
+	#cs
+	$IndxHdrUpdateSeqArrOffset = Dec(_SwapEndian(StringMid($Entry,$LocalAttributeOffset+8,4)))
+;	ConsoleWrite("$IndxHdrUpdateSeqArrOffset = " & $IndxHdrUpdateSeqArrOffset & @crlf)
+	$IndxHdrUpdateSeqArrSize = Dec(_SwapEndian(StringMid($Entry,$LocalAttributeOffset+12,4)))
+;	ConsoleWrite("$IndxHdrUpdateSeqArrSize = " & $IndxHdrUpdateSeqArrSize & @crlf)
+	$IndxHdrUpdSeqArr = StringMid($Entry,1+($IndxHdrUpdateSeqArrOffset*2),$IndxHdrUpdateSeqArrSize*2*2)
+;	ConsoleWrite("$IndxHdrUpdSeqArr = " & $IndxHdrUpdSeqArr & @crlf)
+	$IndxHdrUpdSeqArrPart0 = StringMid($IndxHdrUpdSeqArr,1,4)
+	$IndxHdrUpdSeqArrPart1 = StringMid($IndxHdrUpdSeqArr,5,4)
+	$IndxHdrUpdSeqArrPart2 = StringMid($IndxHdrUpdSeqArr,9,4)
+	$IndxHdrUpdSeqArrPart3 = StringMid($IndxHdrUpdSeqArr,13,4)
+	$IndxHdrUpdSeqArrPart4 = StringMid($IndxHdrUpdSeqArr,17,4)
+	$IndxHdrUpdSeqArrPart5 = StringMid($IndxHdrUpdSeqArr,21,4)
+	$IndxHdrUpdSeqArrPart6 = StringMid($IndxHdrUpdSeqArr,25,4)
+	$IndxHdrUpdSeqArrPart7 = StringMid($IndxHdrUpdSeqArr,29,4)
+	$IndxHdrUpdSeqArrPart8 = StringMid($IndxHdrUpdSeqArr,33,4)
+	$IndxRecordEnd1 = StringMid($Entry,1021,4)
+	$IndxRecordEnd2 = StringMid($Entry,2045,4)
+	$IndxRecordEnd3 = StringMid($Entry,3069,4)
+	$IndxRecordEnd4 = StringMid($Entry,4093,4)
+	$IndxRecordEnd5 = StringMid($Entry,5117,4)
+	$IndxRecordEnd6 = StringMid($Entry,6141,4)
+	$IndxRecordEnd7 = StringMid($Entry,7165,4)
+	$IndxRecordEnd8 = StringMid($Entry,8189,4)
+	If $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd1 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd2 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd3 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd4 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd5 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd6 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd7 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd8 Then
+		ConsoleWrite("Error the INDX record is corrupt" & @CRLF)
+		Return ; Not really correct because I think in theory chunks of 1024 bytes can be invalid and not just everything or nothing for the given INDX record.
+	Else
+		$Entry = StringMid($Entry,1,1020) & $IndxHdrUpdSeqArrPart1 & StringMid($Entry,1025,1020) & $IndxHdrUpdSeqArrPart2 & StringMid($Entry,2049,1020) & $IndxHdrUpdSeqArrPart3 & StringMid($Entry,3073,1020) & $IndxHdrUpdSeqArrPart4 & StringMid($Entry,4097,1020) & $IndxHdrUpdSeqArrPart5 & StringMid($Entry,5121,1020) & $IndxHdrUpdSeqArrPart6 & StringMid($Entry,6145,1020) & $IndxHdrUpdSeqArrPart7 & StringMid($Entry,7169,1020)
+	EndIf
+	#ce
+	$IndxRecordSize = Dec(_SwapEndian(StringMid($Entry,$LocalAttributeOffset+56,8)),2)
+;	ConsoleWrite("$IndxRecordSize = " & $IndxRecordSize & @crlf)
+	$IndxHeaderSize = Dec(_SwapEndian(StringMid($Entry,$LocalAttributeOffset+48,8)),2)
+;	ConsoleWrite("$IndxHeaderSize = " & $IndxHeaderSize & @crlf)
+	$IsNotLeafNode = StringMid($Entry,$LocalAttributeOffset+72,2) ;1 if not leaf node
+	$Entry = StringMid($Entry,$LocalAttributeOffset+48+($IndxHeaderSize*2),($IndxRecordSize-$IndxHeaderSize-16)*2)
+	If $IsNotLeafNode = "01" Then  ; This flag leads to the entry being 8 bytes of 00's longer than the others. Can be stripped I think.
+		$Entry = StringTrimRight($Entry,16)
+;		ConsoleWrite("Is not leaf node..." & @crlf)
+	EndIf
+	Return $Entry
+EndFunc
+
+Func _StripIndxRecord($Entry)
+;	ConsoleWrite("Starting function _StripIndxRecord()" & @crlf)
+	Local $LocalAttributeOffset = 1,$IndxHdrUpdateSeqArrOffset,$IndxHdrUpdateSeqArrSize,$IndxHdrUpdSeqArr,$IndxHdrUpdSeqArrPart0,$IndxHdrUpdSeqArrPart1,$IndxHdrUpdSeqArrPart2,$IndxHdrUpdSeqArrPart3,$IndxHdrUpdSeqArrPart4,$IndxHdrUpdSeqArrPart5,$IndxHdrUpdSeqArrPart6,$IndxHdrUpdSeqArrPart7,$IndxHdrUpdSeqArrPart8
+	Local $IndxRecordEnd1,$IndxRecordEnd2,$IndxRecordEnd3,$IndxRecordEnd4,$IndxRecordEnd5,$IndxRecordEnd6,$IndxRecordEnd7,$IndxRecordEnd8,$IndxRecordSize,$IndxHeaderSize,$IsNotLeafNode
+;	ConsoleWrite("Unfixed INDX record:" & @crlf)
+;	ConsoleWrite(_HexEncode("0x"&$Entry) & @crlf)
+;	ConsoleWrite(_HexEncode("0x" & StringMid($Entry,1,4096)) & @crlf)
+	$IndxHdrUpdateSeqArrOffset = Dec(_SwapEndian(StringMid($Entry,$LocalAttributeOffset+8,4)))
+;	ConsoleWrite("$IndxHdrUpdateSeqArrOffset = " & $IndxHdrUpdateSeqArrOffset & @crlf)
+	$IndxHdrUpdateSeqArrSize = Dec(_SwapEndian(StringMid($Entry,$LocalAttributeOffset+12,4)))
+;	ConsoleWrite("$IndxHdrUpdateSeqArrSize = " & $IndxHdrUpdateSeqArrSize & @crlf)
+	$IndxHdrUpdSeqArr = StringMid($Entry,1+($IndxHdrUpdateSeqArrOffset*2),$IndxHdrUpdateSeqArrSize*2*2)
+;	ConsoleWrite("$IndxHdrUpdSeqArr = " & $IndxHdrUpdSeqArr & @crlf)
+	$IndxHdrUpdSeqArrPart0 = StringMid($IndxHdrUpdSeqArr,1,4)
+	$IndxHdrUpdSeqArrPart1 = StringMid($IndxHdrUpdSeqArr,5,4)
+	$IndxHdrUpdSeqArrPart2 = StringMid($IndxHdrUpdSeqArr,9,4)
+	$IndxHdrUpdSeqArrPart3 = StringMid($IndxHdrUpdSeqArr,13,4)
+	$IndxHdrUpdSeqArrPart4 = StringMid($IndxHdrUpdSeqArr,17,4)
+	$IndxHdrUpdSeqArrPart5 = StringMid($IndxHdrUpdSeqArr,21,4)
+	$IndxHdrUpdSeqArrPart6 = StringMid($IndxHdrUpdSeqArr,25,4)
+	$IndxHdrUpdSeqArrPart7 = StringMid($IndxHdrUpdSeqArr,29,4)
+	$IndxHdrUpdSeqArrPart8 = StringMid($IndxHdrUpdSeqArr,33,4)
+	$IndxRecordEnd1 = StringMid($Entry,1021,4)
+	$IndxRecordEnd2 = StringMid($Entry,2045,4)
+	$IndxRecordEnd3 = StringMid($Entry,3069,4)
+	$IndxRecordEnd4 = StringMid($Entry,4093,4)
+	$IndxRecordEnd5 = StringMid($Entry,5117,4)
+	$IndxRecordEnd6 = StringMid($Entry,6141,4)
+	$IndxRecordEnd7 = StringMid($Entry,7165,4)
+	$IndxRecordEnd8 = StringMid($Entry,8189,4)
+	If $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd1 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd2 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd3 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd4 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd5 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd6 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd7 OR $IndxHdrUpdSeqArrPart0 <> $IndxRecordEnd8 Then
+		ConsoleWrite("Error the INDX record is corrupt" & @CRLF)
+		Return ; Not really correct because I think in theory chunks of 1024 bytes can be invalid and not just everything or nothing for the given INDX record.
+	Else
+		$Entry = StringMid($Entry,1,1020) & $IndxHdrUpdSeqArrPart1 & StringMid($Entry,1025,1020) & $IndxHdrUpdSeqArrPart2 & StringMid($Entry,2049,1020) & $IndxHdrUpdSeqArrPart3 & StringMid($Entry,3073,1020) & $IndxHdrUpdSeqArrPart4 & StringMid($Entry,4097,1020) & $IndxHdrUpdSeqArrPart5 & StringMid($Entry,5121,1020) & $IndxHdrUpdSeqArrPart6 & StringMid($Entry,6145,1020) & $IndxHdrUpdSeqArrPart7 & StringMid($Entry,7169,1020)
+	EndIf
+	$IndxRecordSize = Dec(_SwapEndian(StringMid($Entry,$LocalAttributeOffset+56,8)),2)
+;	ConsoleWrite("$IndxRecordSize = " & $IndxRecordSize & @crlf)
+	$IndxHeaderSize = Dec(_SwapEndian(StringMid($Entry,$LocalAttributeOffset+48,8)),2)
+;	ConsoleWrite("$IndxHeaderSize = " & $IndxHeaderSize & @crlf)
+	$IsNotLeafNode = StringMid($Entry,$LocalAttributeOffset+72,2) ;1 if not leaf node
+	$Entry = StringMid($Entry,$LocalAttributeOffset+48+($IndxHeaderSize*2),($IndxRecordSize-$IndxHeaderSize-16)*2)
+	If $IsNotLeafNode = "01" Then  ; This flag leads to the entry being 8 bytes of 00's longer than the others. Can be stripped I think.
+		$Entry = StringTrimRight($Entry,16)
+;		ConsoleWrite("Is not leaf node..." & @crlf)
+	EndIf
+	Return $Entry
+EndFunc
+
+Func _HexToGuidStr($input,$mode)
+	;{4b-2b-2b-2b-6b}
+	Local $OutStr
+	If Not StringLen($input) = 32 Then Return $input
+	If $mode Then $OutStr = "{"
+	For $i = 1 To 32 Step 2
+		$OutStr &= StringMid($input,$i,2)
+		If $i = 7 Or $i = 11 Or $i = 15 Or $i = 19 Then
+			$OutStr &= "-"
+		EndIf
+	Next
+	If $mode Then $OutStr &= "}"
+	Return $OutStr
+EndFunc
+
+Func _MainSecure($RawContentSDS)
+	$SizeSDS = StringLen($RawContentSDS)/2
+	$StartOffset = 1
+	$BytesProcessed = 0
+	$CurrentDescriptor = 0
+	While 1
+		$CurrentDescriptor += 1
+		If $BytesProcessed >= $SizeSDS Then
+;			ConsoleWrite("End of $SDS reached" & @CRLF)
+			ExitLoop
+		EndIf
+		$TargetSDSOffset = StringMid($RawContentSDS,$StartOffset + 16, 16)
+		$TargetSDSOffset = Dec(_SwapEndian($TargetSDSOffset),2)
+
+		$TargetSDSSize = StringMid($RawContentSDS,$StartOffset + 32, 8)
+		$TargetSDSSize = Dec(_SwapEndian($TargetSDSSize),2)
+
+		If $TargetSDSOffset >= $SizeSDS Then
+;			ConsoleWrite("End of $SDS reached" & @CRLF)
+			ExitLoop
+		EndIf
+
+		$TargetSDSOffsetHex = "0x"&Hex(Int(($StartOffset-3)/2),8)
+
+		If $TargetSDSOffset = 0 And $TargetSDSSize = 0 Then
+			If Mod(($StartOffset-$StartOffset)/2,262144) Then ; Align 0x40000
+				Do
+					$StartOffset+=2
+				Until Mod(($StartOffset-$StartOffset)/2,262144)=0
+				ContinueLoop ;Move to next block
+			Else
+				ExitLoop ;We are at end
+			EndIf
+		EndIf
+
+		If Mod($TargetSDSSize,16) Then ; Align SDS size to 16 bytes
+			Do
+				$TargetSDSSize+=1
+			Until Mod($TargetSDSSize,16)=0
+		EndIf
+		$TargetSDSHash = StringMid($RawContentSDS,$StartOffset, 8)
+		$TargetSDSChunk = StringMid($RawContentSDS,$StartOffset+($TargetSDSOffset*2), $TargetSDSSize*2)
+;		ConsoleWrite("$TargetSDSSize: " & $TargetSDSSize & @CRLF)
+		_DecodeSDSChunk($TargetSDSChunk, $TargetSDSHash)
+		;Write information to csv
+		_WriteCsvSecureSDS()
+		;Make sure all global variables for csv are cleared
+		_ClearVarSecureSDS()
+		$BytesProcessed+=$TargetSDSSize
+		$StartOffset+=$TargetSDSSize*2
+	WEnd
+EndFunc
+
+Func _ClearVarSecureSDS()
+	$TargetSDSOffsetHex = ""
+	$SecurityDescriptorHash = ""
+	$SecurityId = ""
+	$ControlText = ""
+	$SidOwner = ""
+	$SidGroup = ""
+	$SAclRevision = ""
+	$SAceCount = ""
+	$SAceTypeText = ""
+	$SAceFlagsText = ""
+	$SAceMask = ""
+	$SAceObjectType = ""
+	$SAceInheritedObjectType = ""
+	$SAceSIDString = ""
+	$SAceObjectFlagsText = ""
+	$DAclRevision = ""
+	$DAceCount = ""
+	$DAceTypeText = ""
+	$DAceFlagsText = ""
+	$DAceMask = ""
+	$DAceObjectType = ""
+	$DAceInheritedObjectType = ""
+	$DAceSIDString = ""
+	$DAceObjectFlagsText = ""
+EndFunc
+
+Func _WriteCsvSecureSDS()
+	FileWriteLine($LogFileSecureSDSCsv, $RecordOffset&$de&$this_lsn&$de&$SecurityDescriptorHash&$de&$SecurityId&$de&$ControlText&$de&$SidOwner&$de&$SidGroup&$de&$SAclRevision&$de&$SAceCount&$de&$SAceTypeText&$de&$SAceFlagsText&$de&$SAceMask&$de&$SAceObjectFlagsText&$de&$SAceObjectType&$de&$SAceInheritedObjectType&$de&$SAceSIDString&$de&$DAclRevision&$de&$DAceCount&$de&$DAceTypeText&$de&$DAceFlagsText&$de&$DAceMask&$de&$DAceObjectFlagsText&$de&$DAceObjectType&$de&$DAceInheritedObjectType&$de&$DAceSIDString&@crlf)
+EndFunc
+
+Func _WriteCSVHeaderSecureSDS()
+	$SecureSDS_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"SecurityDescriptorHash"&$de&"SecurityId"&$de&"Control"&$de&"SidOwner"&$de&"SidGroup"&$de&"SAclRevision"&$de&"SAceCount"&$de&"SAceType"&$de&"SAceFlags"&$de&"SAceMask"&$de&"SAceObjectFlags"&$de&"SAceObjectType"&$de&"SAceInheritedObjectType"&$de&"SAceSIDofTrustee"&$de&"DAclRevision"&$de&"DAceCount"&$de&"DAceType"&$de&"DAceFlags"&$de&"DAceMask"&$de&"DAceObjectFlags"&$de&"DAceObjectType"&$de&"DAceInheritedObjectType"&$de&"DAceSIDofTrustee"
+	FileWriteLine($LogFileSecureSDSCsv, $SecureSDS_Csv_Header & @CRLF)
+EndFunc
+
+Func _WriteCSVHeaderSecureSDH()
+	$SecureSDH_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"sdh_flags"&$de&"sdh_SecurityDescriptorHashKey"&$de&"sdh_SecurityIdKey"&$de&"sdh_SecurityDescriptorHashData"&$de&"sdh_SecurityIdData"&$de&"sdh_OffsetInSDS"&$de&"sdh_SizeInSDS"
+	FileWriteLine($LogFileSecureSDHCsv, $SecureSDH_Csv_Header & @CRLF)
+EndFunc
+
+Func _WriteCSVHeaderSecureSII()
+	$SecureSII_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"sdh_flags"&$de&"sdh_SecurityIdKey"&$de&"sdh_SecurityDescriptorHashData"&$de&"sdh_SecurityIdData"&$de&"sdh_OffsetInSDS"&$de&"sdh_SizeInSDS"
+	FileWriteLine($LogFileSecureSIICsv, $SecureSII_Csv_Header & @CRLF)
+EndFunc
+
+;-----------/Security------------------
+
+Func _Decode_ObjId_O($InputData)
+	;88 bytes
+	$StartOffset = 1
+	$DataOffset = StringMid($InputData, $StartOffset, 4)
+	$DataOffset = Dec(_SwapEndian($DataOffset),2)
+
+	$DataSize = StringMid($InputData, $StartOffset + 4, 4)
+	$DataSize = Dec(_SwapEndian($DataSize),2)
+
+	If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
+
+	;Padding 4 bytes
+	$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
+	$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
+
+	$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
+	$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
+
+	;1=Entry has subnodes, 2=Last entry
+	$Flags = StringMid($InputData, $StartOffset + 24, 4)
+	$Flags = "0x" & _SwapEndian($Flags)
+
+	;Padding 2 bytes
+	$GUIDObjectId = StringMid($InputData, $StartOffset + 32, 32)
+	$GUIDObjectId = _HexToGuidStr($GUIDObjectId,0)
+
+	$MftRef = StringMid($InputData, $StartOffset + 64, 12)
+	$MftRef = Dec(_SwapEndian($MftRef),2)
+
+	$MftSeqNo = StringMid($InputData, $StartOffset + 76, 4)
+	$MftSeqNo = Dec(_SwapEndian($MftSeqNo),2)
+
+	$GUIDBirthVolumeId = StringMid($InputData, $StartOffset + 80, 32)
+	$GUIDBirthVolumeId = _HexToGuidStr($GUIDBirthVolumeId,0)
+
+	$GUIDBirthObjectId = StringMid($InputData, $StartOffset + 112, 32)
+	$GUIDBirthObjectId = _HexToGuidStr($GUIDBirthObjectId,0)
+
+	$GUIDDomainId = StringMid($InputData, $StartOffset + 144, 32)
+	$GUIDDomainId = _HexToGuidStr($GUIDDomainId,0)
+
+	FileWriteLine($LogFileObjIdOCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$GUIDObjectId&$de&$MftRef&$de&$MftSeqNo&$de&$GUIDBirthVolumeId&$de&$GUIDBirthObjectId&$de&$GUIDDomainId&@crlf)
+EndFunc
+
+Func _Decode_Quota_O($InputData)
+	$StartOffset = 1
+	$DataOffset = StringMid($InputData, $StartOffset, 4)
+	$DataOffset = Dec(_SwapEndian($DataOffset),2)
+
+	$DataSize = StringMid($InputData, $StartOffset + 4, 4)
+	$DataSize = Dec(_SwapEndian($DataSize),2)
+
+	If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
+
+	;Padding 4 bytes
+	$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
+	$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
+
+	$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
+	$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
+
+	$Flags = StringMid($InputData, $StartOffset + 24, 4)
+	$Flags = "0x" & _SwapEndian($Flags)
+
+	;Padding 2 bytes
+	$SID = StringMid($InputData, $StartOffset + 32, $IndexKeySize*2)
+	$SID = _DecodeSID($SID)
+
+	$OwnerId = StringMid($InputData, $StartOffset + 32 + ($IndexKeySize*2), 8)
+	$OwnerId = Dec(_SwapEndian($OwnerId),2)
+
+;	$Padding8 = StringMid($InputData, $StartOffset + 32 + ($IndexKeySize*2), 16)
+	FileWriteLine($LogFileQuotaOCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$SID&$de&$OwnerId&@crlf)
+EndFunc
+
+Func _Decode_Quota_Q($InputData)
+	$StartOffset = 1
+;	_DumpOutput("_Decode_Quota_Q()" & @CRLF)
+;	_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+	$DataOffset = StringMid($InputData, $StartOffset, 4)
+;	_DumpOutput("$DataOffset: " & $DataOffset & @CRLF)
+	$DataOffset = Dec(_SwapEndian($DataOffset),2)
+
+	$DataSize = StringMid($InputData, $StartOffset + 4, 4)
+;	_DumpOutput("$DataSize: " & $DataSize & @CRLF)
+	$DataSize = Dec(_SwapEndian($DataSize),2)
+
+	If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
+
+	;Padding 4 bytes
+	$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
+;	_DumpOutput("$IndexEntrySize: " & $IndexEntrySize & @CRLF)
+	$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
+
+	$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
+;	_DumpOutput("$IndexKeySize: " & $IndexKeySize & @CRLF)
+	$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
+
+	;1=Entry has subnodes, 2=Last entry
+	$Flags = StringMid($InputData, $StartOffset + 24, 4)
+;	_DumpOutput("$Flags: " & $Flags & @CRLF)
+	$Flags = "0x" & _SwapEndian($Flags)
+
+	;Padding 2 bytes
+	$OwnerId = StringMid($InputData, $StartOffset + 32, 8)
+;	_DumpOutput("$OwnerId: " & $OwnerId & @CRLF)
+	$OwnerId = Dec(_SwapEndian($OwnerId),2)
+
+	$Version = StringMid($InputData, $StartOffset + 40, 8)
+;	_DumpOutput("$Version: " & $Version & @CRLF)
+	$Version = "0x" & _SwapEndian($Version)
+
+	$Flags2 = StringMid($InputData, $StartOffset + 48, 8)
+;	_DumpOutput("$Flags2: " & $Flags2 & @CRLF)
+	$Flags2 = _SwapEndian($Flags2)
+	$Flags2Text = _Decode_QuotaFlags("0x"&$Flags2)
+
+	$BytesUsed = StringMid($InputData, $StartOffset + 56, 16)
+;	_DumpOutput("$BytesUsed: " & $BytesUsed & @CRLF)
+	$BytesUsed = Dec(_SwapEndian($BytesUsed),2)
+
+	$ChangeTime = StringMid($InputData, $StartOffset + 72, 16)
+;	_DumpOutput("$ChangeTime: " & $ChangeTime & @CRLF)
+	$ChangeTime = _SwapEndian($ChangeTime)
+	$ChangeTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ChangeTime)
+	$ChangeTime = _WinTime_UTCFileTimeFormat(Dec($ChangeTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$ChangeTime = "-"
+	ElseIf $TimestampPrecision = 2 Then
+		$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-4)
+		$ChangeTime_Precision = StringRight($ChangeTime,3)
+	ElseIf $TimestampPrecision = 3 Then
+		$ChangeTime = $ChangeTime & ":" & _FillZero(StringRight($ChangeTime_tmp, 4))
+		$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-9)
+		$ChangeTime_Precision = StringRight($ChangeTime,8)
+	Else
+		$ChangeTime_Core = $ChangeTime
+	EndIf
+
+	$WarningLimit = StringMid($InputData, $StartOffset + 88, 16)
+;	_DumpOutput("$WarningLimit: " & $WarningLimit & @CRLF)
+	$WarningLimit = "0x" & _SwapEndian($WarningLimit)
+
+	$HardLimit = StringMid($InputData, $StartOffset + 104, 16)
+;	_DumpOutput("$HardLimit: " & $HardLimit & @CRLF)
+	$HardLimit = "0x" & _SwapEndian($HardLimit)
+
+	$ExceededTime = StringMid($InputData, $StartOffset + 120, 16)
+;	_DumpOutput("$ExceededTime: " & $ExceededTime & @CRLF)
+	$ExceededTime = "0x" & _SwapEndian($ExceededTime)
+
+	$SID = StringMid($InputData, $StartOffset + 136)
+;	_DumpOutput("$SID: " & $SID & @CRLF)
+	$SID = _DecodeSID($SID)
+
+	;$Padding8 = StringMid($InputData, $StartOffset + 32 + ($IndexKeySize*2), 16)
+	FileWriteLine($LogFileQuotaQCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$OwnerId&$de&$Version&$de&$Flags2Text&$de&$BytesUsed&$de&$ChangeTime&$de&$WarningLimit&$de&$HardLimit&$de&$ExceededTime&$de&$SID&@crlf)
+EndFunc
+
+Func _Decode_QuotaFlags($InputData)
+	If $InputData = 0x0001 Then Return "Default Limits"
+	If $InputData = 0x0002 Then Return "Limit Reached"
+	If $InputData = 0x0004 Then Return "Id Deleted"
+	If $InputData = 0x0010 Then Return "Tracking Enabled"
+	If $InputData = 0x0020 Then Return "Enforcement Enabled"
+	If $InputData = 0x0040 Then Return "Tracking Requested"
+	If $InputData = 0x0080 Then Return "Log Threshold"
+	If $InputData = 0x0100 Then Return "Log Limit"
+	If $InputData = 0x0200 Then Return "Out Of Date"
+	If $InputData = 0x0400 Then Return "Corrupt"
+	If $InputData = 0x0800 Then Return "Pending Deletes"
+	Return "UNKNOWN"
+EndFunc
+
+Func _Decode_Reparse_R($InputData)
+	$StartOffset = 1
+	$DataOffset = StringMid($InputData, $StartOffset, 4)
+	$DataOffset = Dec(_SwapEndian($DataOffset),2)
+
+	$DataSize = StringMid($InputData, $StartOffset + 4, 4)
+	$DataSize = Dec(_SwapEndian($DataSize),2)
+
+	If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
+
+	;Padding 4 bytes
+	$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
+	$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
+
+	$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
+	$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
+
+	$Flags = StringMid($InputData, $StartOffset + 24, 4)
+	$Flags = "0x" & _SwapEndian($Flags)
+
+	;Padding 2 bytes
+	$KeyReparseTag = StringMid($InputData, $StartOffset + 32, 8)
+	$KeyReparseTag = "0x" & _SwapEndian($KeyReparseTag)
+
+	$KeyMftRefOfReparsePoint = StringMid($InputData, $StartOffset + 40, 12)
+	$KeyMftRefOfReparsePoint = Dec(_SwapEndian($KeyMftRefOfReparsePoint),2)
+
+	$KeyMftRefSeqNoOfReparsePoint = StringMid($InputData, $StartOffset + 52, 4)
+	$KeyMftRefSeqNoOfReparsePoint = Dec(_SwapEndian($KeyMftRefSeqNoOfReparsePoint),2)
+
+;	$Padding4 = StringMid($InputData, $StartOffset + 56, 8)
+	FileWriteLine($LogFileReparseRCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$KeyReparseTag&$de&$KeyMftRefOfReparsePoint&$de&$KeyMftRefSeqNoOfReparsePoint&@crlf)
+EndFunc
+
+Func _Decode_OpenAttributeTableDump($InputData)
+	Local $StartOffset = 1,$EntryCounter=1
+	;Header
+	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
+	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
+
+	$MaxEntries = StringMid($InputData, $StartOffset + 4, 4)
+	$MaxEntries = Dec(_SwapEndian($MaxEntries),2)
+
+	$NumberOfEntries = StringMid($InputData, $StartOffset + 8, 8)
+	$NumberOfEntries = Dec(_SwapEndian($NumberOfEntries),2)
+	If ($MaxEntries = 0 Or $NumberOfEntries = 0) Then MsgBox(0,"Info","Entries was 0")
+
+
+	$EntrySignature = StringMid($InputData, $StartOffset + 24, 8)
+
+	$OffsetLastRealEntry = StringMid($InputData, $StartOffset + 32, 8)
+	$OffsetLastRealEntry = Dec(_SwapEndian($OffsetLastRealEntry),2)
+
+;	$OffsetLastReservedEntry = StringMid($InputData, $StartOffset + 40, 8)
+;	$OffsetLastReservedEntry = Dec(_SwapEndian($OffsetLastReservedEntry),2)
+	$OffsetLastReservedEntry = $MaxEntries*$TableEntrySize
+
+;	$NumberOfEntries = Round($OffsetLastReservedEntry/40)
+	$NumberOfEntries = $MaxEntries
+
+	If $VerboseOn Then
+		ConsoleWrite("_Decode_OpenAttributeTableDump: " & @CRLF)
+		ConsoleWrite("$TableEntrySize: " & $TableEntrySize & @CRLF)
+		ConsoleWrite("$MaxEntries: " & $MaxEntries & @CRLF)
+		ConsoleWrite("$EntrySignature: " & $EntrySignature & @CRLF)
+		ConsoleWrite("$OffsetLastRealEntry: " & $OffsetLastRealEntry & @CRLF)
+		ConsoleWrite("$OffsetLastReservedEntry: " & $OffsetLastReservedEntry & @CRLF)
+		ConsoleWrite("$NumberOfEntries: " & $NumberOfEntries & @CRLF)
+	EndIf
+
+	$OpenAttributesArray[0][0] = "TableOffset"
+	$OpenAttributesArray[0][1] = "AllocatedOrNextFree"
+	$OpenAttributesArray[0][2] = "DirtyPagesSeen"
+	$OpenAttributesArray[0][3] = "AttributeNamePresent"
+	$OpenAttributesArray[0][4] = "unknown1"
+	$OpenAttributesArray[0][5] = "AttributeCode"
+	$OpenAttributesArray[0][6] = "unknown2"
+	$OpenAttributesArray[0][7] = "MftRef"
+	$OpenAttributesArray[0][8] = "MftRefSeqNo"
+	$OpenAttributesArray[0][9] = "Lsn"
+	$OpenAttributesArray[0][10] = "UnknownPointer"
+	$OpenAttributesArray[0][11] = "EndSignature"
+	$OpenAttributesArray[0][12] = "AttributeName"
+
+	$OffsetFirstEntry = 48
+	ReDim $OpenAttributesArray[1+$NumberOfEntries][13]
+	Do
+		$AllocatedOrNextFree = StringMid($InputData, $StartOffset + $OffsetFirstEntry, 8) ;AllocatedOrNextFree
+
+		$DirtyPagesSeen = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 8, 2)
+
+		$AttributeNamePresent = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 10, 2)
+
+		$unknown1 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 12, 4)
+
+		$TargetAttributeCode = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 16, 8)
+;		$TargetAttributeCode = _SwapEndian($TargetAttributeCode)
+
+		$unknown2 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 24, 8)
+
+		$TargetMftRef = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 32, 12)
+		$TargetMftRef = Dec(_SwapEndian($TargetMftRef),2)
+
+		$TargetMftRefSeqNo = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 44, 4)
+		$TargetMftRefSeqNo = Dec(_SwapEndian($TargetMftRefSeqNo),2)
+
+		$TargetLsn = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 48, 16)
+		$TargetLsn = Dec(_SwapEndian($TargetLsn),2)
+;		$unknown3 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 56, 8)
+
+		$UnknownPointer = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 64, 8)
+		$UnknownPointer = _SwapEndian($UnknownPointer)
+		$TargetEndSignature = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 72, 8)
+
+		$OpenAttributesArray[$EntryCounter][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
+		$OpenAttributesArray[$EntryCounter][1] = "0x" & $AllocatedOrNextFree
+		$OpenAttributesArray[$EntryCounter][2] = "0x" & $DirtyPagesSeen
+		$OpenAttributesArray[$EntryCounter][3] = "0x" & $AttributeNamePresent
+		$OpenAttributesArray[$EntryCounter][4] = "0x" & $unknown1
+		$OpenAttributesArray[$EntryCounter][5] = "0x" & $TargetAttributeCode
+		$OpenAttributesArray[$EntryCounter][6] = "0x" & $unknown2
+		$OpenAttributesArray[$EntryCounter][7] = $TargetMftRef
+		$OpenAttributesArray[$EntryCounter][8] = $TargetMftRefSeqNo
+		$OpenAttributesArray[$EntryCounter][9] = $TargetLsn
+		$OpenAttributesArray[$EntryCounter][10] = "0x" & $UnknownPointer
+		$OpenAttributesArray[$EntryCounter][11] = "0x" & $TargetEndSignature
+
+		$StartOffset += $TableEntrySize*2
+		$EntryCounter += 1
+;	Until $StartOffset >= $OffsetLastRealEntry*2
+;	Until $StartOffset-$OffsetFirstEntry >= $OffsetLastReservedEntry*2
+	Until $StartOffset >= $OffsetLastReservedEntry*2
+	ReDim $OpenAttributesArray[$EntryCounter][13]
+
+	$lsn_openattributestable = $this_lsn
+	If $VerboseOn Then
+		_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+		_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+;		_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+	EndIf
+EndFunc
+
+Func _Decode_AttributeNamesDump($InputData)
+	Local $StartOffset = 1,$EntryCounter=1, $EntrySize=0
+	$InputDataSize = StringLen($InputData)
+	$AttributeNamesDumpArray[0][0] = "DumpOffset"
+	$AttributeNamesDumpArray[0][1] = "OffsetInTable"
+	$AttributeNamesDumpArray[0][2] = "NameLength"
+	$AttributeNamesDumpArray[0][3] = "AttributeStreamName"
+
+
+	Do
+		If $StartOffset+8 >= $InputDataSize Then ExitLoop
+		ReDim $AttributeNamesDumpArray[1+$EntryCounter][4]
+
+		$OffsetInTable = StringMid($InputData, $StartOffset, 4)
+;		ConsoleWrite("$OffsetInTable: " & $OffsetInTable & @CRLF)
+		$OffsetInTable = _SwapEndian($OffsetInTable)
+
+		$NameLength = StringMid($InputData, $StartOffset + 4, 4)
+;		ConsoleWrite("$NameLength: " & $NameLength & @CRLF)
+		$NameLength = Dec(_SwapEndian($NameLength),2)
+
+		$AttributeStreamName = StringMid($InputData, $StartOffset + 8, $NameLength*2)
+;		ConsoleWrite("$AttributeStreamName: " & $AttributeStreamName & @CRLF)
+		$AttributeStreamName = BinaryToString("0x"&$AttributeStreamName,2)
+
+		$AttributeNamesDumpArray[$EntryCounter][0] = "0x" & Hex(Int(($StartOffset- 1)/2),8)
+		$AttributeNamesDumpArray[$EntryCounter][1] = "0x" & $OffsetInTable
+		$AttributeNamesDumpArray[$EntryCounter][2] = $NameLength
+		$AttributeNamesDumpArray[$EntryCounter][3] = $AttributeStreamName
+
+		If Ubound($OpenAttributesArray) > 1 Then
+;			ConsoleWrite("Ubound($OpenAttributesArray): " & Ubound($OpenAttributesArray) & @CRLF)
+			$FoundInTable = _ArraySearch($OpenAttributesArray,$AttributeNamesDumpArray[$EntryCounter][1],0,0,0,2,1,0)
+;			ConsoleWrite("$FoundInTable: " & $FoundInTable & @CRLF)
+			If $FoundInTable > 0 Then $OpenAttributesArray[$FoundInTable][12] = $AttributeStreamName
+		EndIf
+
+		$EntrySize = 12 + ($NameLength*2)
+		$StartOffset += $EntrySize
+		$EntryCounter += 1
+	Until $StartOffset+8 >= $InputDataSize
+	ReDim $AttributeNamesDumpArray[$EntryCounter][4]
+
+
+	For $i = 1 To UBound($OpenAttributesArray)-1
+		FileWriteLine($LogFileOpenAttributeTableCsv, $RecordOffset&$de&$lsn_openattributestable&$de&$OpenAttributesArray[$i][0]&$de&$OpenAttributesArray[$i][12]&$de&$OpenAttributesArray[$i][1]&$de&$OpenAttributesArray[$i][2]&$de&$OpenAttributesArray[$i][3]&$de&$OpenAttributesArray[$i][4]&$de&$OpenAttributesArray[$i][5]&$de&_ResolveAttributeType(StringMid($OpenAttributesArray[$i][5],3,4))&$de&$OpenAttributesArray[$i][6]&$de&$OpenAttributesArray[$i][7]&$de&$OpenAttributesArray[$i][8]&$de&$OpenAttributesArray[$i][9]&$de&$OpenAttributesArray[$i][10]&$de&$OpenAttributesArray[$i][11]&@crlf)
+	Next
+	If $VerboseOn Then
+		_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+		_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+;		_ArrayDisplay($AttributeNamesDumpArray,"$AttributeNamesDumpArray")
+;		_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+	EndIf
+EndFunc
+
+Func _Decode_DirtyPageTableDump($InputData)
+	Local $StartOffset = 1,$EntryCounter=1
+	;Header
+	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
+	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
+
+	$unknown0 = StringMid($InputData, $StartOffset + 4, 4)
+
+	$NumberOfEntries = StringMid($InputData, $StartOffset + 8, 8)
+	$NumberOfEntries = Dec(_SwapEndian($NumberOfEntries),2)
+;	ConsoleWrite("$NumberOfEntries: " & $NumberOfEntries & @CRLF)
+
+	$EntrySignature = StringMid($InputData, $StartOffset + 24, 8)
+
+	$OffsetLastRealEntry = StringMid($InputData, $StartOffset + 32, 8)
+	$OffsetLastRealEntry = Dec(_SwapEndian($OffsetLastRealEntry),2)
+
+	$OffsetLastReservedEntry = StringMid($InputData, $StartOffset + 40, 8)
+	$OffsetLastReservedEntry = Dec(_SwapEndian($OffsetLastReservedEntry),2)
+
+	$NumberOfEntries = Round($OffsetLastReservedEntry/40)
+
+	$DirtyPageTableDumpArray[0][0] = "TableOffset"
+	$DirtyPageTableDumpArray[0][1] = "AllocatedOrNextFree"
+	$DirtyPageTableDumpArray[0][2] = "IndexOfDirtyPageEntryToOpenAttribute"
+	$DirtyPageTableDumpArray[0][3] = "LengthOfTransfer"
+	$DirtyPageTableDumpArray[0][4] = "LcnsToFollow"
+	$DirtyPageTableDumpArray[0][5] = "Reserved"
+	$DirtyPageTableDumpArray[0][6] = "Vcn"
+	$DirtyPageTableDumpArray[0][7] = "OldestLsn"
+	$DirtyPageTableDumpArray[0][8] = "LcnsForPage"
+	$DirtyPageTableDumpArray[0][9] = "EndSignature"
+
+	$OffsetFirstEntry = 48
+	ReDim $DirtyPageTableDumpArray[1+$NumberOfEntries][10]
+	Do
+		If $StartOffset >= $OffsetLastRealEntry*2 Then ExitLoop
+		$AllocatedOrNextFree = StringMid($InputData, $StartOffset + $OffsetFirstEntry, 8) ;AllocatedOrNextFree
+		If $AllocatedOrNextFree <> $EntrySignature Then ExitLoop ;RESTART_ENTRY_ALLOCATED
+
+		$IndexOfDirtyPageEntryToOpenAttribute = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 8, 8)
+		$IndexOfDirtyPageEntryToOpenAttribute = _SwapEndian($IndexOfDirtyPageEntryToOpenAttribute)
+
+		$LengthOfTransfer = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 16, 8)
+		$LengthOfTransfer = _SwapEndian($LengthOfTransfer)
+
+		$LcnsToFollow = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 24, 8)
+		$LcnsToFollow = _SwapEndian($LcnsToFollow)
+
+		$Reserved = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 32, 8)
+
+		$Vcn = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 40, 8)
+		$Vcn = Dec(_SwapEndian($Vcn),2)
+
+		$OldestLsn = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 48, 16)
+		$OldestLsn = Dec(_SwapEndian($OldestLsn),2)
+
+		$LcnsForPage = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 64, 8)
+		$LcnsForPage = Dec(_SwapEndian($LcnsForPage),2)
+
+		$TargetEndSignature = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 72, 8)
+
+		$DirtyPageTableDumpArray[$EntryCounter][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
+		$DirtyPageTableDumpArray[$EntryCounter][1] = "0x" & $AllocatedOrNextFree
+		$DirtyPageTableDumpArray[$EntryCounter][2] = "0x" & $IndexOfDirtyPageEntryToOpenAttribute
+		$DirtyPageTableDumpArray[$EntryCounter][3] = "0x" & $LengthOfTransfer
+		$DirtyPageTableDumpArray[$EntryCounter][4] = "0x" & $LcnsToFollow
+		$DirtyPageTableDumpArray[$EntryCounter][5] = "0x" & $Reserved
+		$DirtyPageTableDumpArray[$EntryCounter][6] = $Vcn
+		$DirtyPageTableDumpArray[$EntryCounter][7] = $OldestLsn
+		$DirtyPageTableDumpArray[$EntryCounter][8] = $LcnsForPage
+		$DirtyPageTableDumpArray[$EntryCounter][9] = "0x" & $TargetEndSignature
+
+		$StartOffset += $TableEntrySize*2
+		$EntryCounter += 1
+;	Until $StartOffset-$OffsetFirstEntry >= $OffsetLastRealEntry*2
+	Until $StartOffset >= $OffsetLastRealEntry*2
+	ReDim $DirtyPageTableDumpArray[$EntryCounter][10]
+;	_ArrayDisplay($DirtyPageTableDumpArray,"$DirtyPageTableDumpArray")
+	For $i = 1 To UBound($DirtyPageTableDumpArray)-1
+		FileWriteLine($LogFileDirtyPageTableCsv, $RecordOffset&$de&$this_lsn&$de&$DirtyPageTableDumpArray[$i][0]&$de&$DirtyPageTableDumpArray[$i][1]&$de&$DirtyPageTableDumpArray[$i][2]&$de&$DirtyPageTableDumpArray[$i][3]&$de&$DirtyPageTableDumpArray[$i][4]&$de&$DirtyPageTableDumpArray[$i][5]&$de&$DirtyPageTableDumpArray[$i][6]&$de&$DirtyPageTableDumpArray[$i][7]&$de&$DirtyPageTableDumpArray[$i][8]&$de&$DirtyPageTableDumpArray[$i][9]&@crlf)
+	Next
+EndFunc
+
+Func _WriteCSVHeaderOpenAttributeTable()
+	$OpenAttributeTable_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"TableOffset"&$de&"AttributeName"&$de&"AllocatedOrNextFree"&$de&"DirtyPagesSeen"&$de&"AttributeNamePresent"&$de&"unknown1"&$de&"AttributeCode"&$de&"AttributeType"&$de&"unknown2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"Lsn"&$de&"UnknownPointer"&$de&"EndSignature"
+	FileWriteLine($LogFileOpenAttributeTableCsv, $OpenAttributeTable_Csv_Header & @CRLF)
+EndFunc
+
+Func _WriteCSVHeaderDirtyPageTable()
+	$DirtyPageTable_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"TableOffset"&$de&"AllocatedOrNextFree"&$de&"IndexOfDirtyPageEntryToOpenAttribute"&$de&"LengthOfTransfer"&$de&"LcnsToFollow"&$de&"Reserved"&$de&"Vcn"&$de&"OldestLsn"&$de&"LcnsForPage"&$de&"EndSignature"
+	FileWriteLine($LogFileDirtyPageTableCsv, $DirtyPageTable_Csv_Header & @CRLF)
+EndFunc
+;#cs
+Func _Decode_BitsInNonresidentBitMap2($data)
+	Local $BitMapOffset, $NumberOfBits
+	$BitMapOffset = "0x"&_SwapEndian(StringMid($data,1,8))
+	$NumberOfBits = "0x"&_SwapEndian(StringMid($data,9,8))
+	$TextInformation = ";BitMapOffset="&$BitMapOffset&";NumberOfBits="&$NumberOfBits
+EndFunc
+;#ce
+Func _Decode_BitsInNonresidentBitMap($RedoData,$RedoOperation,$UndoData,$UndoOperation)
+	Local $StartOffset = 1
+	Local $Redo_BitMapOffset,$Redo_NumberOfBits,$Undo_BitMapOffset,$Undo_NumberOfBits
+	$Redo_BitMapOffset = StringMid($RedoData, $StartOffset, 8)
+	$Redo_BitMapOffset = "0x" & _SwapEndian($Redo_BitMapOffset)
+	$Redo_NumberOfBits = StringMid($RedoData, $StartOffset + 8, 8)
+	$Redo_NumberOfBits = "0x" & _SwapEndian($Redo_NumberOfBits)
+	$Undo_BitMapOffset = StringMid($UndoData, $StartOffset, 8)
+	$Undo_BitMapOffset = "0x" & _SwapEndian($Undo_BitMapOffset)
+	$Undo_NumberOfBits = StringMid($UndoData, $StartOffset + 8, 8)
+	$Undo_NumberOfBits = "0x" & _SwapEndian($Undo_NumberOfBits)
+	If ($Redo_BitMapOffset <> $Undo_BitMapOffset) Or ($Redo_NumberOfBits <> $Undo_NumberOfBits) Then MsgBox(0,"Info","Bits mismatch in redo vs undo: " & $this_lsn)
+	FileWriteLine($LogFileBitsInNonresidentBitMapCsv, $RecordOffset&$de&$this_lsn&$de&$RedoOperation&$de&$Redo_BitMapOffset&$de&$Redo_NumberOfBits&$de&$UndoOperation&$de&$Undo_BitMapOffset&$de&$Undo_NumberOfBits&@crlf)
+EndFunc
+
+Func _WriteCSVHeaderBitsInNonresidentBitMap()
+	$BitsInNonresidentBitMap_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"RedoOperation"&$de&"Redo_BitMapOffset"&$de&"Redo_NumberOfBits"&$de&"UndoOperation"&$de&"Undo_BitMapOffset"&$de&"Undo_NumberOfBits"
+	FileWriteLine($LogFileBitsInNonresidentBitMapCsv, $BitsInNonresidentBitMap_Csv_Header & @CRLF)
+EndFunc
+
+Func _DumpOutput($text)
+   ConsoleWrite($text)
+   If $debuglogfile Then FileWrite($debuglogfile, $text)
+EndFunc
+
+Func _WriteCSVHeaderObjIdO()
+	$ObjIdO_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"GUIDObjectId"&$de&"MftRef"&$de&"MftSeqNo"&$de&"GUIDBirthVolumeId"&$de&"GUIDBirthObjectId"&$de&"GUIDDomainId"
+	FileWriteLine($LogFileObjIdOCsv, $ObjIdO_Csv_Header & @CRLF)
+EndFunc
+
+Func _WriteCSVHeaderQuotaO()
+	$QuotaO_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"SID"&$de&"OwnerId"
+	FileWriteLine($LogFileQuotaOCsv, $QuotaO_Csv_Header & @CRLF)
+EndFunc
+
+Func _WriteCSVHeaderQuotaQ()
+	$QuotaQ_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"OwnerId"&$de&"Version"&$de&"Flags2"&$de&"BytesUsed"&$de&"ChangeTime"&$de&"WarningLimit"&$de&"HardLimit"&$de&"ExceededTime"&$de&"SID"
+	FileWriteLine($LogFileQuotaQCsv, $QuotaQ_Csv_Header & @CRLF)
+EndFunc
+
+Func _WriteCSVHeaderReparseR()
+	$ReparseR_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"KeyReparseTag"&$de&"KeyMftRefOfReparsePoint"&$de&"KeyMftRefSeqNoOfReparsePoint"
+	FileWriteLine($LogFileReparseRCsv, $ReparseR_Csv_Header & @CRLF)
+EndFunc
+
+Func _Decode_TransactionTableDump($InputData)
+	Local $StartOffset = 1,$EntryCounter=1
+	;Header
+	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
+	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
+
+	$MaxEntries = StringMid($InputData, $StartOffset + 4, 4)
+	$MaxEntries = Dec(_SwapEndian($MaxEntries),2)
+
+	$NumberOfEntries = StringMid($InputData, $StartOffset + 8, 8)
+	$NumberOfEntries = Dec(_SwapEndian($NumberOfEntries),2)
+	If ($MaxEntries = 0 Or $NumberOfEntries = 0) Then MsgBox(0,"Info","Entries was 0")
+
+	$EntrySignature = StringMid($InputData, $StartOffset + 24, 8)
+
+	$OffsetLastRealEntry = StringMid($InputData, $StartOffset + 32, 8)
+	$OffsetLastRealEntry = Dec(_SwapEndian($OffsetLastRealEntry),2)
+
+;	$OffsetLastReservedEntry = StringMid($InputData, $StartOffset + 40, 8)
+;	$OffsetLastReservedEntry = Dec(_SwapEndian($OffsetLastReservedEntry),2)
+	$OffsetLastReservedEntry = $MaxEntries*$TableEntrySize
+
+;	$NumberOfEntries = Round($OffsetLastReservedEntry/40)
+	$NumberOfEntries = $MaxEntries
+
+	If $VerboseOn Then
+		_DumpOutput("_Decode_TransactionTableDump: " & @CRLF)
+		_DumpOutput("$TableEntrySize: " & $TableEntrySize & @CRLF)
+		_DumpOutput("$MaxEntries: " & $MaxEntries & @CRLF)
+		_DumpOutput("$EntrySignature: " & $EntrySignature & @CRLF)
+		_DumpOutput("$OffsetLastRealEntry: " & $OffsetLastRealEntry & @CRLF)
+		_DumpOutput("$OffsetLastReservedEntry: " & $OffsetLastReservedEntry & @CRLF)
+		_DumpOutput("$NumberOfEntries: " & $NumberOfEntries & @CRLF)
+	EndIf
+
+	$OffsetFirstEntry = 48
+	Do
+		$AllocatedOrNextFree = "0x" & StringMid($InputData, $StartOffset + $OffsetFirstEntry, 8) ;AllocatedOrNextFree
+
+		$TransactionState = "0x" & StringMid($InputData, $StartOffset + $OffsetFirstEntry + 8, 2)
+
+		$Reserved = "0x" & StringMid($InputData, $StartOffset + $OffsetFirstEntry + 10, 6)
+
+		$FirstLsn = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 16, 16)
+		$FirstLsn = Dec(_SwapEndian($FirstLsn),2)
+
+		$PreviousLsn = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 32, 16)
+		$PreviousLsn = Dec(_SwapEndian($PreviousLsn),2)
+
+		$UndoNextLsn = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 48, 16)
+		$UndoNextLsn = Dec(_SwapEndian($UndoNextLsn),2)
+
+		$UndoRecords = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 64, 8)
+		$UndoRecords = Dec(_SwapEndian($UndoRecords),2)
+
+		$UndoBytes = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 72, 8)
+		$UndoBytes = Dec(_SwapEndian($UndoBytes),2)
+
+		$EntryOffset = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
+
+		FileWriteLine($LogFileTransactionTableCsv, $this_lsn&$de&$EntryOffset&$de&$AllocatedOrNextFree&$de&$TransactionState&$de&$Reserved&$de&$FirstLsn&$de&$PreviousLsn&$de&$UndoNextLsn&$de&$UndoRecords&$de&$UndoBytes&@crlf)
+
+		$StartOffset += $TableEntrySize*2
+		$EntryCounter += 1
+	Until $StartOffset >= $OffsetLastReservedEntry*2
+EndFunc
+
+Func _WriteCSVHeaderTransactionTable()
+	$TransactionTable_Csv_Header = "lf_LSN"&$de&"TableOffset"&$de&"AllocatedOrNextFree"&$de&"TransactionState"&$de&"Reserved"&$de&"FirstLsn"&$de&"PreviousLsn"&$de&"UndoNextLsn"&$de&"UndoRecords"&$de&"UndoBytes"
+	FileWriteLine($LogFileTransactionTableCsv, $TransactionTable_Csv_Header & @CRLF)
+EndFunc
+
+#cs
+$FN_Name
+Global $FileNamesArray[1][3]
+$FileNamesArray[0][0] = "Ref"
+$FileNamesArray[0][1] = "FileName"
+$FileNamesArray[0][2] = "LSN"
+#ce
+;Insert FileName1;FileName2 etc per SeqNo1;SeqNO2 and LSN1;LSN2
+;NewRecord,UpdatefileName,UsnJrnl
+Func _GetFileNameFromArray($InputRef,$InputLsn)
+	$FoundInTable = _ArraySearch($FileNamesArray,$InputRef,0,0,0,2,1,0)
+	If $FoundInTable > 0 Then
+		If $InputLsn > $FileNamesArray[$FoundInTable][3] Then
+			Return $FileNamesArray[$FoundInTable][1]
+		EndIf
+	EndIf
+	Return ""
+EndFunc
+
+Func _UpdateFileNameArray($InputRef,$InputName,$InputLsn)
+	$FoundInTable = _ArraySearch($FileNamesArray,$InputRef,0,0,0,2,1,0)
+	If Not $FoundInTable > 0 Then
+		$ArrayEnd = UBound($FileNamesArray)
+		ReDim $FileNamesArray[$ArrayEnd+1][3]
+		$FileNamesArray[$ArrayEnd][0] = $InputRef
+		$FileNamesArray[$ArrayEnd][1] = $InputName
+		$FileNamesArray[$ArrayEnd][2] = $InputLsn
+	EndIf
+	Return $FoundInTable
+EndFunc
+
+Func _WriteCSVHeaderRCRD()
+	$RCRD_Csv_Header = "Offset"&$de&"last_lsn"&$de&"page_flags"&$de&"page_count"&$de&"page_position"&$de&"next_record_offset"&$de&"page_unknown"&$de&"last_end_lsn"&$de&"KeepData"&$de&"RulesString"&$de&"GlobalRecordSpreadCounter"&$de&"GlobalRecordSpreadReset2"
+	FileWriteLine($LogFileRCRDCsv, $RCRD_Csv_Header & @CRLF)
+EndFunc
+
+Func _WriteCSVHeaderTransactionHeader()
+	$TransactionHeader_Csv_Header = "RecordOffset"&$de&"this_lsn"&$de&"client_previous_lsn"&$de&"client_undo_next_lsn"&$de&"client_index"&$de&"record_type"&$de&"transaction_id"&$de&"lf_flags"&$de&"redo_operation"&$de&"undo_operation"&$de&"redo_offset"&$de&"redo_length"&$de&"undo_offset"&$de&"undo_length"&$de&"client_data_length"&$de&"target_attribute"&$de&"lcns_to_follow"&$de&"record_offset_in_mft"&$de&"attribute_offset"&$de&"MftClusterIndex"&$de&"target_vcn"&$de&"target_lcn"
+	FileWriteLine($LogFileTransactionHeaderCsv, $TransactionHeader_Csv_Header & @CRLF)
+EndFunc
+
+Func _WriteCSVHeaderSlackOpenAttributeTable()
+	$SlackOpenAttributeTable_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"TableOffset"&$de&"AttributeName"&$de&"AllocatedOrNextFree"&$de&"DirtyPagesSeen"&$de&"AttributeNamePresent"&$de&"unknown1"&$de&"AttributeCode"&$de&"AttributeType"&$de&"unknown2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"Lsn"&$de&"UnknownPointer"&$de&"EndSignature"
+	FileWriteLine($LogFileSlackOpenAttributeTableCsv, $SlackOpenAttributeTable_Csv_Header & @CRLF)
+EndFunc
+
+Func _Decode_SlackOpenAttributeTableDump($InputData)
+	Local $StartOffset = 1,$EntryCounter=1, $InputDataSize = StringLen($InputData)
+	;Header
+	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
+	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
+
+	$MaxEntries = StringMid($InputData, $StartOffset + 4, 4)
+	$MaxEntries = Dec(_SwapEndian($MaxEntries),2)
+
+	$NumberOfEntries = StringMid($InputData, $StartOffset + 8, 8)
+	$NumberOfEntries = Dec(_SwapEndian($NumberOfEntries),2)
+	If ($MaxEntries = 0 Or $NumberOfEntries = 0) Then MsgBox(0,"Info","Entries was 0")
+
+
+	$EntrySignature = StringMid($InputData, $StartOffset + 24, 8)
+
+	$OffsetLastRealEntry = StringMid($InputData, $StartOffset + 32, 8)
+	$OffsetLastRealEntry = Dec(_SwapEndian($OffsetLastRealEntry),2)
+
+;	$OffsetLastReservedEntry = StringMid($InputData, $StartOffset + 40, 8)
+;	$OffsetLastReservedEntry = Dec(_SwapEndian($OffsetLastReservedEntry),2)
+	$OffsetLastReservedEntry = $MaxEntries*$TableEntrySize
+
+;	$NumberOfEntries = Round($OffsetLastReservedEntry/40)
+	$NumberOfEntries = $MaxEntries
+
+	If $VerboseOn Then
+		ConsoleWrite("_Decode_SlackOpenAttributeTableDump: " & @CRLF)
+		ConsoleWrite("$TableEntrySize: " & $TableEntrySize & @CRLF)
+		ConsoleWrite("$MaxEntries: " & $MaxEntries & @CRLF)
+		ConsoleWrite("$EntrySignature: " & $EntrySignature & @CRLF)
+		ConsoleWrite("$OffsetLastRealEntry: " & $OffsetLastRealEntry & @CRLF)
+		ConsoleWrite("$OffsetLastReservedEntry: " & $OffsetLastReservedEntry & @CRLF)
+		ConsoleWrite("$NumberOfEntries: " & $NumberOfEntries & @CRLF)
+	EndIf
+
+	$SlackOpenAttributesArray[0][0] = "TableOffset"
+	$SlackOpenAttributesArray[0][1] = "AllocatedOrNextFree"
+	$SlackOpenAttributesArray[0][2] = "DirtyPagesSeen"
+	$SlackOpenAttributesArray[0][3] = "AttributeNamePresent"
+	$SlackOpenAttributesArray[0][4] = "unknown1"
+	$SlackOpenAttributesArray[0][5] = "AttributeCode"
+	$SlackOpenAttributesArray[0][6] = "unknown2"
+	$SlackOpenAttributesArray[0][7] = "MftRef"
+	$SlackOpenAttributesArray[0][8] = "MftRefSeqNo"
+	$SlackOpenAttributesArray[0][9] = "Lsn"
+	$SlackOpenAttributesArray[0][10] = "UnknownPointer"
+	$SlackOpenAttributesArray[0][11] = "EndSignature"
+	$SlackOpenAttributesArray[0][12] = "AttributeName"
+
+	$OffsetFirstEntry = 48
+	ReDim $SlackOpenAttributesArray[1+$NumberOfEntries][13]
+	Do
+		If $StartOffset >= $InputDataSize Then ExitLoop
+		$AllocatedOrNextFree = StringMid($InputData, $StartOffset + $OffsetFirstEntry, 8) ;AllocatedOrNextFree
+
+		$DirtyPagesSeen = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 8, 2)
+
+		$AttributeNamePresent = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 10, 2)
+
+		$unknown1 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 12, 4)
+
+		$TargetAttributeCode = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 16, 8)
+;		$TargetAttributeCode = _SwapEndian($TargetAttributeCode)
+
+		$unknown2 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 24, 8)
+
+		$TargetMftRef = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 32, 12)
+		$TargetMftRef = Dec(_SwapEndian($TargetMftRef),2)
+
+		$TargetMftRefSeqNo = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 44, 4)
+		$TargetMftRefSeqNo = Dec(_SwapEndian($TargetMftRefSeqNo),2)
+
+		$TargetLsn = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 48, 16)
+		$TargetLsn = Dec(_SwapEndian($TargetLsn),2)
+;		$unknown3 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 56, 8)
+
+		$UnknownPointer = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 64, 8)
+		$UnknownPointer = _SwapEndian($UnknownPointer)
+		$TargetEndSignature = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 72, 8)
+
+		$SlackOpenAttributesArray[$EntryCounter][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
+		$SlackOpenAttributesArray[$EntryCounter][1] = "0x" & $AllocatedOrNextFree
+		$SlackOpenAttributesArray[$EntryCounter][2] = "0x" & $DirtyPagesSeen
+		$SlackOpenAttributesArray[$EntryCounter][3] = "0x" & $AttributeNamePresent
+		$SlackOpenAttributesArray[$EntryCounter][4] = "0x" & $unknown1
+		$SlackOpenAttributesArray[$EntryCounter][5] = "0x" & $TargetAttributeCode
+		$SlackOpenAttributesArray[$EntryCounter][6] = "0x" & $unknown2
+		$SlackOpenAttributesArray[$EntryCounter][7] = $TargetMftRef
+		$SlackOpenAttributesArray[$EntryCounter][8] = $TargetMftRefSeqNo
+		$SlackOpenAttributesArray[$EntryCounter][9] = $TargetLsn
+		$SlackOpenAttributesArray[$EntryCounter][10] = "0x" & $UnknownPointer
+		$SlackOpenAttributesArray[$EntryCounter][11] = "0x" & $TargetEndSignature
+
+		$StartOffset += $TableEntrySize*2
+;		If $StartOffset >= $InputDataSize Then ExitLoop
+		$EntryCounter += 1
+
+;	Until $StartOffset >= $OffsetLastRealEntry*2
+;	Until $StartOffset-$OffsetFirstEntry >= $OffsetLastReservedEntry*2
+	Until $StartOffset >= $OffsetLastReservedEntry*2
+	ReDim $SlackOpenAttributesArray[$EntryCounter][13]
+
+	For $i = 1 To UBound($SlackOpenAttributesArray)-1
+		FileWriteLine($LogFileSlackOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$SlackOpenAttributesArray[$i][0]&$de&$SlackOpenAttributesArray[$i][12]&$de&$SlackOpenAttributesArray[$i][1]&$de&$SlackOpenAttributesArray[$i][2]&$de&$SlackOpenAttributesArray[$i][3]&$de&$SlackOpenAttributesArray[$i][4]&$de&$SlackOpenAttributesArray[$i][5]&$de&_ResolveAttributeType(StringMid($SlackOpenAttributesArray[$i][5],3,4))&$de&$SlackOpenAttributesArray[$i][6]&$de&$SlackOpenAttributesArray[$i][7]&$de&$SlackOpenAttributesArray[$i][8]&$de&$SlackOpenAttributesArray[$i][9]&$de&$SlackOpenAttributesArray[$i][10]&$de&$SlackOpenAttributesArray[$i][11]&@crlf)
+	Next
+
+;	$lsn_openattributestable = $this_lsn
+	If $VerboseOn Then
+		_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+		_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+;		_ArrayDisplay($SlackOpenAttributesArray,"$SlackOpenAttributesArray")
+	EndIf
+EndFunc
+
+Func _Decode_SlackAttributeNamesDump($InputData)
+	Local $StartOffset = 1,$EntryCounter=1, $EntrySize=0
+	$InputDataSize = StringLen($InputData)
+	$SlackAttributeNamesDumpArray[0][0] = "DumpOffset"
+	$SlackAttributeNamesDumpArray[0][1] = "OffsetInTable"
+	$SlackAttributeNamesDumpArray[0][2] = "NameLength"
+	$SlackAttributeNamesDumpArray[0][3] = "AttributeStreamName"
+
+	Do
+		If $StartOffset+8 >= $InputDataSize Then ExitLoop
+		ReDim $SlackAttributeNamesDumpArray[1+$EntryCounter][4]
+
+		$OffsetInTable = StringMid($InputData, $StartOffset, 4)
+;		ConsoleWrite("$OffsetInTable: " & $OffsetInTable & @CRLF)
+		$OffsetInTable = _SwapEndian($OffsetInTable)
+
+		$NameLength = StringMid($InputData, $StartOffset + 4, 4)
+;		ConsoleWrite("$NameLength: " & $NameLength & @CRLF)
+		$NameLength = Dec(_SwapEndian($NameLength),2)
+
+		$AttributeStreamName = StringMid($InputData, $StartOffset + 8, $NameLength*2)
+;		ConsoleWrite("$AttributeStreamName: " & $AttributeStreamName & @CRLF)
+		$AttributeStreamName = BinaryToString("0x"&$AttributeStreamName,2)
+
+		$SlackAttributeNamesDumpArray[$EntryCounter][0] = "0x" & Hex(Int(($StartOffset- 1)/2),8)
+		$SlackAttributeNamesDumpArray[$EntryCounter][1] = "0x" & $OffsetInTable
+		$SlackAttributeNamesDumpArray[$EntryCounter][2] = $NameLength
+		$SlackAttributeNamesDumpArray[$EntryCounter][3] = $AttributeStreamName
+
+;		If Ubound($SlackOpenAttributesArray) > 1 Then
+;			ConsoleWrite("Ubound($SlackOpenAttributesArray): " & Ubound($SlackOpenAttributesArray) & @CRLF)
+;			$FoundInTable = _ArraySearch($SlackOpenAttributesArray,$SlackAttributeNamesDumpArray[$EntryCounter][1],0,0,0,2,1,0)
+;			ConsoleWrite("$FoundInTable: " & $FoundInTable & @CRLF)
+;			If $FoundInTable > 0 Then $SlackOpenAttributesArray[$FoundInTable][12] = $AttributeStreamName
+;		EndIf
+
+		$EntrySize = 12 + ($NameLength*2)
+		$StartOffset += $EntrySize
+;		If $StartOffset+8 >= $InputDataSize Then ExitLoop
+		$EntryCounter += 1
+	Until $StartOffset+8 >= $InputDataSize
+	ReDim $SlackAttributeNamesDumpArray[$EntryCounter][4]
+
+	For $i = 1 To UBound($SlackAttributeNamesDumpArray)-1
+		FileWriteLine($LogFileSlackAttributeNamesDumpCsv, $RecordOffset&$de&$this_lsn&$de&$SlackAttributeNamesDumpArray[$i][0]&$de&$SlackAttributeNamesDumpArray[$i][1]&$de&$SlackAttributeNamesDumpArray[$i][2]&$de&$SlackAttributeNamesDumpArray[$i][3]&@crlf)
+	Next
+	If $VerboseOn Then
+		_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+		_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+;		_ArrayDisplay($SlackAttributeNamesDumpArray,"$SlackAttributeNamesDumpArray")
+;		_ArrayDisplay($SlackOpenAttributesArray,"$SlackOpenAttributesArray")
+	EndIf
+EndFunc
+
+Func _WriteCSVHeaderSlackAttributeNamesDump()
+	$SlackAttributeNamesDump_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"DumpOffset"&$de&"OffsetInTable"&$de&"NameLength"&$de&"AttributeStreamName"
+	FileWriteLine($LogFileSlackAttributeNamesDumpCsv, $SlackAttributeNamesDump_Csv_Header & @CRLF)
+EndFunc
+
+Func _CheckAndRepairTransactionHeader($InputData)
+	Local $StartOffset=1, $InputDataSize = StringLen($InputData)/2, $SanityCheckSuccess=0, $DummyPrepend = "0000000000000000", $LocalCounter=0, $FragmentFakeLsnA = "3146616b654c736e", $FragmentFakeLsnB = "3246616b654c736e", $ReturnData
+	Local $FragmentFakeLsn1, $FragmentFakeLsn2, $FragmentFakeLsn3, $FragmentTestLsn1, $FragmentTestLsn2, $FragmentTestLsn3, $FragmentRedoLength_tmp,$FragmentUndoLength_tmp
+
+	Do
+;		_DumpOutput("$LocalCounter: " & $LocalCounter & @CRLF)
+;		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+;		_DumpOutput("$StartOffset = 0x" & Hex(Int(($StartOffset-1)/2)) & @CRLF)
+		$FragmentLsn1 = StringMid($InputData, $StartOffset, 16)
+		$FragmentLsn1 = Dec(_SwapEndian($FragmentLsn1),2)
+		$FragmentLsn2 = StringMid($InputData, $StartOffset + 16, 16)
+		$FragmentLsn2 = Dec(_SwapEndian($FragmentLsn2),2)
+		$FragmentLsn3 = StringMid($InputData, $StartOffset + 32, 16)
+		$FragmentLsn3 = Dec(_SwapEndian($FragmentLsn3),2)
+		$FragmentClientDataLength = StringMid($InputData, $StartOffset + 48, 8)
+		$FragmentClientDataLength = Dec(_SwapEndian($FragmentClientDataLength),2)
+		$FragmentClientIndex = StringMid($InputData, $StartOffset + 56, 8)
+		$FragmentClientIndex = Dec(_SwapEndian($FragmentClientIndex),2)
+		$FragmentRecordType = StringMid($InputData, $StartOffset + 64, 8)
+		$FragmentRecordType = Dec(_SwapEndian($FragmentRecordType),2)
+		$FragmentTransactionId = StringMid($InputData, $StartOffset + 72, 8)
+		$FragmentTransactionId = Dec(_SwapEndian($FragmentTransactionId),2)
+		$FragmentFlags = StringMid($InputData, $StartOffset + 80, 4)
+		$FragmentFlags = Dec(_SwapEndian($FragmentFlags),2)
+		;Allignment 6 bytes
+		$FragmentRedoOp = StringMid($InputData, $StartOffset + 96, 4)
+		$FragmentRedoOp = Dec(_SwapEndian($FragmentRedoOp),2)
+		$FragmentUndoOp = StringMid($InputData, $StartOffset + 100, 4)
+		$FragmentUndoOp = Dec(_SwapEndian($FragmentUndoOp),2)
+		$FragmentRedoOffset = StringMid($InputData, $StartOffset + 104, 4)
+		$FragmentRedoOffset = Dec(_SwapEndian($FragmentRedoOffset),2)
+		$FragmentRedoLength = StringMid($InputData, $StartOffset + 108, 4)
+		$FragmentRedoLength = Dec(_SwapEndian($FragmentRedoLength),2)
+		$FragmentUndoOffset = StringMid($InputData, $StartOffset + 112, 4)
+		$FragmentUndoOffset = Dec(_SwapEndian($FragmentUndoOffset),2)
+		$FragmentUndoLength = StringMid($InputData, $StartOffset + 116, 4)
+		$FragmentUndoLength = Dec(_SwapEndian($FragmentUndoLength),2)
+		$FragmentTargetAttribute = StringMid($InputData, $StartOffset + 120, 4)
+		$FragmentTargetAttribute = Dec(_SwapEndian($FragmentTargetAttribute),2)
+		$FragmentLcnsToFollow = StringMid($InputData, $StartOffset + 124, 4)
+		$FragmentLcnsToFollow = Dec(_SwapEndian($FragmentLcnsToFollow),2)
+		$FragmentRecordOffsetInMft = StringMid($InputData, $StartOffset + 128, 4)
+		$FragmentRecordOffsetInMft = Dec(_SwapEndian($FragmentRecordOffsetInMft),2)
+		$FragmentAttributeOffset = StringMid($InputData, $StartOffset + 132, 4)
+		$FragmentAttributeOffset = Dec(_SwapEndian($FragmentAttributeOffset),2)
+		$FragmentMftClusterIndex = StringMid($InputData, $StartOffset + 136, 4)
+		$FragmentMftClusterIndex = Dec(_SwapEndian($FragmentMftClusterIndex),2)
+		$FragmentTargetVcn = StringMid($InputData, $StartOffset + 140, 8)
+		$FragmentTargetVcn = Dec(_SwapEndian($FragmentTargetVcn),2)
+		$FragmentTargetLcn = StringMid($InputData, $StartOffset + 148, 8)
+		$FragmentTargetLcn = Dec(_SwapEndian($FragmentTargetLcn),2)
+		;Do the tests
+
+		Select
+			Case _SanityCheck_LSN($FragmentLsn1)=0 And $LocalCounter < 1
+				If $LocalCounter > 0 Then
+;					_DumpOutput("Skipping _SanityCheck_LSN($FragmentLsn1)" & @CRLF)
+				Else
+;					_DumpOutput("Error in _SanityCheck_LSN($FragmentLsn1)" & @CRLF)
+					$InputData = $DummyPrepend & $InputData
+					$LocalCounter += 1
+					ContinueLoop
+				EndIf
+			Case _SanityCheck_LSN($FragmentLsn2)=0 And $LocalCounter < 2
+				If $LocalCounter > 1 Then
+;					_DumpOutput("Skipping _SanityCheck_LSN($FragmentLsn2)" & @CRLF)
+				Else
+;					_DumpOutput("Error in _SanityCheck_LSN($FragmentLsn2)" & @CRLF)
+					$InputData = $DummyPrepend & $InputData
+					$LocalCounter += 1
+					ContinueLoop
+				EndIf
+			Case _SanityCheck_LSN($FragmentLsn3)=0 And $LocalCounter < 3
+				If $LocalCounter > 2 Then
+;					_DumpOutput("Skipping _SanityCheck_LSN($FragmentLsn3)" & @CRLF)
+				Else
+;					_DumpOutput("Error in _SanityCheck_LSN($FragmentLsn3)" & @CRLF)
+					$InputData = $DummyPrepend & $InputData
+					$LocalCounter += 1
+					ContinueLoop
+				EndIf
+			Case _SanityTest2($FragmentLsn1,$FragmentLsn2,$FragmentLsn3)=0 And $LocalCounter < 1
+				If $LocalCounter > 0 Then
+;					_DumpOutput("Skipping _SanityTest2()" & @CRLF)
+				Else
+;					_DumpOutput("Error in _SanityTest2()" & @CRLF)
+					$InputData = $DummyPrepend & $InputData
+					$LocalCounter += 1
+					ContinueLoop
+				EndIf
+			Case _SanityTest3($FragmentLsn2,$FragmentLsn3)=0 And $LocalCounter < 2
+				If $LocalCounter > 1 Then
+;					_DumpOutput("Skipping _SanityTest3()" & @CRLF)
+				Else
+;					_DumpOutput("Error in _SanityTest3()" & @CRLF)
+					$InputData = $DummyPrepend & $InputData
+					$LocalCounter += 1
+					ContinueLoop
+				EndIf
+			Case _SanityCheck_ClientDataLength($FragmentClientDataLength)=0 And $LocalCounter < 4
+				If $LocalCounter > 3 Then
+;					_DumpOutput("Skipping _SanityCheck_ClientDataLength()" & @CRLF)
+				Else
+;					_DumpOutput("Error in _SanityCheck_ClientDataLength()" & @CRLF)
+					$InputData = $DummyPrepend & $InputData
+					$LocalCounter += 1
+					ContinueLoop
+				EndIf
+			Case _SanityCheck_ClientIndex($FragmentClientIndex)=0 And $LocalCounter < 4
+				If $LocalCounter > 3 Then
+;					_DumpOutput("Skipping _SanityCheck_ClientIndex()" & @CRLF)
+				Else
+;					_DumpOutput("Error in _SanityCheck_ClientIndex()" & @CRLF)
+					$InputData = $DummyPrepend & $InputData
+					$LocalCounter += 1
+					ContinueLoop
+				EndIf
+			Case _SanityCheck_RecordType($FragmentRecordType)=0 And $LocalCounter < 5
+				If $LocalCounter > 4 Then
+;					_DumpOutput("Skipping _SanityCheck_RecordType()" & @CRLF)
+				Else
+;					_DumpOutput("Error in _SanityCheck_RecordType()" & @CRLF)
+					$InputData = $DummyPrepend & $InputData
+					$LocalCounter += 1
+					ContinueLoop
+				EndIf
+			Case _SanityCheck_TransactionId($FragmentTransactionId)=0 And $LocalCounter < 5
+				If $LocalCounter > 4 Then
+;					_DumpOutput("Skipping _SanityCheck_TransactionId()" & @CRLF)
+				Else
+;					_DumpOutput("Error in _SanityCheck_TransactionId()" & @CRLF)
+					$InputData = $DummyPrepend & $InputData
+					$LocalCounter += 1
+					ContinueLoop
+				EndIf
+			Case _SanityCheck_Flags($FragmentFlags)=0 And $LocalCounter < 6
+				If $LocalCounter > 5 Then
+;					_DumpOutput("Skipping _SanityCheck_Flags()" & @CRLF)
+				Else
+;					_DumpOutput("Error in _SanityCheck_Flags()" & @CRLF)
+					$InputData = $DummyPrepend & $InputData
+					$LocalCounter += 1
+					ContinueLoop
+				EndIf
+			Case _SanityCheck_UndoRedoOpCode($FragmentRedoOp)=0
+;				_DumpOutput("Error in _SanityCheck_UndoRedoOpCode($FragmentRedoOp)" & @CRLF)
+				$InputData = $DummyPrepend & $InputData
+				$LocalCounter += 1
+				ContinueLoop
+			Case _SanityCheck_UndoRedoOpCode($FragmentUndoOp)=0
+;				_DumpOutput("Error in _SanityCheck_UndoRedoOpCode($FragmentUndoOp)" & @CRLF)
+				$InputData = $DummyPrepend & $InputData
+				$LocalCounter += 1
+				ContinueLoop
+			Case _SanityCheck_RedoOffset($FragmentRedoOffset)=0
+;				_DumpOutput("Error in _SanityCheck_RedoOffset()" & @CRLF)
+				$InputData = $DummyPrepend & $InputData
+				$LocalCounter += 1
+				ContinueLoop
+			Case _SanityCheck_UndoOffset($FragmentUndoOffset)=0
+;				_DumpOutput("Error in _SanityCheck_UndoOffset()" & @CRLF)
+				$InputData = $DummyPrepend & $InputData
+				$LocalCounter += 1
+				ContinueLoop
+			Case _SanityCheck_TargetAttribute($FragmentTargetAttribute)=0
+;				_DumpOutput("Error in _SanityCheck_TargetAttribute()" & @CRLF)
+				$InputData = $DummyPrepend & $InputData
+				$LocalCounter += 1
+				ContinueLoop
+			Case _SanityCheck_LcnsToFollow($FragmentLcnsToFollow)=0
+;				_DumpOutput("Error in _SanityCheck_LcnsToFollow()" & @CRLF)
+				$InputData = $DummyPrepend & $InputData
+				$LocalCounter += 1
+				ContinueLoop
+			Case _SanityCheck_RecordOffsetInMft($FragmentRecordOffsetInMft)=0
+;				_DumpOutput("Error in _SanityCheck_RecordOffsetInMft()" & @CRLF)
+				$InputData = $DummyPrepend & $InputData
+				$LocalCounter += 1
+				ContinueLoop
+			Case _SanityCheck_AttributeOffset($FragmentAttributeOffset)=0
+;				_DumpOutput("Error in _SanityCheck_AttributeOffset()" & @CRLF)
+				$InputData = $DummyPrepend & $InputData
+				$LocalCounter += 1
+				ContinueLoop
+			Case _SanityTest1($FragmentRedoOp,$FragmentUndoOp)=0
+;				_DumpOutput("Error in _SanityTest1()" & @CRLF)
+				$InputData = $DummyPrepend & $InputData
+				$LocalCounter += 1
+				ContinueLoop
+
+			Case Else
+				$SanityCheckSuccess=1
+;				_DumpOutput("Case Else" & @CRLF)
+;				_DumpOutput("_SanityCheckTransactionHeader: Validation success at prepending bytes: " & $LocalCounter*8 & @CRLF)
+;				_DumpOutput("$StartOffset = 0x" & Hex(Int(($StartOffset-1)/2)) & @CRLF)
+				ExitLoop
+;				$StartOffset += 96 + ($FragmentClientDataLength*2)
+		EndSelect
+
+		$SanityCheckSuccess=1
+;		_DumpOutput("_SanityCheckTransactionHeader: Validation success at prepending bytes: " & $LocalCounter*8 & @CRLF)
+;		_DumpOutput("$StartOffset = 0x" & Hex(Int(($StartOffset-1)/2)) & @CRLF)
+		ExitLoop
+	Until $LocalCounter > 6
+;	_DumpOutput("_SanityCheckTransactionHeader: Validation success at $StartOffset = " & $StartOffset & @CRLF)
+;	_DumpOutput("$StartOffset = 0x" & Hex(Int(($StartOffset-1)/2)) & @CRLF)
+	If Not $SanityCheckSuccess Then
+		_DumpOutput("Repair of header failed" & @CRLF)
+		Return SetError(1,0,0)
+	EndIf
+	_DumpOutput("_CheckAndRepairTransactionHeader(): Validation success when prepending bytes: 0x" & Hex(Int($LocalCounter*8),4) & @CRLF)
+;	_DumpOutput("$StartOffset = 0x" & Hex(Int(($StartOffset-1)/2)) & @CRLF)
+
+
+	If $LocalCounter > 3 Then
+	;Align tmp sizes to 8 bytes
+		$FragmentRedoLength_tmp = $FragmentRedoLength
+		If Mod($FragmentRedoLength_tmp,8) Then
+			While 1
+				$FragmentRedoLength_tmp+=1
+				If Mod($FragmentRedoLength_tmp,8) = 0 Then ExitLoop
+			WEnd
+		EndIf
+
+		$FragmentUndoLength_tmp = $FragmentUndoLength
+		If Mod($FragmentUndoLength_tmp,8) Then
+			While 1
+				$FragmentUndoLength_tmp+=1
+				If Mod($FragmentUndoLength_tmp,8) = 0 Then ExitLoop
+			WEnd
+		EndIf
+	EndIf
+
+;	_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+	;Attempt rebuilding a header
+	Select
+		Case $LocalCounter = 1
+;			_DumpOutput("Case $LocalCounter = 1" & @CRLF)
+			$FragmentTestLsn2 = StringMid($InputData,$StartOffset + 16,16)
+			$FragmentTestLsn2 = Dec(_SwapEndian($FragmentTestLsn2),2)
+			If $FragmentTestLsn2 > 0 Then
+				$FragmentFakeLsn1 = $FragmentTestLsn2 + 760 ;Just add something
+				$FragmentFakeLsn1 = _SwapEndian(Hex($FragmentFakeLsn1,16))
+			Else
+				$FragmentFakeLsn1 = $FragmentFakeLsnA
+			EndIf
+			$ReturnData = $FragmentFakeLsn1 & StringMid($InputData,$StartOffset + 16)
+			$TextInformation &= ";Header rebuilt with fake (LSN1)"
+			_DumpOutput("Header rebuilt with fake (LSN1)" & @CRLF)
+		Case $LocalCounter = 2
+;			_DumpOutput("Case $LocalCounter = 2" & @CRLF)
+			$FragmentTestLsn3 = StringMid($InputData,$StartOffset + 32,16)
+			$FragmentTestLsn3 = Dec(_SwapEndian($FragmentTestLsn3),2)
+			If $FragmentTestLsn3 > 0 Then
+				$FragmentFakeLsn1 = $FragmentTestLsn3 + 760 ;Just add something
+				$FragmentFakeLsn1 = _SwapEndian(Hex($FragmentFakeLsn1,16))
+				$FragmentFakeLsn2 = _SwapEndian(Hex($FragmentTestLsn3,16))
+			Else
+				$FragmentFakeLsn1 = $FragmentFakeLsnB
+				$FragmentFakeLsn2 = $DummyPrepend ;$FragmentFakeLsnA
+			EndIf
+			$ReturnData = $FragmentFakeLsn1 & $FragmentFakeLsn2 & StringMid($InputData,$StartOffset + 32)
+			$TextInformation &= ";Header rebuilt with fake (LSN1,LSN2)"
+			_DumpOutput("Header rebuilt with fake (LSN1,LSN2)" & @CRLF)
+		Case $LocalCounter = 3
+;			_DumpOutput("Case $LocalCounter = 3" & @CRLF)
+			$FragmentFakeLsn1 = $FragmentFakeLsnB
+			$FragmentFakeLsn2 = $FragmentFakeLsnA
+			$FragmentFakeLsn3 = $FragmentFakeLsnA
+			$ReturnData = $FragmentFakeLsn1 & $FragmentFakeLsn2 & $FragmentFakeLsn3 & StringMid($InputData,$StartOffset + 48)
+			$TextInformation &= ";Header rebuilt with fake (LSN1,LSN2,LSN3)"
+			_DumpOutput("Header rebuilt with fake (LSN1,LSN2,LSN3)" & @CRLF)
+		Case $LocalCounter = 4
+;			_DumpOutput("Case $LocalCounter = 4" & @CRLF)
+			$FragmentFakeLsn1 = $FragmentFakeLsnB
+			$FragmentFakeLsn2 = $FragmentFakeLsnA
+			$FragmentFakeLsn3 = $FragmentFakeLsnA
+;			If _SolveUndoRedoCodes($FragmentRedoOp) <> "CompensationlogRecord" Then
+				$FragmentFakeClientDataLength = _Max(Int($FragmentRedoOffset+$FragmentRedoLength_tmp),Int($FragmentUndoOffset+$FragmentUndoLength_tmp))
+				$FragmentFakeClientDataLength = _SwapEndian(Hex(Int($FragmentFakeClientDataLength),8))
+;			Else ;Actually this is not needed
+;				$FragmentFakeClientDataLength = (StringLen($InputData)-96)/2
+;				$FragmentFakeClientDataLength = _SwapEndian(Hex(Int($FragmentFakeClientDataLength),8))
+;			EndIf
+			$FragmentFakeClientIndex = "00000000"
+			$ReturnData = $FragmentFakeLsn1 & $FragmentFakeLsn2 & $FragmentFakeLsn3 & $FragmentFakeClientDataLength & $FragmentFakeClientIndex & StringMid($InputData,$StartOffset + 64)
+			$TextInformation &= ";Header rebuilt with fake (LSN1,LSN2,LSN3,ClientDataLength,ClientIndex)"
+			_DumpOutput("Header rebuilt with fake (LSN1,LSN2,LSN3,ClientDataLength,ClientIndex)" & @CRLF)
+		Case $LocalCounter = 5
+;			_DumpOutput("Case $LocalCounter = 5" & @CRLF)
+			$FragmentFakeLsn1 = $FragmentFakeLsnB
+			$FragmentFakeLsn2 = $FragmentFakeLsnA
+			$FragmentFakeLsn3 = $FragmentFakeLsnA
+;			If _SolveUndoRedoCodes($FragmentRedoOp) <> "CompensationlogRecord" Then
+				$FragmentFakeClientDataLength = _Max(Int($FragmentRedoOffset+$FragmentRedoLength_tmp),Int($FragmentUndoOffset+$FragmentUndoLength_tmp))
+				$FragmentFakeClientDataLength = _SwapEndian(Hex(Int($FragmentFakeClientDataLength),8))
+;			Else ;Actually this is not needed
+;				$FragmentFakeClientDataLength = (StringLen($InputData)-96)/2
+;				$FragmentFakeClientDataLength = _SwapEndian(Hex(Int($FragmentFakeClientDataLength),8))
+;			EndIf
+			$FragmentFakeClientIndex = "00000000"
+			$FragmentFakeRecordType = "01000000"
+			$FragmentFakeTransactionId = "18000000"
+			$ReturnData = $FragmentFakeLsn1 & $FragmentFakeLsn2 & $FragmentFakeLsn3 & $FragmentFakeClientDataLength & $FragmentFakeClientIndex & $FragmentFakeRecordType & $FragmentFakeTransactionId & StringMid($InputData,$StartOffset + 80)
+			$TextInformation &= ";Header rebuilt with fake (LSN1,LSN2,LSN3,ClientDataLength,ClientIndex,RecordType,TransactionId)"
+			_DumpOutput("Header rebuilt with fake (LSN1,LSN2,LSN3,ClientDataLength,ClientIndex,RecordType,TransactionId)" & @CRLF)
+		Case $LocalCounter = 6
+;			_DumpOutput("Case $LocalCounter = 6" & @CRLF)
+			$FragmentFakeLsn1 = $FragmentFakeLsnB
+			$FragmentFakeLsn2 = $FragmentFakeLsnA
+			$FragmentFakeLsn3 = $FragmentFakeLsnA
+;			If _SolveUndoRedoCodes($FragmentRedoOp) <> "CompensationlogRecord" Then
+				$FragmentFakeClientDataLength = _Max(Int($FragmentRedoOffset+$FragmentRedoLength_tmp),Int($FragmentUndoOffset+$FragmentUndoLength_tmp))
+				$FragmentFakeClientDataLength = _SwapEndian(Hex(Int($FragmentFakeClientDataLength),8))
+;			Else ;Actually this is not needed
+;				$FragmentFakeClientDataLength = (StringLen($InputData)-96)/2
+;				$FragmentFakeClientDataLength = _SwapEndian(Hex(Int($FragmentFakeClientDataLength),8))
+;			EndIf
+			$FragmentFakeClientIndex = "00000000"
+			$FragmentFakeRecordType = "01000000"
+			$FragmentFakeTransactionId = "18000000"
+			$FragmentFakeFlags = "0000"
+			$FragmentFakePadding6 = "000000000000"
+			$ReturnData = $FragmentFakeLsn1 & $FragmentFakeLsn2 & $FragmentFakeLsn3 & $FragmentFakeClientDataLength & $FragmentFakeClientIndex & $FragmentFakeRecordType & $FragmentFakeTransactionId & $FragmentFakeFlags & $FragmentFakePadding6 & StringMid($InputData,$StartOffset + 96)
+			$TextInformation &= ";Header rebuilt with fake (LSN1,LSN2,LSN3,ClientDataLength,ClientIndex,RecordType,TransactionId,Flags)"
+			_DumpOutput("Header rebuilt with fake (LSN1,LSN2,LSN3,ClientDataLength,ClientIndex,RecordType,TransactionId,Flags)" & @CRLF)
+		Case Else
+			$ReturnData = $InputData
+	EndSelect
+
+	_DumpOutput("Repaired transaction:" & @CRLF)
+	If $LocalCounter < 4 Then
+		_DumpOutput(_HexEncode("0x"&StringMid($ReturnData,$StartOffset,96 + ($FragmentClientDataLength*2))) & @CRLF)
+		Return StringMid($ReturnData,$StartOffset,96 + ($FragmentClientDataLength*2))
+	Else
+		_DumpOutput(_HexEncode("0x"&$ReturnData) & @CRLF)
+		Return $ReturnData
+	EndIf
+EndFunc
+
+Func _SanityTest1($RedoOp,$UndoOp)
+	$Undo = _SolveUndoRedoCodes($UndoOp)
+	$Redo = _SolveUndoRedoCodes($RedoOp)
+	If $Undo = "Noop" And Not ($Redo = "DirtyPageTableDump" Or $Redo = "CompensationlogRecord" Or $Redo = "UpdateNonResidentValue" Or $Redo = "InitializeFileRecordSegment" Or $Redo = "OpenAttributeTableDump" Or $Redo = "AttributeNamesDump" Or $Redo = "OpenNonresidentAttribute" Or $Redo = "TransactionTableDump") Then
+		_DumpOutput("_SanityTest1: 1" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "ForgetTransaction" And $Undo <> "CompensationlogRecord") Or ($Undo = "CompensationlogRecord" And $Redo <> "ForgetTransaction") Then
+		_DumpOutput("_SanityTest1: 2" & @CRLF)
+		Return 0
+	EndIf
+	If $Undo = "DeallocateFileRecordSegment" And $Redo <> "Noop" Then
+		_DumpOutput("_SanityTest1: 3" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "AddIndexEntryAllocation" And $Undo <> "DeleteIndexEntryAllocation") Or ($Undo = "DeleteIndexEntryAllocation" And $Redo <> "AddIndexEntryAllocation") Then
+		_DumpOutput("_SanityTest1: 4" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "AddindexEntryRoot" And $Undo <> "DeleteindexEntryRoot") Or ($Undo = "DeleteindexEntryRoot" And $Redo <> "AddindexEntryRoot") Then
+		_DumpOutput("_SanityTest1: 5" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "CreateAttribute" And $Undo <> "DeleteAttribute") Or ($Undo = "DeleteAttribute" And $Redo <> "CreateAttribute") Then
+		_DumpOutput("_SanityTest1: 6" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "SetBitsInNonresidentBitMap" And $Undo <> "ClearBitsInNonresidentBitMap") Or ($Undo = "SetBitsInNonresidentBitMap" And $Redo <> "ClearBitsInNonresidentBitMap") Then
+		_DumpOutput("_SanityTest1: 7" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "SetIndexEntryVcnAllocation" And $Undo <> "SetIndexEntryVcnAllocation") Or ($Undo = "SetIndexEntryVcnAllocation" And $Redo <> "SetIndexEntryVcnAllocation") Then
+		_DumpOutput("_SanityTest1: 8" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "SetIndexEntryVcnRoot" And $Undo <> "SetIndexEntryVcnRoot") Or ($Undo = "SetIndexEntryVcnRoot" And $Redo <> "SetIndexEntryVcnRoot") Then
+		_DumpOutput("_SanityTest1: 9" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "UpdateMappingPairs" And $Undo <> "UpdateMappingPairs") Or ($Undo = "UpdateMappingPairs" And $Redo <> "UpdateMappingPairs") Then
+		_DumpOutput("_SanityTest1: 10" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "WriteEndOfIndexBuffer" And $Undo <> "WriteEndOfIndexBuffer") Or ($Undo = "WriteEndOfIndexBuffer" And $Redo <> "WriteEndOfIndexBuffer") Then
+		_DumpOutput("_SanityTest1: 11" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "UpdateResidentValue" And $Undo <> "UpdateResidentValue") Or ($Undo = "UpdateResidentValue" And $Redo <> "UpdateResidentValue") Then
+		_DumpOutput("_SanityTest1: 12" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "UpdateFileNameRoot" And $Undo <> "UpdateFileNameRoot") Or ($Undo = "UpdateFileNameRoot" And $Redo <> "UpdateFileNameRoot") Then
+		_DumpOutput("_SanityTest1: 13" & @CRLF)
+		Return 0
+	EndIf
+	If ($Redo = "UpdateFileNameAllocation" And $Undo <> "UpdateFileNameAllocation") Or ($Undo = "UpdateFileNameAllocation" And $Redo <> "UpdateFileNameAllocation") Then
+		_DumpOutput("_SanityTest1: 14" & @CRLF)
+		Return 0
+	EndIf
+	Return 1
+EndFunc
+
+Func _SanityTest2($LSN1,$LSN2,$LSN3)
+	If $LSN2 > $LSN1 Or $LSN3 > $LSN1 Or ($LSN2 = 0 And $LSN3 <> 0) Then
+		Return 0
+	Else
+		Return 1
+	EndIf
+EndFunc
+
+Func _SanityTest3($LSN2,$LSN3)
+	If $LSN2 = 0 And $LSN3 <> 0 Then
+		Return 0
+	Else
+		Return 1
+	EndIf
+EndFunc
+
+Func _SanityCheck_LSN($InputData)
+	If $InputData = 0 Or $InputData > 0xFFFF Then ;And $InputData < 0xFFFFFFFFFFFFFFFF Then
+		Return 1
+	Else
+		Return 0
+	EndIf
+EndFunc
+
+Func _SanityCheck_ClientDataLength($InputData)
+	If $InputData > 0x28 and $InputData < 0xFFFF Then
+		Return 1
+	Else
+		Return 0
+	EndIf
+EndFunc
+
+Func _SanityCheck_ClientIndex($InputData)
+	If $InputData <> 0x0 And $InputData <> 0x1 Then
+		Return 0
+	Else
+		Return 1
+	EndIf
+EndFunc
+
+Func _SanityCheck_RecordType($InputData)
+	If $InputData <> 0x1 And $InputData <> 0x2 Then
+		Return 0
+	Else
+		Return 1
+	EndIf
+EndFunc
+
+Func _SanityCheck_TransactionId($InputData)
+	If Not Mod($InputData,8) Then
+		Return 1
+	Else
+		Return 0
+	EndIf
+EndFunc
+
+Func _SanityCheck_Flags($InputData)
+	If $InputData <> 0x0 And $InputData <> 0x1 Then
+		Return 0
+	Else
+		Return 1
+	EndIf
+EndFunc
+
+Func _SanityCheck_UndoRedoOpCode($InputData)
+	If _SolveUndoRedoCodes($InputData) <> "UNKNOWN" Then
+		Return 1
+	Else
+		Return 0
+	EndIf
+EndFunc
+
+Func _SanityCheck_RedoOffset($InputData)
+	If Not Mod($InputData,8) And $InputData < 0xFFFF Then
+		Return 1
+	Else
+		Return 0
+	EndIf
+EndFunc
+
+Func _SanityCheck_UndoOffset($InputData)
+	If $InputData > 0x0 And $InputData < 0xFFFF Then
+		Return 1
+	Else
+		Return 0
+	EndIf
+EndFunc
+
+Func _SanityCheck_TargetAttribute($InputData)
+	If $InputData = 0x1 Or $InputData = 0x17 Or $InputData = 0x18 Or Not Mod($InputData+0x10,0x28) Then
+		Return 1
+	Else
+		Return 0
+	EndIf
+EndFunc
+
+Func _SanityCheck_LcnsToFollow($InputData)
+	If $InputData <> 0x0 And $InputData <> 0x1 Then
+		Return 0
+	Else
+		Return 1
+	EndIf
+EndFunc
+
+Func _SanityCheck_RecordOffsetInMft($InputData)
+	If $InputData < 0xFFFF Then
+		Return 1
+	Else
+		Return 0
+	EndIf
+EndFunc
+
+Func _SanityCheck_AttributeOffset($InputData)
+	If $InputData < 0xFFFF Then
+		Return 1
+	Else
+		Return 0
+	EndIf
+EndFunc
+
+Func _SanityCheck_MftClusterIndex($InputData)
+	;Not posible to validate
+	Return 1
+EndFunc
+
+Func _SanityCheck_TargetVcn($InputData)
+	;Not posible to validate
+	Return 1
+EndFunc
+
+Func _SanityCheck_TargetLcn($InputData)
+	;Not posible to validate
+	Return 1
+EndFunc
+
+Func _CheckAndRepairTransactionHeader2($InputData)
+	Local $StartOffset=1, $InputDataSize = StringLen($InputData)/2, $SanityCheckSuccess=0
+
+	Do
+		_DumpOutput("$StartOffset = 0x" & Hex(Int(($StartOffset-1)/2)) & @CRLF)
+		$FragmentLsn1 = StringMid($InputData, $StartOffset, 16)
+;		_DumpOutput("$FragmentLsn1: " & $FragmentLsn1 & @CRLF)
+		$FragmentLsn1 = Dec(_SwapEndian($FragmentLsn1),2)
+		$FragmentLsn2 = StringMid($InputData, $StartOffset + 16, 16)
+		$FragmentLsn2 = Dec(_SwapEndian($FragmentLsn2),2)
+		$FragmentLsn3 = StringMid($InputData, $StartOffset + 32, 16)
+		$FragmentLsn3 = Dec(_SwapEndian($FragmentLsn3),2)
+		$FragmentClientDataLength = StringMid($InputData, $StartOffset + 48, 8)
+		$FragmentClientDataLength = Dec(_SwapEndian($FragmentClientDataLength),2)
+		$FragmentClientIndex = StringMid($InputData, $StartOffset + 56, 8)
+		$FragmentClientIndex = Dec(_SwapEndian($FragmentClientIndex),2)
+;		_DumpOutput("$FragmentClientIndex:" & $FragmentClientIndex & @CRLF)
+		$FragmentRecordType = StringMid($InputData, $StartOffset + 64, 8)
+		$FragmentRecordType = Dec(_SwapEndian($FragmentRecordType),2)
+		$FragmentTransactionId = StringMid($InputData, $StartOffset + 72, 8)
+		$FragmentTransactionId = Dec(_SwapEndian($FragmentTransactionId),2)
+		$FragmentFlags = StringMid($InputData, $StartOffset + 80, 4)
+		$FragmentFlags = Dec(_SwapEndian($FragmentFlags),2)
+		;Allignment 6 bytes
+		$FragmentRedoOp = StringMid($InputData, $StartOffset + 96, 4)
+		$FragmentRedoOp = Dec(_SwapEndian($FragmentRedoOp),2)
+		$FragmentUndoOp = StringMid($InputData, $StartOffset + 100, 4)
+		$FragmentUndoOp = Dec(_SwapEndian($FragmentUndoOp),2)
+		$FragmentRedoOffset = StringMid($InputData, $StartOffset + 104, 4)
+		$FragmentRedoOffset = Dec(_SwapEndian($FragmentRedoOffset),2)
+		$FragmentRedoLength = StringMid($InputData, $StartOffset + 108, 4)
+		$FragmentRedoLength = Dec(_SwapEndian($FragmentRedoLength),2)
+		$FragmentUndoOffset = StringMid($InputData, $StartOffset + 112, 4)
+		$FragmentUndoOffset = Dec(_SwapEndian($FragmentUndoOffset),2)
+		$FragmentUndoLength = StringMid($InputData, $StartOffset + 116, 4)
+		$FragmentUndoLength = Dec(_SwapEndian($FragmentUndoLength),2)
+		$FragmentTargetAttribute = StringMid($InputData, $StartOffset + 120, 4)
+;		_DumpOutput("$FragmentTargetAttribute:" & $FragmentTargetAttribute & @CRLF)
+		$FragmentTargetAttribute = Dec(_SwapEndian($FragmentTargetAttribute),2)
+		$FragmentLcnsToFollow = StringMid($InputData, $StartOffset + 124, 4)
+		$FragmentLcnsToFollow = Dec(_SwapEndian($FragmentLcnsToFollow),2)
+		$FragmentRecordOffsetInMft = StringMid($InputData, $StartOffset + 128, 4)
+		$FragmentRecordOffsetInMft = Dec(_SwapEndian($FragmentRecordOffsetInMft),2)
+		$FragmentAttributeOffset = StringMid($InputData, $StartOffset + 132, 4)
+		$FragmentAttributeOffset = Dec(_SwapEndian($FragmentAttributeOffset),2)
+		$FragmentMftClusterIndex = StringMid($InputData, $StartOffset + 136, 4)
+		$FragmentMftClusterIndex = Dec(_SwapEndian($FragmentMftClusterIndex),2)
+		$FragmentTargetVcn = StringMid($InputData, $StartOffset + 140, 8)
+		$FragmentTargetVcn = Dec(_SwapEndian($FragmentTargetVcn),2)
+		$FragmentTargetLcn = StringMid($InputData, $StartOffset + 148, 8)
+		$FragmentTargetLcn = Dec(_SwapEndian($FragmentTargetLcn),2)
+		;Do the tests
+		Select
+			Case _SanityCheck_LSN($FragmentLsn1)=0
+				_DumpOutput("Error in _SanityCheck_LSN($FragmentLsn1)" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_LSN($FragmentLsn2)=0
+				_DumpOutput("Error in _SanityCheck_LSN($FragmentLsn2)" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_LSN($FragmentLsn3)=0
+				_DumpOutput("Error in _SanityCheck_LSN($FragmentLsn3)" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_ClientDataLength($FragmentClientDataLength)=0
+				_DumpOutput("Error in _SanityCheck_ClientDataLength()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_ClientIndex($FragmentClientIndex)=0
+				_DumpOutput("Error in _SanityCheck_ClientIndex()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_RecordType($FragmentRecordType)=0
+				_DumpOutput("Error in _SanityCheck_RecordType()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_TransactionId($FragmentTransactionId)=0
+				_DumpOutput("Error in _SanityCheck_TransactionId()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_Flags($FragmentFlags)=0
+				_DumpOutput("Error in _SanityCheck_Flags()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_UndoRedoOpCode($FragmentRedoOp)=0
+				_DumpOutput("Error in _SanityCheck_UndoRedoOpCode($FragmentRedoOp)" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_UndoRedoOpCode($FragmentUndoOp)=0
+				_DumpOutput("Error in _SanityCheck_UndoRedoOpCode($FragmentUndoOp)" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_RedoOffset($FragmentRedoOffset)=0
+				_DumpOutput("Error in _SanityCheck_RedoOffset()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_UndoOffset($FragmentUndoOffset)=0
+				_DumpOutput("Error in _SanityCheck_UndoOffset()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_TargetAttribute($FragmentTargetAttribute)=0
+				_DumpOutput("Error in _SanityCheck_TargetAttribute()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_LcnsToFollow($FragmentLcnsToFollow)=0
+				_DumpOutput("Error in _SanityCheck_LcnsToFollow()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_RecordOffsetInMft($FragmentRecordOffsetInMft)=0
+				_DumpOutput("Error in _SanityCheck_RecordOffsetInMft()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityCheck_AttributeOffset($FragmentAttributeOffset)=0
+				_DumpOutput("Error in _SanityCheck_AttributeOffset()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityTest1($FragmentRedoOp,$FragmentUndoOp)=0
+				_DumpOutput("Error in _SanityTest1()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case _SanityTest2($FragmentLsn1,$FragmentLsn2,$FragmentLsn3)=0
+				_DumpOutput("Error in _SanityTest2()" & @CRLF)
+				$StartOffset += 16
+				ContinueLoop
+			Case Else
+				$SanityCheckSuccess=1
+				_DumpOutput("_SanityCheckTransactionHeader: Validation success at $StartOffset = " & $StartOffset & @CRLF)
+				_DumpOutput("$StartOffset = 0x" & Hex(Int(($StartOffset-1)/2)) & @CRLF)
+				ExitLoop
+;				$StartOffset += 96 + ($FragmentClientDataLength*2)
+		EndSelect
+
+
+		$StartOffset += 16 ;Since transactions are always aligned to 8 bytes
+	Until $StartOffset >= $InputDataSize
+	_DumpOutput("_SanityCheckTransactionHeader: Validation success at $StartOffset = " & $StartOffset & @CRLF)
+	_DumpOutput("$StartOffset = 0x" & Hex(Int(($StartOffset-1)/2)) & @CRLF)
+	If Not $SanityCheckSuccess Then Return SetError(1,0,0)
+	Return StringMid($InputData,$StartOffset,96 + ($FragmentClientDataLength*2))
+EndFunc
+
+Func _SelectFragment()
+	_DisplayInfo("Not yet fully implemented" & @CRLF)
+	Return
+	;Not sure if this will ever be activated. Needs further codechange.
+	$FragmentFile = FileOpenDialog("Select Fragment",@ScriptDir,"All (*.*)")
+	If @error Then
+		_DisplayInfo("Error getting Fragment: " & $FragmentFile & @CRLF)
+		GUICtrlSetData($FragmentField,"Error getting Fragment")
+		Return
+	Else
+;		_DisplayInfo("Selected Fragment: " & $FragmentFile & @CRLF)
+		GUICtrlSetData($FragmentField,$FragmentFile)
+	EndIf
+	$hFragment = FileOpen($FragmentFile,16)
+	$FragmentData = FileRead($hFragment)
+	_CheckFragment(StringMid($FragmentData,3))
+EndFunc
+
+Func _CheckFragment($InputData)
+
+	_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+	$result = _CheckAndRepairTransactionHeader($InputData)
+	If @error Then
+		_DumpOutput("Error in sanity check of data" & @CRLF)
+	Else
+		_DumpOutput("Success verifying data:" & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$result) & @CRLF)
+	EndIf
 EndFunc

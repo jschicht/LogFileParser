@@ -1,5 +1,24 @@
 LogFileParser Changelog
 
+v2.0.0.0. 
+Added decode of security descriptors.
+Added decode of $O, $Q and $R streams.
+Changed text translation of redo/undo codes 0x10, 0x11, 0x17, 0x18, 0x1d, 0x1e and 0x22.
+Added decode of OpenAttributeTableDump, DirtyPageTableDump and TransactionTableDump into separate csv files.
+Added mapping from AttributeNamesDump to OpenAttributeTableDump where applicable.
+Added 10 missing variables from lsn record to main output (appended on right side in main output).
+Improved identification of current attribute and Mft ref.
+Added decode of SetBitsInNonresidentBitMap and ClearBitsInNonresidentBitMap into separate csv file.
+Added decode of $ObjId:$O, $Quota:$O, $Quota:$Q, and $Reparse:$R into separate csv files.
+Improved decode of SetIndexEntryVcnRoot and SetIndexEntryVcnAllocation.
+Implemented postfix of output files with .empty if they have no content.
+Added RSTR decode to output in debug.log.
+Fixed bug in the validation inside _UsnDecodeRecord2() function.
+Added option to exit if predicted MFT ref indicate wrong SectorsPerCluster or MFT_Record_Size configuration.
+Added functionality to decode lost records from bytes within slack space in $LogFile. A configuration value was added to finetune its successrate.
+Added missing decode of certain deleted index entries.
+Improved logging to debug.log.
+
 v1.0.0.22. Added support for configuring (millisec) precision separator.
 
 v1.0.0.21. Added TRANSACTED_CHANGE as reason code 0x00400000 (winioctl.h). Reorganized the concat of reason codes to make it easier reading.

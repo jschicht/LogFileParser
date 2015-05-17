@@ -1,23 +1,25 @@
 Features
-Decode and dump $LogFile records.
-Decode many attribute changes.
-Optionally resolve all datarun list information available in $LogFile.
-Configurable verbose mode (does not affect logging).
+Decode and dump $LogFile records and transaction entries.
+Decode NTFS attribute changes.
+Optionally resolve all datarun list information available in $LogFile. Option: "Reconstruct data runs".
+Recover transactions from slack space within $LogFile.
+Choose to reconstruct missing or damaged headers of transactions found in slack. Option: "Rebuild header". 
+Optionally also finetune result with a LSN error level value. Option: "LSN error level".
 Logs to csv and imports to sqlite database with several tables.
 Optionally import csv output of mft2csv into db.
-Choose timestamp format, precision and millisec/precision separator.
+Choose timestamp format, precision and millisec/precision separator. Option "Precision separator".
 Choose region adjustment for timestamps. Default is UTC 0.0.
-Choose separator.
-Configurable UNICODE or ANSI output.
-Optionally decode $UsnJrnl (deactivated - no longer needed).
-Configurable MFT record size (1024 or 4096).
+Choose output separator. Option: "Set separator".
+Configurable UNICODE or ANSI output. Option "Unicode".
+Configurable MFT record size (1024 or 4096). Option "MFT record size".
+Optionally decode transaction fragment. Deactivated until fully implemented.
+Detailed verbose output into debug.log.
 
 Background
 NTFS is designed as a recoverable filesystem. This done through logging of all transactions that alters volume structure. So any change to a file on the volume will require something to be logged to the $LogFile too, so that it can be reversed in case of system failure at any time. Therefore a lot of information is written to this file, and since it is circular, it means new transactions are overwriting older records in the file. Thus it is somewhat limited how much historical data can be retrieved from this file. Again, that would depend on the type of volume, and the size of the $LogFile. On the systemdrive of a frequently used system, you will likely only get a few hours of history, whereas an external/secondary disk with backup files on, would likely contain more historical information. And a 2MB file will contain far less history than a 256MB one. So in what size range can this file be configured to? Anything from 256 KB and up. Configure the size to 2 GB can be done like this, "chkdsk D: /L:2097152". How a large sized logfile impacts on performance is beyond the scope of this text. Setting it lower than 2048 is normally not possible. However it is possble by patching untfs.dll: http://code.google.com/p/mft2csv/wiki/Tiny_NTFS
 
 Intro
-This parser will decode and dump lots of transaction information from the $LogFile on NTFS. There are several csv's generated as well as an sqlite database named ntfs.db containing all relevant information.
-The currently handled Redo transaction types are:
+This parser will decode and dump lots of transaction information from the $LogFile on NTFS. There are several csv's generated as well as an sqlite database named ntfs.db containing all relevant information. The output is extremely detailed and very low level, meaning it requires some decent NTFS knowledge in order to understand it. The currently handled Redo transaction types with meaningfull output decode are:
 
 InitializeFileRecordSegment
 CreateAttribute
@@ -30,17 +32,24 @@ AddindexEntryRoot
 DeleteindexEntryRoot
 AddIndexEntryAllocation
 DeleteIndexEntryAllocation
-ResetAllocation
-ResetRoot
+WriteEndOfIndexBuffer
+SetIndexEntryVcnRoot
 SetIndexEntryVcnAllocation
 UpdateFileNameRoot
+UpdateFileNameAllocation
+SetBitsInNonresidentBitMap
+ClearBitsInNonresidentBitMap
 OpenNonresidentAttribute
-
+OpenAttributeTableDump
+AttributeNamesDump
+DirtyPageTableDump
+TransactionTableDump
 
 The list of currently supported attributes:
 $STANDARD_INFORMATION
 $FILE_NAME
 $OBJECT_ID
+$SECURITY_DESCRIPTOR
 $VOLUME_NAME
 $VOLUME_INFORMATION
 $DATA
@@ -51,7 +60,7 @@ $EA_INFORMATION
 $EA
 $LOGGED_UTILITY_STREAM
 
-So basically there's only 3 missing in the decode; $ATTRIBUTE_LIST, $SECURITY_DESCRIPTOR and $BITMAP. However, $ATTRIBUTE_LIST is kind of implemented as records from attribute lists are processed through InitializeFileRecordSegment as separate MFT records, and information about base ref is already logged.
+So basically there's only 1 missing in the decode; $ATTRIBUTE_LIST. However, $ATTRIBUTE_LIST is kind of implemented as records from attribute lists are processed through InitializeFileRecordSegment as separate MFT records, and information about base ref is already logged.
 
 
 Explanation of the different output generated:
@@ -71,9 +80,6 @@ All dumped and decoded index records (IndexRoot/IndexAllocation)
 LogFileJoined.csv
 Same as LogFile.csv, but have filename information joined in from the $UsnJrnl or csv of mft2csv.
 
-UsnJrnl.csv
-The output of the $UsnJrnl parser module. File will not be created if not the USN journal is to be analyzed.
-
 MFTRecords.bin
 Dummy $MFT recreated based on found MFT records in InitializeFileRecordSegment transactions. Can use mft2csv on this one (remember to configure "broken MFT" and "Fixups" properly).
 
@@ -81,7 +87,52 @@ LogFile_lfUsnJrnl.csv
 Records for the $UsnJrnl that has been decoded within $LogFile
 
 LogFile_UndoWipe_INDX.csv
-All undo operations for clearing of directory indexes (INDX)
+All undo operations for clearing of directory indexes (INDX).
+
+LogFile_AllTransactionHeaders.csv
+All headers of decoded transactions.
+
+LogFile_BitsInNonresidentBitMap.csv
+All decoded SetBitsInNonresidentBitMap operations.
+
+LogFile_DirtyPageTable.csv
+All entries in every decoded DirtyPageTableDump operation.
+
+LogFile_ObjIdO.csv
+All decodes from system file $ObjId:$O.
+
+LogFile_OpenAttributeTable.csv
+All entries in every decoded OpenAttributeTableDump operation.
+
+LogFile_QuotaO.csv
+All decodes from system file $Quota:$O.
+
+LogFile_QuotaQ.csv
+All decodes from system file $Quota:$Q.
+
+LogFile_RCRD.csv
+All headers of decoded RCRD records.
+
+LogFile_ReparseR.csv
+All decodes from system file $Reparse:$R.
+
+LogFile_SecureSDH.csv
+All decodes from system file $Secure:$SDH.
+
+LogFile_SecureSII.csv
+All decodes from system file $Secure:$SII.
+
+LogFile_SecurityDescriptors.csv
+Decoded security descriptors. Source can be from $SECURITY_DESCRIPTOR or $Secure:$SDS.
+
+LogFile_SlackAttributeNamesDump.csv
+All entries from decoded AttributeNamesDump transactions found in slack space.
+
+LogFile_SlackOpenAttributeTable.csv
+All entries from decoded OpenAttributeTableDump transactions found in slack space.
+
+LogFile_TransactionTable.csv
+Decoded TransactionTableDump transactions.
 
 Ntfs.db
 An sqlite database file with tables almost equivalent to the above csv's. The database contains 5 tables:
@@ -142,10 +193,15 @@ Circularity of a 65 MB file poses inherent and absolute restriction on how many 
 Changes to the data of resident files are not stored within $LogFile, only information that a change was done is stored.
 
 Note
-The $UsnJrnl contains information in a more human friendly way. For instance each record contains fileref, filename, timestamp and explanation of what occurred. It also contains far more historical information than $LogFile, though without a lot of details. 
+The $UsnJrnl contains information in a more human friendly way. For instance each record contains fileref, filename, timestamp and explanation of what occurred. It also contains far more historical information than $LogFile, though without a lot of details. If $UsnJrnl is active, then all transactions written to it during the recycle life of the $LogFile are also present within $LogFile. This means that there is no reason to decode the $UsnJrnl in order to understand $LogFile any better.
 
 Todo
 Implement more analysis of data present in ntfs.db.
+
+Slack space
+In this context slack space means the space within a RCRD record that is the leftover in the record beyond the last transaction. I don't think this has been described before, so let me explain. Volume slack is the unused space between the end of file system and end of the partition where the file system resides. MFT record slack is kind of the same, but refers to the space found after the record end signature (0xFFFFFFFF) up to the physical record end (0x400 or 0x1000). And slack space within the $LogFile is thus the space found beyond the last transaction and up to the RCRD record end (usually 0x1000). These transactions from slack are actually there from before the $LogFile was recycled (overwriten). There is also an algorithm identifying valid transactions from slack space. In addition there may also exist several layers of such slack space. 
+Example:
+Lets say last transaction in a given RCRD record ended at offset 0x00007D27. From this offset and up to 0x00007FFF we have 0x2D8 bytes of slack space. It could then be that the bytes starting at 0x00007D28 is not a valid transaction header because it is in the middle of a transaction. The program will then (if configured to) attempt to rebuild a pseudo header with valid values in order to decode the transaction. If it fails at rebuild any valid header, it considers to much information from the original header is lost, and it will consider these bytes as lost, and continue scanning the rest of the slack space for any valid transaction header. The lost bytes will be logged to debug.log for you to investigate. On the other hand, if it was able rebuild a valid header, the information about this would be found in the lf_TextInformation field. Lets say it identified a transaction starting at offset 0x00007D48 and with size 0xB0. Then another good transactions was identified immediately following at offset 0x00007DF8 with size 0xE0. However at offset 0x00007ED8 there was no valid transaction header. This means we are now at the seond layer of slack space within that RCRD record. Now lets say the program, after re-scanning, was able to identify a valid transaction header at offset 0x00007F18. This transaction would be marked in the csv with a value of 2 in the FromRcrdSlack field. However, consider the transaction total size pushing the offset beyong the RCRD record size. In essensce, this would be a partially recovered transaction, which could decode fine, but will be found with a value of 1 in the IncompleteTransaction field. Remember the debug.log is very detailed and will help understanding the decoded output, especially what comes from slack space.
 
 
 References:
