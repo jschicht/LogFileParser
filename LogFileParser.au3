@@ -1,7 +1,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.0
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.2
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -77,7 +77,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.0", 540, 480, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.2", 540, 480, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -302,6 +302,7 @@ $FileNamesArray[0][1] = "FileName"
 $FileNamesArray[0][2] = "LSN"
 
 _DebugOut("Using $LogFile: " & $InputLogFile)
+_DebugOut("Unicode: " & GUICtrlRead($CheckUnicode))
 
 If StringLen(GUICtrlRead($PrecisionSeparatorInput)) <> 1 Then
 	_DisplayInfo("Error: Precision separator not set properly" & @crlf)
@@ -1921,6 +1922,7 @@ If $undo_length > 0 Then ; Not needed I guess
 					EndIf
 				EndIf
 			EndIf
+		Case $undo_operation_hex="0100" ;CompensationlogRecord
 		Case $undo_operation_hex="0200" ;InitializeFileRecordSegment
 ;			_ParserCodeOldVersion($undo_chunk)
 		Case $undo_operation_hex="0400" ; WriteEndOfFileRecordSegment
@@ -1941,6 +1943,7 @@ If $undo_length > 0 Then ; Not needed I guess
 		Case $undo_operation_hex="0b00"
 ;			_Decode_SetNewAttributeSize($undo_chunk)
 		Case $undo_operation_hex="0c00" Or $undo_operation_hex="0e00"
+			#cs
 			If $undo_length*2>168 Then
 				$DecodeOk = _Decode_IndexEntry($undo_chunk,$undo_operation_hex,0)
 				If Not $DecodeOk Then
@@ -1952,6 +1955,51 @@ If $undo_length > 0 Then ; Not needed I guess
 				_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
 				_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 			EndIf
+			#ce
+			Select
+				Case $PredictedRefNumber = 9 Or $RealMftRef = 9 ;$Secure
+					If $undo_length = 40 Then ;$SII
+						_DecodeIndxEntriesSII($undo_chunk)
+						$TextInformation &= ";$Secure:$SII;See LogFile_SecureSII.csv"
+						$AttributeString &= ":$SII"
+					ElseIf $undo_length = 48 Then  ;$SDH
+						_DecodeIndxEntriesSDH($undo_chunk)
+						$TextInformation &= ";$Secure:$SDH;See LogFile_SecureSDH.csv"
+						$AttributeString &= ":$SDH"
+					EndIf
+
+				Case $PredictedRefNumber = 24 Or $RealMftRef = 24 ;$Quota
+					If $undo_length > 68 Then
+						_Decode_Quota_Q($undo_chunk)
+						$TextInformation &= ";See LogFile_QuotaQ.csv"
+					Else
+						_Decode_Quota_O($undo_chunk)
+						$TextInformation &= ";See LogFile_QuotaO.csv"
+					EndIf
+
+				Case $PredictedRefNumber = 25 Or $RealMftRef = 25 ;$ObjId
+					If $undo_length = 88 Then
+						_Decode_ObjId_O($undo_chunk)
+						$TextInformation &= ";See LogFile_ObjIdO.csv"
+					EndIf
+
+				Case Else
+					If $undo_length*2>168 Then
+						$DecodeOk=0
+						$DecodeOk = _Decode_IndexEntry($undo_chunk,$undo_operation_hex,0)
+						If Not $DecodeOk Then
+	;						If $undo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $UndoChunkSize, '$INDEX_ROOT')
+							_DumpOutput("_Decode_IndexEntry() failed at undo for $this_lsn: " & $this_lsn & @CRLF)
+							_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+						Else
+;							If $undo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $UndoChunkSize, '$INDEX_ROOT')
+						EndIf
+					Else
+						_DumpOutput(@CRLF & "Error: Unresolved: " & $undo_operation & @CRLF)
+						_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+						_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+					EndIf
+			EndSelect
 		Case $undo_operation_hex="1000" ; WriteEndOfIndexBuffer
 			If Not ($PredictedRefNumber = 9 Or $PredictedRefNumber = 24 Or $PredictedRefNumber = 25 Or $PredictedRefNumber = 26 Or $RealMftRef = 9 Or $RealMftRef = 24 Or $RealMftRef = 25 Or $RealMftRef = 26) Then
 ;			If ($PredictedRefNumber <> 9 And $PredictedRefNumber <> 24 And $PredictedRefNumber <> 25 And $PredictedRefNumber <> 26) Or ($RealMftRef <> 9 And $RealMftRef <> 24 And $RealMftRef <> 25 And $RealMftRef <> 26) Then
@@ -6391,7 +6439,7 @@ Func _RemoveSingleOffsetOfAttribute($TestRef, $TestOffsetAttr, $TestSize, $TestS
 				If Int($TestOffsetAttr) < Int($FoundOffset) Then
 					$AttrArraySplit[$i] = $FoundAttr&'?'&Int($FoundOffset)-Int($TestSize)
 					ConsoleWrite("Modified entry: " & $FoundAttr&'?'&Int($FoundOffset)-Int($TestSize) & @CRLF)
-					If Int($FoundOffset)-Int($TestSize) < 0 Then MsgBox(0,"Error _RemoveSingleOffsetOfAttribute()",$this_lsn)
+					If Int($FoundOffset)-Int($TestSize) < 0 Then _DebugOut("Error in _RemoveSingleOffsetOfAttribute() with " & $this_lsn)
 				EndIf
 			EndIf
 		Next
@@ -6454,7 +6502,7 @@ Func _UpdateSingleOffsetOfAttribute($TestRef, $TestOffsetAttr, $TestSize, $TestS
 			ElseIf Int($TestOffsetAttr) < Int($FoundOffset) Then
 				$AttrArraySplit[$i] = $FoundAttr&'?'&Int($FoundOffset)+Int($TestSize)
 				ConsoleWrite("Modified entry: " & $FoundAttr&'?'&Int($FoundOffset)+Int($TestSize) & @CRLF)
-				If Int($FoundOffset)-Int($TestSize) < 0 Then MsgBox(0,"Error _RemoveSingleOffsetOfAttribute()",$this_lsn)
+				If Int($FoundOffset)-Int($TestSize) < 0 Then _DebugOut("Error in _UpdateSingleOffsetOfAttribute() with " & $this_lsn)
 				$check=1
 			EndIf
 		Next
@@ -6518,7 +6566,7 @@ Func _CheckOffsetOfAttribute($TestRef, $TestString)
 			EndIf
 			If $TestOffset Then
 				If Not StringIsDigit(StringMid($AttrArraySplit[$i],$TestOffset-1,1)) Then
-					If StringMid($AttrArraySplit[$i],$TestOffset-1,1) <> '?' Then MsgBox(0,"Error in _CheckOffsetOfAttribute()",$AttrArraySplit[$i] & " -> " & StringMid($AttrArraySplit[$i],$TestOffset-1,1))
+					If StringMid($AttrArraySplit[$i],$TestOffset-1,1) <> '?' Then _DebugOut("Error in _CheckOffsetOfAttribute()",$AttrArraySplit[$i] & " -> " & StringMid($AttrArraySplit[$i] & " at offset " & $TestOffset-1,1))
 					$FoundAttr = StringMid($AttrArraySplit[$i], 1, $TestOffset-2)
 ;					ConsoleWrite("$FoundAttr: " & $FoundAttr & @CRLF)
 					Return $FoundAttr
@@ -7713,6 +7761,7 @@ Func _Decode_ObjId_O($InputData)
 	$GUIDDomainId = StringMid($InputData, $StartOffset + 144, 32)
 	$GUIDDomainId = _HexToGuidStr($GUIDDomainId,0)
 
+	$TextInformation &= ";MftRef="&$MftRef&";MftSeqNo="&$MftSeqNo
 	FileWriteLine($LogFileObjIdOCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$GUIDObjectId&$de&$MftRef&$de&$MftSeqNo&$de&$GUIDBirthVolumeId&$de&$GUIDBirthObjectId&$de&$GUIDDomainId&@crlf)
 EndFunc
 
