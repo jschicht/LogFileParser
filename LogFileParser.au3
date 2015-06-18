@@ -1,7 +1,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.2
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.3
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -15,6 +15,7 @@
 #include <File.au3>
 #include <Math.au3>
 #include "SecureConstants.au3"
+
 
 Global $VerboseOn = 0, $CharReplacement=":", $de="|", $PrecisionSeparator=".", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=False, $debuglogfile, $csvextra, $CurrentTimestamp, $EncodingWhenOpen=2, $ReconstructDone=False
 Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef, $FromRcrdSlack, $IncompleteTransaction
@@ -77,7 +78,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.2", 540, 480, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.3", 540, 480, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -516,7 +517,7 @@ For $FileNumber = 0 To UBound($FileOutputTesterArray)-1
 	EndIf
 Next
 
-#cs
+;#cs
 ;x64 dll not working properly?
 If @AutoItX64 Then
 	$Sqlite3DllString = @ScriptDir & "\sqlite3_x64.dll"
@@ -524,8 +525,8 @@ If @AutoItX64 Then
 Else
 	$Sqlite3DllString = @ScriptDir & "\sqlite3.dll"
 EndIf
-#ce
-$Sqlite3DllString = @ScriptDir & "\sqlite3.dll"
+;#ce
+;$Sqlite3DllString = @ScriptDir & "\sqlite3.dll"
 
 ;set encoding
 If GUICtrlRead($CheckUnicode) = 1 Then
@@ -6430,7 +6431,7 @@ Func _RemoveSingleOffsetOfAttribute($TestRef, $TestOffsetAttr, $TestSize, $TestS
 				$check=1
 			EndIf
 ;			If Not $check Then ContinueLoop
-			If Not StringIsDigit($FoundOffset) Then MsgBox(0,"Not number:",$FoundOffset)
+			If Not StringIsDigit($FoundOffset) Then _DumpOutput("Not number: " & $FoundOffset & " at lsn " & $this_lsn)
 			If Int($TestOffsetAttr) > Int($FoundOffset) Then ContinueLoop
 			If $TestOffset Then
 				$AttrArraySplit[$i] = ''
@@ -6493,7 +6494,7 @@ Func _UpdateSingleOffsetOfAttribute($TestRef, $TestOffsetAttr, $TestSize, $TestS
 			If $TestOffset Then
 ;				ConsoleWrite("Found offset: " & $TestOffset & @CRLF)
 			EndIf
-			If Not StringIsDigit($FoundOffset) Then MsgBox(0,"Not number:",$FoundOffset)
+			If Not StringIsDigit($FoundOffset) Then _DumpOutput("Not number: " & $FoundOffset & " at lsn " & $this_lsn)
 			If Int($TestOffsetAttr) > Int($FoundOffset) Then ContinueLoop
 			If $AttrArraySplit[$i] = '' Then ContinueLoop
 			If Int($TestOffsetAttr) = Int($FoundOffset) Then

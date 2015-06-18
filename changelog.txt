@@ -1,5 +1,7 @@
 LogFileParser Changelog
 
+v2.0.0.3. Removed more meaningless messageboxes.
+
 v2.0.0.2. Added decode of deletion of indexes with $ObjId, $Quota and $Secure.
 
 v2.0.0.1. Deactivated meaningless message boxes with internal calculation errors. Improved quality of debug.log
