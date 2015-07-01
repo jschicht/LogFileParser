@@ -1,7 +1,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.3
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.4
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -15,7 +15,6 @@
 #include <File.au3>
 #include <Math.au3>
 #include "SecureConstants.au3"
-
 
 Global $VerboseOn = 0, $CharReplacement=":", $de="|", $PrecisionSeparator=".", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=False, $debuglogfile, $csvextra, $CurrentTimestamp, $EncodingWhenOpen=2, $ReconstructDone=False
 Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef, $FromRcrdSlack, $IncompleteTransaction
@@ -38,12 +37,12 @@ Global $SDHArray[1][1],$SIIArray[1][1],$de2=":",$LogFileSecureSDSCsv,$LogFileSec
 Global $TargetSDSOffsetHex,$SecurityDescriptorHash,$SecurityId,$ControlText,$SidOwner,$SidGroup
 Global $SAclRevision,$SAceCount,$SAceTypeText,$SAceFlagsText,$SAceMask,$SAceObjectType,$SAceInheritedObjectType,$SAceSIDString,$SAceObjectFlagsText
 Global $DAclRevision,$DAceCount,$DAceTypeText,$DAceFlagsText,$DAceMask,$DAceObjectType,$DAceInheritedObjectType,$DAceSIDString,$DAceObjectFlagsText
-Global $OpenAttributesArray[1][13],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray[1][10],$lsn_openattributestable=0,$FileOutputTesterArray[18],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][13],$SlackAttributeNamesDumpArray[1][4]
+Global $OpenAttributesArray[1][13],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray[1][10],$lsn_openattributestable=0,$FileOutputTesterArray[19],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][13],$SlackAttributeNamesDumpArray[1][4]
 Global $LogFileOpenAttributeTableCsv,$LogFileOpenAttributeTableCsvFile,$LogFileDirtyPageTableCsv,$LogFileDirtyPageTableCsvFile,$LogFileBitsInNonresidentBitMapCsv,$LogFileBitsInNonresidentBitMapCsvFile,$LogFileTransactionTableCsv,$LogFileTransactionTableCsvFile
 Global $LogFileReparseRCsv,$LogFileQuotaQCsv,$LogFileQuotaOCsv,$LogFileObjIdOCsv,$LogFileReparseRCsvFile,$LogFileQuotaQCsvFile,$LogFileQuotaOCsvFile,$LogFileObjIdOCsvFile,$LogFileRCRDCsv,$LogFileRCRDCsvFile
 Global $client_index,$record_type,$transaction_id,$lf_flags,$target_attribute,$lcns_to_follow,$record_offset_in_mft,$attribute_offset,$MftClusterIndex,$target_vcn,$target_lcn,$InOpenAttributeTable=-1,$LsnValidationLevel
-Global $LogFileTransactionHeaderCsv,$LogFileTransactionHeaderCsvFile,$LogFileSlackOpenAttributeTableCsv,$LogFileSlackOpenAttributeTableCsvFile,$LogFileSlackAttributeNamesDumpCsv,$LogFileSlackAttributeNamesDumpCsvFile
-Global $GlobalDataKeepCounter=0,$GlobalRecordSpreadCounter=0,$GlobalRecordSpreadReset=0,$GlobalRecordSpreadReset2=0,$DoRebuildBrokenHeader=False,$MinSizeBrokenTransaction = 80
+Global $LogFileTransactionHeaderCsv,$LogFileTransactionHeaderCsvFile,$LogFileSlackOpenAttributeTableCsv,$LogFileSlackOpenAttributeTableCsvFile,$LogFileSlackAttributeNamesDumpCsv,$LogFileSlackAttributeNamesDumpCsvFile,$LogFileAttributeListCsv,$LogFileAttributeListCsvFile
+Global $GlobalDataKeepCounter=0,$GlobalRecordSpreadCounter=0,$GlobalRecordSpreadReset=0,$GlobalRecordSpreadReset2=0,$DoRebuildBrokenHeader=False,$MinSizeBrokenTransaction = 80, $IsNt5x=0
 Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $DataQ[1], $AttrQ[1], $BytesPerCluster
 Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
@@ -78,7 +77,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.3", 540, 480, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.4", 540, 480, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -145,8 +144,12 @@ $InputErrorLevel = GUICtrlCreateInput("0.1",400,170,40,20)
 $InputErrorLevelTranslated = GUICtrlCreateInput("",450,170,80,20)
 GUICtrlSetState($InputErrorLevelTranslated, $GUI_DISABLE)
 
-$ButtonStart = GUICtrlCreateButton("Start", 450, 135, 80, 30)
-$myctredit = GUICtrlCreateEdit("", 0, 190, 540, 90, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
+$CheckNt5x = GUICtrlCreateCheckbox("Source is from Nt5x (XP,2003)", 20, 205, 160, 20)
+GUICtrlSetState($CheckNt5x, $GUI_UNCHECKED)
+
+$ButtonStart = GUICtrlCreateButton("Start", 450, 195, 80, 30)
+
+$myctredit = GUICtrlCreateEdit("", 0, 225, 540, 55, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
 _GUICtrlEdit_SetLimitText($myctredit, 128000)
 
 _InjectTimeZoneInfo()
@@ -220,6 +223,13 @@ If GUICtrlRead($CheckUnicode) = 1 Then
 	$EncodingWhenOpen = 2+32
 EndIf
 
+If GUICtrlRead($CheckNt5x) = 1 Then
+	$IsNt5x = True
+Else
+	$IsNt5x = False
+EndIf
+
+
 If GUICtrlRead($CheckReconstruct) = 1 Then
 	$DoReconstructDataRuns = True
 	If $EncodingWhenOpen=34 Then
@@ -275,6 +285,9 @@ $FileOutputTesterArray[14] = $LogFileTransactionTableCsvFile
 $FileOutputTesterArray[15] = $LogFileRCRDCsvFile
 $FileOutputTesterArray[16] = $LogFileSlackOpenAttributeTableCsvFile
 $FileOutputTesterArray[17] = $LogFileSlackAttributeNamesDumpCsvFile
+$FileOutputTesterArray[18] = $LogFileAttributeListCsvFile
+
+
 
 _WriteCSVHeader()
 If $DoSplitCsv Then _WriteCSVExtraHeader()
@@ -297,13 +310,18 @@ _WriteCSVHeaderRCRD()
 _WriteCSVHeaderTransactionHeader()
 _WriteCSVHeaderSlackOpenAttributeTable()
 _WriteCSVHeaderSlackAttributeNamesDump()
+_WriteCSVHeaderAttributeList()
 
 $FileNamesArray[0][0] = "Ref"
 $FileNamesArray[0][1] = "FileName"
 $FileNamesArray[0][2] = "LSN"
 
 _DebugOut("Using $LogFile: " & $InputLogFile)
-_DebugOut("Unicode: " & GUICtrlRead($CheckUnicode))
+If GUICtrlRead($CheckUnicode) = 1 Then
+	_DebugOut("Unicode: 1")
+Else
+	_DebugOut("Unicode: 0")
+EndIf
 
 If StringLen(GUICtrlRead($PrecisionSeparatorInput)) <> 1 Then
 	_DisplayInfo("Error: Precision separator not set properly" & @crlf)
@@ -319,6 +337,7 @@ _DebugOut("Timestamps presented in UTC: " & $UTCconfig)
 _DebugOut("Sectors per cluster: " & $SectorsPerCluster)
 _DebugOut("DataRun reconstruct configuration: " & $DoReconstructDataRuns)
 _DebugOut("Rebuild broken header for transactions found in slack: " & $DoRebuildBrokenHeader)
+_DebugOut("Nt5x: " & $IsNt5x)
 
 $tBuffer = DllStructCreate("byte[" & $Record_Size & "]")
 $tBuffer2 = DllStructCreate("byte[" & $SectorSize & "]")
@@ -335,7 +354,7 @@ _DebugOut("Using DateTime format: " & $DateTimeFormat)
 _DebugOut("Using timestamp precision: " & $TimestampPrecision)
 _DebugOut("------------------- END CONFIGURATION -----------------------")
 
-$Progress = GUICtrlCreateLabel("Decoding $LogFile info and writing to csv", 10, 280,540,20)
+$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 280,540,20)
 GUICtrlSetFont($Progress, 12)
 $ProgressStatus = GUICtrlCreateLabel("", 10, 310, 520, 20)
 $ElapsedTime = GUICtrlCreateLabel("", 10, 325, 520, 20)
@@ -497,6 +516,7 @@ _WinAPI_CloseHandle($LogFileObjIdOCsv)
 _WinAPI_CloseHandle($LogFileTransactionTableCsv)
 _WinAPI_CloseHandle($LogFileSlackOpenAttributeTableCsv)
 _WinAPI_CloseHandle($LogFileSlackAttributeNamesDumpCsv)
+_WinAPI_CloseHandle($LogFileAttributeListCsv)
 
 AdlibUnRegister("_LogFileProgress")
 GUICtrlSetData($ProgressStatus, "Processing LogFile transaction " & $CurrentRecord+1 & " of " & $MaxRecords)
@@ -581,24 +601,36 @@ If $SQLiteExe <> 0 Then
 	ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
 	Exit
 EndIf
-if $DoReconstructDataRuns Then
-	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileDataRunsCsvfile) & "' DataRuns" & @CRLF, $sOutputFile)
+
+;Import csv for dataruns
+If FileExists($LogFileDataRunsCsvfile) Then
+	if $DoReconstructDataRuns Then
+		$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileDataRunsCsvfile) & "' DataRuns" & @CRLF, $sOutputFile)
+		If $SQLiteExe <> 0 Then
+			MsgBox(0,"Error","Could not import " & $LogFileDataRunsCsvfile & " into database: " & @error)
+			ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+			Exit
+		EndIf
+	EndIf
+EndIf
+
+;Import main csv of logfile output
+If FileExists($LogFileCsvFile) Then
+	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileCsvFile) & "' LogFile" & @CRLF, $sOutputFile)
 	If $SQLiteExe <> 0 Then
-		MsgBox(0,"Error","Could not import " & $LogFileDataRunsCsvfile & " into database: " & @error)
+		MsgBox(0,"Error","Could not import " & $LogFileCsvFile & " into database: " & @error)
 		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
 		Exit
 	EndIf
 EndIf
-$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileCsvFile) & "' LogFile" & @CRLF, $sOutputFile)
-If $SQLiteExe <> 0 Then
-	MsgBox(0,"Error","Could not import " & $LogFileCsvFile & " into database: " & @error)
-	ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
-	Exit
-EndIf
-$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileIndxCsvfile) & "' IndexEntries" & @CRLF, $sOutputFile)
-If $SQLiteExe <> 0 Then
-	MsgBox(0,"Error","Could not import " & $LogFileIndxCsvfile & " into database: " & @error)
-	ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+
+;Import csv of INDX decodes
+If FileExists($LogFileIndxCsvfile) Then
+	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileIndxCsvfile) & "' IndexEntries" & @CRLF, $sOutputFile)
+	If $SQLiteExe <> 0 Then
+		MsgBox(0,"Error","Could not import " & $LogFileIndxCsvfile & " into database: " & @error)
+		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+	EndIf
 EndIf
 
 _SQLite_Startup($Sqlite3DllString)
@@ -1565,6 +1597,16 @@ EndIf
 ;	$VerboseOn=0
 ;EndIf
 ;#ce
+;If $this_lsn=105054169 Or $this_lsn=105054288  Or $this_lsn=5693203315 Or $this_lsn=105061642  Or $this_lsn=100666594 Or $this_lsn= 100666924 Then
+;	$VerboseOn=1
+;Else
+;	$VerboseOn=0
+;EndIf
+;If $this_lsn=11539784 Or $this_lsn=11538546 Then
+;	$VerboseOn=1
+;Else
+;	$VerboseOn=0
+;EndIf
 ;_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
 ;_DumpOutput("$target_attribute: " & $target_attribute & @CRLF)
 If $VerboseOn Then
@@ -1596,7 +1638,9 @@ If $VerboseOn Then
 	_DumpOutput("$MftClusterIndex: " & $MftClusterIndex & @CRLF)
 	_DumpOutput("$target_vcn: " & $target_vcn & @CRLF)
 	_DumpOutput("$target_lcn: " & $target_lcn & @CRLF)
+	_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
 	_DumpOutput(@CRLF)
+;	MsgBox(0,"Verbose","Check output")
 EndIf
 ;If $undo_operation_hex="0100" And (((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size) <> 0) Then MsgBox(0,"Info","Check CompensationlogRecord")
 ;ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
@@ -1636,19 +1680,46 @@ If $redo_length > 0 Then
 			If StringLeft($redo_chunk,8) = "494e4458" Then ;INDX
 				$TextInformation &= ";INDX"
 
-				If $KeptRefTmp = 24 And Not $FromRcrdSlack Then
-					$AttributeString = "$INDEX_ALLOCATION($Quota?)"
-					$PredictedRefNumber = $KeptRefTmp
-					$KeptRef = $KeptRefTmp
-				ElseIf $KeptRefTmp = 25 And Not $FromRcrdSlack Then
-					$AttributeString = "$INDEX_ALLOCATION($ObjId?)"
-					$PredictedRefNumber = $KeptRefTmp
-					$KeptRef = $KeptRefTmp
-				ElseIf $KeptRefTmp = 26 And Not $FromRcrdSlack Then
-					$AttributeString = "$INDEX_ALLOCATION($Reparse?)"
-					$PredictedRefNumber = $KeptRefTmp
-					$KeptRef = $KeptRefTmp
+				If Not $FromRcrdSlack Then
+					If $KeptRefTmp = 24 Or $PredictedRefNumber = 24 Or $RealMftRef = 24 Then
+						If $KeptRefTmp = 24 Then
+							If $FoundInTable < 1 Then $AttributeString = "$INDEX_ALLOCATION($Quota?)"
+							$PredictedRefNumber = $KeptRefTmp
+							$KeptRef = $KeptRefTmp
+						EndIf
+						If ($AttributeString = "$INDEX_ALLOCATION:$O" Or $AttributeString = "$INDEX_ROOT:$O" Or $AttributeString = "UNKNOWN:$O") Then
+							_Decode_Quota_O($redo_chunk,1)
+							$TextInformation &= ";See LogFile_QuotaO.csv"
+						EndIf
+						If ($AttributeString = "$INDEX_ALLOCATION:$Q" Or $AttributeString = "$INDEX_ROOT:$Q" Or $AttributeString = "UNKNOWN:$Q") Then
+							_Decode_Quota_Q($redo_chunk,1)
+							$TextInformation &= ";See LogFile_QuotaO.csv"
+						EndIf
+					EndIf
+					If $KeptRefTmp = 25 Or $PredictedRefNumber = 25 Or $RealMftRef = 25 Then
+						If $KeptRefTmp = 25 Then
+							If $FoundInTable < 1 Then $AttributeString = "$INDEX_ALLOCATION($ObjId?)"
+							$PredictedRefNumber = $KeptRefTmp
+							$KeptRef = $KeptRefTmp
+						EndIf
+						If ($AttributeString = "$INDEX_ALLOCATION:$O" Or $AttributeString = "$INDEX_ROOT:$O" Or $AttributeString = "UNKNOWN:$O") Then
+							_Decode_ObjId_O($redo_chunk,1)
+							$TextInformation &= ";See LogFile_ObjIdO.csv"
+						EndIf
+					EndIf
+					If $KeptRefTmp = 26 Or $PredictedRefNumber = 26 Or $RealMftRef = 26 Then
+						If $KeptRefTmp = 26 Then
+							If $FoundInTable < 1 Then $AttributeString = "$INDEX_ALLOCATION($Reparse?)"
+							$PredictedRefNumber = $KeptRefTmp
+							$KeptRef = $KeptRefTmp
+						EndIf
+						If ($AttributeString = "$INDEX_ALLOCATION:$R" Or $AttributeString = "$INDEX_ROOT:$R" Or $AttributeString = "UNKNOWN:$R") Then
+							_Decode_Reparse_R($redo_chunk,1)
+							$TextInformation &= ";See LogFile_ReparseR.csv"
+						EndIf
+					EndIf
 				Else
+
 					$DecodeOk=0
 					$DecodeOk = _Decode_INDX($redo_chunk)
 					If Not $DecodeOk Then ;Possibly $Secure:$SDH or $Secure:$SII
@@ -1656,10 +1727,10 @@ If $redo_length > 0 Then
 ;						ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
 						$Indx = _GetIndxWoFixup($redo_chunk)
 						If StringMid($Indx,89,8) = "49004900" Then ;SDH signature
-							_DecodeIndxEntriesSDH($Indx)
+							_DecodeIndxEntriesSDH($Indx,1)
 							$TextInformation &= ";See LogFile_SecureSDH.csv"
 						Else
-							_DecodeIndxEntriesSII($Indx)
+							_DecodeIndxEntriesSII($Indx,1)
 							$TextInformation &= ";See LogFile_SecureSII.csv"
 						EndIf
 					Else
@@ -1667,41 +1738,73 @@ If $redo_length > 0 Then
 					EndIf
 				EndIf
 				If $PreviousRedoOp = "1c00" And Not $FromRcrdSlack Then
-					$AttributeString = $PreviousAttribute
+					If $FoundInTable < 1 Then $AttributeString = $PreviousAttribute
 					$PredictedRefNumber = $KeptRef
 				EndIf
+
 			Else
-				$UsnOk=0
-				$UsnOk = _UsnDecodeRecord2($redo_chunk)
-				If Not $UsnOk Then
-;					If $record_offset_in_mft + Int($redo_length) = 4096 Then
-					If $PreviousRedoOp="0b00" Then ; SetNewAttributeSizes
-;						MsgBox(0,"Check refs","$PredictedRefNumber: " & $PredictedRefNumber & ", $KeptRef: " & $KeptRef & ", $KeptRefTmp: " & $KeptRefTmp)
-						$PredictedRefNumber = $KeptRef
-						If Int($undo_length) = 0 And $undo_operation_hex = "0000" And Int($record_offset_in_mft) + Int($redo_length) = 4096 Then
-							$TextInformation &= ";$UsnJrnl;Filling of zeros to page boundary"
-							$AttributeString = "$DATA:$J"
-						ElseIf Int($undo_length) >= 32 And $undo_operation_hex="0800" Then
-							_MainSecure($redo_chunk)
+				If $FoundInTable > 0 Then
+					Select
+						Case $AttributeString = "$ATTRIBUTE_LIST"
+							_DecodeAttrList($redo_chunk,1)
+							$TextInformation &= ";See LogFile_AttributeList.csv"
+						Case $AttributeString = "$Data:$SDS"
+							_MainSecure($redo_chunk,1)
 							$TextInformation &= ";$Secure:$SDS;See LogFile_SecurityDescriptors.csv"
-						ElseIf Int($undo_length) > 0 And $undo_operation_hex="0800" Then
-							$TextInformation &= ";$Secure"
-							_DumpOutput("Error in UpdateNonResidentValue: unresolved $Secure: " & $this_lsn & @CRLF)
-							_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
-						Else
-							_DumpOutput("_UsnDecodeRecord2() failed and probably not Filling of zeros to page boundary for $this_lsn: " & $this_lsn & @CRLF)
-							_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
-						EndIf
-					Else ;Likely $Secure:$SDS
-;						ConsoleWrite("_UsnDecodeRecord2() failed and $PreviousRedoOp <> 0b00 for $this_lsn: " & $this_lsn & @CRLF)
-;						ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-						_MainSecure($redo_chunk)
-						$TextInformation &= ";$Secure:$SDS;See LogFile_SecurityDescriptors.csv"
-					EndIf
-;					ConsoleWrite("_UsnDecodeRecord2() failed for $this_lsn: " & $this_lsn & @CRLF)
-;					ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+						Case $AttributeString = "$INDEX_ALLOCATION:$SII"
+							$Indx = _GetIndxWoFixup($redo_chunk)
+							_DecodeIndxEntriesSII($Indx,1)
+							$TextInformation &= ";See LogFile_SecureSII.csv"
+						Case $AttributeString = "$INDEX_ALLOCATION:$SDH"
+							$Indx = _GetIndxWoFixup($redo_chunk)
+							_DecodeIndxEntriesSDH($Indx,1)
+							$TextInformation &= ";See LogFile_SecureSDH.csv"
+						Case ($PredictedRefNumber = 24 Or $RealMftRef = 24) And ($AttributeString = "$INDEX_ALLOCATION:$O" Or $AttributeString = "$INDEX_ROOT:$O" Or $AttributeString = "UNKNOWN:$O")
+							_Decode_Quota_O($redo_chunk,1)
+							$TextInformation &= ";See LogFile_QuotaO.csv"
+						Case ($PredictedRefNumber = 24 Or $RealMftRef = 24) And ($AttributeString = "$INDEX_ALLOCATION:$Q" Or $AttributeString = "$INDEX_ROOT:$Q" Or $AttributeString = "UNKNOWN:$Q")
+							_Decode_Quota_Q($redo_chunk,1)
+							$TextInformation &= ";See LogFile_QuotaQ.csv"
+						Case ($PredictedRefNumber = 25 Or $RealMftRef = 25) And ($AttributeString = "$INDEX_ALLOCATION:$O" Or $AttributeString = "$INDEX_ROOT:$O" Or $AttributeString = "UNKNOWN:$O")
+							_Decode_ObjId_O($redo_chunk,1)
+							$TextInformation &= ";See LogFile_ObjIdO.csv"
+						Case ($PredictedRefNumber = 26 Or $RealMftRef = 26) And ($AttributeString = "$INDEX_ALLOCATION:$R" Or $AttributeString = "$INDEX_ROOT:$R" Or $AttributeString = "UNKNOWN:$R")
+							_Decode_Reparse_R($redo_chunk,1)
+							$TextInformation &= ";See LogFile_ReparseR.csv"
+					EndSelect
 				Else
-					$TextInformation &= ";$UsnJrnl"
+					$UsnOk=0
+					$UsnOk = _UsnDecodeRecord2($redo_chunk)
+					If Not $UsnOk Then
+	;					If $record_offset_in_mft + Int($redo_length) = 4096 Then
+						If $PreviousRedoOp="0b00" Then ; SetNewAttributeSizes
+	;						MsgBox(0,"Check refs","$PredictedRefNumber: " & $PredictedRefNumber & ", $KeptRef: " & $KeptRef & ", $KeptRefTmp: " & $KeptRefTmp)
+							$PredictedRefNumber = $KeptRef
+							If Int($undo_length) = 0 And $undo_operation_hex = "0000" And Int($record_offset_in_mft) + Int($redo_length) = 4096 Then
+								$TextInformation &= ";$UsnJrnl;Filling of zeros to page boundary"
+								$AttributeString = "$DATA:$J"
+							ElseIf Int($undo_length) >= 32 And $undo_operation_hex="0800" Then
+								_MainSecure($redo_chunk,1)
+								$TextInformation &= ";$Secure:$SDS;See LogFile_SecurityDescriptors.csv"
+							ElseIf Int($undo_length) > 0 And $undo_operation_hex="0800" Then
+								$TextInformation &= ";$Secure"
+								_DumpOutput("Error in UpdateNonResidentValue: unresolved $Secure: " & $this_lsn & @CRLF)
+								_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+							Else
+								_DumpOutput("_UsnDecodeRecord2() failed and probably not Filling of zeros to page boundary for $this_lsn: " & $this_lsn & @CRLF)
+								_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+							EndIf
+						Else ;Likely $Secure:$SDS
+	;						ConsoleWrite("_UsnDecodeRecord2() failed and $PreviousRedoOp <> 0b00 for $this_lsn: " & $this_lsn & @CRLF)
+	;						ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+							_MainSecure($redo_chunk,1)
+							$TextInformation &= ";$Secure:$SDS;See LogFile_SecurityDescriptors.csv"
+						EndIf
+	;					ConsoleWrite("_UsnDecodeRecord2() failed for $this_lsn: " & $this_lsn & @CRLF)
+	;					ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+					Else
+						$TextInformation &= ";$UsnJrnl"
+					EndIf
 				EndIf
 			EndIf
 		Case $redo_operation_hex="0900" ; UpdateMappingPairs
@@ -1741,29 +1844,33 @@ If $redo_length > 0 Then
 			Select
 				Case $PredictedRefNumber = 9 Or $RealMftRef = 9 ;$Secure
 					If $redo_length = 40 Then ;$SII
-						_DecodeIndxEntriesSII($redo_chunk)
+						_DecodeIndxEntriesSII($redo_chunk,1)
 						$TextInformation &= ";$Secure:$SII;See LogFile_SecureSII.csv"
 						$AttributeString &= ":$SII"
 					ElseIf $redo_length = 48 Then  ;$SDH
-						_DecodeIndxEntriesSDH($redo_chunk)
+						_DecodeIndxEntriesSDH($redo_chunk,1)
 						$TextInformation &= ";$Secure:$SDH;See LogFile_SecureSDH.csv"
 						$AttributeString &= ":$SDH"
 					EndIf
 
 				Case $PredictedRefNumber = 24 Or $RealMftRef = 24 ;$Quota
 					If $redo_length > 68 Then
-						_Decode_Quota_Q($redo_chunk)
+						_Decode_Quota_Q($redo_chunk,1)
 						$TextInformation &= ";See LogFile_QuotaQ.csv"
 					Else
-						_Decode_Quota_O($redo_chunk)
+						_Decode_Quota_O($redo_chunk,1)
 						$TextInformation &= ";See LogFile_QuotaO.csv"
 					EndIf
 
 				Case $PredictedRefNumber = 25 Or $RealMftRef = 25 ;$ObjId
-					If $redo_length = 88 Then
-						_Decode_ObjId_O($redo_chunk)
+;					If $redo_length = 88 Then ;also 96..
+						_Decode_ObjId_O($redo_chunk,1)
 						$TextInformation &= ";See LogFile_ObjIdO.csv"
-					EndIf
+;					EndIf
+
+				Case $PredictedRefNumber = 26 Or $RealMftRef = 26 ;$Reparse
+					_Decode_Reparse_R($redo_chunk,1)
+					$TextInformation &= ";See LogFile_ReparseR.csv"
 
 				Case Else
 					$DecodeOk=0
@@ -1776,8 +1883,8 @@ If $redo_length > 0 Then
 						If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
 					EndIf
 			EndSelect
-		Case $redo_operation_hex="1000" ; WriteEndOfIndexBuffer -> always 0 but check undo
-			$AttributeString = "$INDEX_ALLOCATION"
+		Case $redo_operation_hex="1000" ; WriteEndOfIndexBuffer -> always 0 (on nt6x?) but check undo
+			If $AttributeString="" Then $AttributeString = "$INDEX_ALLOCATION"
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
 ;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
@@ -1844,10 +1951,19 @@ If $redo_length > 0 Then
 ;			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
 ;			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 			If Not $FromRcrdSlack Then
-				_Decode_OpenAttributeTableDump($redo_chunk)
+				If $IsNt5x Then
+					_Decode_OpenAttributeTableDumpNt5x($redo_chunk)
+				Else
+					_Decode_OpenAttributeTableDumpNt6x($redo_chunk)
+				EndIf
 				$TextInformation &= ";See LogFile_OpenAttributeTable.csv"
 			Else
-				_Decode_SlackOpenAttributeTableDump($redo_chunk)
+				If $IsNt5x Then
+					_Decode_SlackOpenAttributeTableDumpNt5x($redo_chunk)
+				Else
+					_Decode_SlackOpenAttributeTableDumpNt6x($redo_chunk)
+				EndIf
+;				_Decode_SlackOpenAttributeTableDump($redo_chunk)
 				$TextInformation &= ";See LogFile_SlackOpenAttributeTable.csv"
 			EndIf
 		Case $redo_operation_hex="1E00" ;AttributeNamesDump
@@ -1875,15 +1991,17 @@ If $redo_length > 0 Then
 			_Decode_TransactionTableDump($redo_chunk)
 			$TextInformation &= ";See LogFile_TransactionTable.csv"
 		Case $redo_operation_hex="2100" ;UpdateRecordDataRoot
-			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
-			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
-			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
-			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+;			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+			_Decode_Quota_Q_SingleEntry($redo_chunk,1)
 		Case $redo_operation_hex="2200" ;UpdateRecordDataAllocation
-			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
-			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
-			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
-			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+;			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+			_Decode_Quota_Q_SingleEntry($redo_chunk,1)
 		Case $redo_operation = "UNKNOWN"
 			$TextInformation &= ";RedoOperation="&$redo_operation_hex
 			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
@@ -1960,27 +2078,27 @@ If $undo_length > 0 Then ; Not needed I guess
 			Select
 				Case $PredictedRefNumber = 9 Or $RealMftRef = 9 ;$Secure
 					If $undo_length = 40 Then ;$SII
-						_DecodeIndxEntriesSII($undo_chunk)
+						_DecodeIndxEntriesSII($undo_chunk,0)
 						$TextInformation &= ";$Secure:$SII;See LogFile_SecureSII.csv"
 						$AttributeString &= ":$SII"
 					ElseIf $undo_length = 48 Then  ;$SDH
-						_DecodeIndxEntriesSDH($undo_chunk)
+						_DecodeIndxEntriesSDH($undo_chunk,0)
 						$TextInformation &= ";$Secure:$SDH;See LogFile_SecureSDH.csv"
 						$AttributeString &= ":$SDH"
 					EndIf
 
 				Case $PredictedRefNumber = 24 Or $RealMftRef = 24 ;$Quota
 					If $undo_length > 68 Then
-						_Decode_Quota_Q($undo_chunk)
+						_Decode_Quota_Q($undo_chunk,0)
 						$TextInformation &= ";See LogFile_QuotaQ.csv"
 					Else
-						_Decode_Quota_O($undo_chunk)
+						_Decode_Quota_O($undo_chunk,0)
 						$TextInformation &= ";See LogFile_QuotaO.csv"
 					EndIf
 
 				Case $PredictedRefNumber = 25 Or $RealMftRef = 25 ;$ObjId
 					If $undo_length = 88 Then
-						_Decode_ObjId_O($undo_chunk)
+						_Decode_ObjId_O($undo_chunk,0)
 						$TextInformation &= ";See LogFile_ObjIdO.csv"
 					EndIf
 
@@ -2002,6 +2120,47 @@ If $undo_length > 0 Then ; Not needed I guess
 					EndIf
 			EndSelect
 		Case $undo_operation_hex="1000" ; WriteEndOfIndexBuffer
+			Select
+				Case $AttributeString = "$ATTRIBUTE_LIST"
+					_DecodeAttrList($undo_chunk,0)
+					$TextInformation &= ";See LogFile_AttributeList.csv"
+				Case $AttributeString = "$Data:$SDS"
+					_MainSecure($undo_chunk,0)
+					$TextInformation &= ";$Secure:$SDS;See LogFile_SecurityDescriptors.csv"
+				Case $AttributeString = "$INDEX_ALLOCATION:$SII"
+					$Indx = _GetIndxWoFixup($undo_chunk)
+					_DecodeIndxEntriesSII($Indx,0)
+					$TextInformation &= ";See LogFile_SecureSII.csv"
+				Case $AttributeString = "$INDEX_ALLOCATION:$SDH"
+					$Indx = _GetIndxWoFixup($undo_chunk)
+					_DecodeIndxEntriesSDH($Indx,0)
+					$TextInformation &= ";See LogFile_SecureSDH.csv"
+				Case ($PredictedRefNumber = 24 Or $RealMftRef = 24) And ($AttributeString = "$INDEX_ALLOCATION:$O" Or $AttributeString = "$INDEX_ROOT:$O" Or $AttributeString = "UNKNOWN:$O")
+					_Decode_Quota_O($undo_chunk,0)
+					$TextInformation &= ";See LogFile_QuotaO.csv"
+				Case ($PredictedRefNumber = 24 Or $RealMftRef = 24) And ($AttributeString = "$INDEX_ALLOCATION:$Q" Or $AttributeString = "$INDEX_ROOT:$Q" Or $AttributeString = "UNKNOWN:$Q")
+					_Decode_Quota_Q($undo_chunk,0)
+					$TextInformation &= ";See LogFile_QuotaQ.csv"
+				Case ($PredictedRefNumber = 25 Or $RealMftRef = 25) And ($AttributeString = "$INDEX_ALLOCATION:$O" Or $AttributeString = "$INDEX_ROOT:$O" Or $AttributeString = "UNKNOWN:$O")
+					_Decode_ObjId_O($undo_chunk,0)
+					$TextInformation &= ";See LogFile_ObjIdO.csv"
+				Case ($PredictedRefNumber = 26 Or $RealMftRef = 26) And ($AttributeString = "$INDEX_ALLOCATION:$R" Or $AttributeString = "$INDEX_ROOT:$R" Or $AttributeString = "UNKNOWN:$R")
+					_Decode_Reparse_R($undo_chunk,0)
+					$TextInformation &= ";See LogFile_ReparseR.csv"
+				Case Not ($PredictedRefNumber = 9 Or $PredictedRefNumber = 24 Or $PredictedRefNumber = 25 Or $PredictedRefNumber = 26 Or $RealMftRef = 9 Or $RealMftRef = 24 Or $RealMftRef = 25 Or $RealMftRef = 26) And $AttributeString = "$INDEX_ALLOCATION:$I30"
+					$DecodeOk=0
+					$DecodeOk = _Decode_UndoWipeINDX($undo_chunk)
+					If Not $DecodeOk Then
+						_DumpOutput(@CRLF & "_Decode_UndoWipeINDX() failed for $this_lsn: " & $this_lsn & @CRLF)
+						_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+					EndIf
+				Case Else
+					_DumpOutput("Unresolved: " & $undo_operation & @CRLF)
+					_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+					_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+			EndSelect
+;--------------------------------------------
+#cs
 			If Not ($PredictedRefNumber = 9 Or $PredictedRefNumber = 24 Or $PredictedRefNumber = 25 Or $PredictedRefNumber = 26 Or $RealMftRef = 9 Or $RealMftRef = 24 Or $RealMftRef = 25 Or $RealMftRef = 26) Then
 ;			If ($PredictedRefNumber <> 9 And $PredictedRefNumber <> 24 And $PredictedRefNumber <> 25 And $PredictedRefNumber <> 26) Or ($RealMftRef <> 9 And $RealMftRef <> 24 And $RealMftRef <> 25 And $RealMftRef <> 26) Then
 ;			If $undo_length*2>168 Then
@@ -2020,6 +2179,8 @@ If $undo_length > 0 Then ; Not needed I guess
 				_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 ;				MsgBox(0,"Info","Check output of transaction with lsn: " & $this_lsn)
 			EndIf
+
+#ce
 		Case $undo_operation_hex="1100" ; SetIndexEntryVcnRoot
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;			ConsoleWrite("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
@@ -2071,15 +2232,17 @@ If $undo_length > 0 Then ; Not needed I guess
 			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
 			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 		Case $undo_operation_hex="2100" ;UpdateRecordDataRoot
-			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
-			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
-			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
-			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+;			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+			_Decode_Quota_Q_SingleEntry($undo_chunk,0)
 		Case $undo_operation_hex="2200" ;UpdateRecordDataAllocation
-			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
-			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
-			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
-			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+;			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+			_Decode_Quota_Q_SingleEntry($undo_chunk,0)
 		Case $undo_operation = "UNKNOWN"
 			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
 			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
@@ -2144,10 +2307,14 @@ If Not $FromRcrdSlack Then
 	EndIf
 EndIf
 
-_SetNameOnSystemFiles()
+If $FN_Name="" Then _SetNameOnSystemFiles()
+
 _WriteLogFileCsv()
 If $DoSplitCsv Then _WriteCSVExtra()
 _ClearVar()
+If $VerboseOn Then
+;	MsgBox(0,"Verbose","Check output")
+EndIf
 EndFunc
 
 Func _DecodeRSTR($RSTRRecord)
@@ -3911,74 +4078,55 @@ EndFunc
 Func _Get_ReparsePoint($Entry,$Current_Attrib_Number,$CurrentAttributeName)
 	Local $LocalAttributeOffset = 1,$ReparseType,$ReparseDataLength,$ReparsePadding,$ReparseSubstititeNameOffset,$ReparseSubstituteNameLength,$ReparsePrintNameOffset,$ReparsePrintNameLength,$ReparseSubstititeName,$ReparsePrintName
 	$ReparseType = StringMid($Entry,$LocalAttributeOffset,8)
-	$ReparseType = "0x"& StringMid($ReparseType,7,2) & StringMid($ReparseType,5,2) & StringMid($ReparseType,3,2) & StringMid($ReparseType,1,2)
-;http://msdn.microsoft.com/en-us/library/dd541667(v=prot.10).aspx
-;http://msdn.microsoft.com/en-us/library/windows/desktop/aa365740(v=vs.85).aspx
-	Select
-		Case $ReparseType = '0xA000000C'
-			$ReparseType = 'SYMLINK'
-		Case $ReparseType = '0x8000000B'
-			$ReparseType = 'FILTER_MANAGER'
-		Case $ReparseType = '0x80000012'
-			$ReparseType = 'DFSR'
-		Case $ReparseType = '0x8000000A'
-			$ReparseType = 'DFS'
-		Case $ReparseType = '0x80000007'
-			$ReparseType = 'SIS'
-		Case $ReparseType = '0x80000005'
-			$ReparseType = 'DRIVER_EXTENDER'
-		Case $ReparseType = '0x80000006'
-			$ReparseType = 'HSM2'
-		Case $ReparseType = '0xC0000004'
-			$ReparseType = 'HSM'
-		Case $ReparseType = '0xA0000003'
-			$ReparseType = 'MOUNT_POINT'
-		Case $ReparseType = '0x80000009'
-			$ReparseType = 'CSV'
-		Case $ReparseType = '0x80000013'
-			$ReparseType = 'DEDUP'
-		Case $ReparseType = '0x80000014'
-			$ReparseType = 'NFS'
-		Case $ReparseType = '0x80000008'
-			$ReparseType = 'WIM'
-		Case Else
-			$ReparseType = 'UNKNOWN'
-	EndSelect
+	$ReparseType = "0x"& _SwapEndian($ReparseType)
+	$ReparseType = _GetReparseType($ReparseType)
 	$ReparseDataLength = StringMid($Entry,$LocalAttributeOffset+8,4)
-	$ReparseDataLength = Dec(StringMid($ReparseDataLength,3,2) & StringMid($ReparseDataLength,1,2))
-	$ReparsePadding = StringMid($Entry,$LocalAttributeOffset+12,4)
+	$ReparseDataLength = Dec(_SwapEndian($ReparseDataLength),2)
+;	$ReparsePadding = StringMid($Entry,$LocalAttributeOffset+12,4)
 	$ReparseData = StringMid($Entry,$LocalAttributeOffset+16,$ReparseDataLength*2)
+
 	$ReparseSubstititeNameOffset = StringMid($ReparseData,1,4)
-	$ReparseSubstititeNameOffset = Dec(StringMid($ReparseSubstititeNameOffset,3,2) & StringMid($ReparseSubstititeNameOffset,1,2))
+	$ReparseSubstititeNameOffset = Dec(_SwapEndian($ReparseSubstititeNameOffset),2)
 	$ReparseSubstituteNameLength = StringMid($ReparseData,5,4)
-	$ReparseSubstituteNameLength = Dec(StringMid($ReparseSubstituteNameLength,3,2) & StringMid($ReparseSubstituteNameLength,1,2))
+	$ReparseSubstituteNameLength = Dec(_SwapEndian($ReparseSubstituteNameLength),2)
 	$ReparsePrintNameOffset = StringMid($ReparseData,9,4)
-	$ReparsePrintNameOffset = Dec(StringMid($ReparsePrintNameOffset,3,2) & StringMid($ReparsePrintNameOffset,1,2))
+	$ReparsePrintNameOffset = Dec(_SwapEndian($ReparsePrintNameOffset),2)
 	$ReparsePrintNameLength = StringMid($ReparseData,13,4)
-	$ReparsePrintNameLength = Dec(StringMid($ReparsePrintNameLength,3,2) & StringMid($ReparsePrintNameLength,1,2))
-	$ReparseSubstititeName = StringMid($Entry,$LocalAttributeOffset+16+16,$ReparseSubstituteNameLength*2)
-;	MsgBox(0,"$ReparseSubstititeName",$ReparseSubstititeName)
-	$ReparseSubstititeName = BinaryToString("0x"&$ReparseSubstititeName,2)
-	$ReparsePrintName = StringMid($Entry,($LocalAttributeOffset+32)+($ReparsePrintNameOffset*2),$ReparsePrintNameLength*2)
-;	MsgBox(0,"$ReparsePrintName",$ReparsePrintName)
-	$ReparsePrintName = BinaryToString("0x"&$ReparsePrintName,2)
+	$ReparsePrintNameLength = Dec(_SwapEndian($ReparsePrintNameLength),2)
+	;-----if $ReparseSubstititeNameOffset<>0 then the order is reversed and parsed from end of $ReparseData ????????
+	If StringMid($ReparseData,1,4) <> "0000" Then
+		$ReparseSubstititeName = StringMid($Entry,StringLen($Entry)+1-($ReparseSubstituteNameLength*2),$ReparseSubstituteNameLength*2)
+;		_DumpOutput("$ReparseSubstititeName = " & $ReparseSubstititeName & @crlf)
+		$ReparseSubstititeName = BinaryToString("0x"&$ReparseSubstititeName,2)
+		$ReparsePrintName = StringMid($Entry,StringLen($Entry)+1-($ReparseSubstituteNameLength*2)-($ReparsePrintNameLength*2),$ReparsePrintNameLength*2)
+;		_DumpOutput("$ReparsePrintName = " & $ReparsePrintName & @crlf)
+		$ReparsePrintName = BinaryToString("0x"&$ReparsePrintName,2)
+	Else
+		$ReparseSubstititeName = StringMid($Entry,$LocalAttributeOffset+16+16,$ReparseSubstituteNameLength*2)
+;		_DumpOutput("$ReparseSubstititeName = " & $ReparseSubstititeName & @crlf)
+		$ReparseSubstititeName = BinaryToString("0x"&$ReparseSubstititeName,2)
+		$ReparsePrintName = StringMid($Entry,($LocalAttributeOffset+32)+($ReparsePrintNameOffset*2),$ReparsePrintNameLength*2)
+;		_DumpOutput("$ReparsePrintName = " & $ReparsePrintName & @crlf)
+		$ReparsePrintName = BinaryToString("0x"&$ReparsePrintName,2)
+	EndIf
 	If $VerboseOn Then
-		ConsoleWrite("### $REPARSE_POINT ATTRIBUTE ###" & @CRLF)
-		ConsoleWrite("$ReparseType = " & $ReparseType & @crlf)
-		ConsoleWrite("$ReparseDataLength = " & $ReparseDataLength & @crlf)
-		ConsoleWrite("$ReparsePadding = " & $ReparsePadding & @crlf)
-		ConsoleWrite("$ReparseSubstititeNameOffset = " & $ReparseSubstititeNameOffset & @crlf)
-		ConsoleWrite("$ReparseSubstituteNameLength = " & $ReparseSubstituteNameLength & @crlf)
-		ConsoleWrite("$ReparsePrintNameOffset = " & $ReparsePrintNameOffset & @crlf)
-		ConsoleWrite("$ReparsePrintNameLength = " & $ReparsePrintNameLength & @crlf)
-		ConsoleWrite("$ReparseSubstititeName = " & $ReparseSubstititeName & @crlf)
-		ConsoleWrite("$ReparsePrintName = " & $ReparsePrintName & @crlf)
+		_DumpOutput("_Get_ReparsePoint():" & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$Entry) & @CRLF)
+		_DumpOutput("$ReparseType = " & $ReparseType & @crlf)
+		_DumpOutput("$ReparseDataLength = " & $ReparseDataLength & @crlf)
+;		_DumpOutput("$ReparsePadding = " & $ReparsePadding & @crlf)
+		_DumpOutput("$ReparseSubstititeNameOffset = " & $ReparseSubstititeNameOffset & @crlf)
+		_DumpOutput("$ReparseSubstituteNameLength = " & $ReparseSubstituteNameLength & @crlf)
+		_DumpOutput("$ReparsePrintNameOffset = " & $ReparsePrintNameOffset & @crlf)
+		_DumpOutput("$ReparsePrintNameLength = " & $ReparsePrintNameLength & @crlf)
+		_DumpOutput("$ReparseSubstititeName = " & $ReparseSubstititeName & @crlf)
+		_DumpOutput("$ReparsePrintName = " & $ReparsePrintName & @crlf)
 	EndIf
 	$RPArr[0][$Current_Attrib_Number] = "RP Number " & $Current_Attrib_Number
 	$RPArr[1][$Current_Attrib_Number] = $CurrentAttributeName
 	$RPArr[2][$Current_Attrib_Number] = $ReparseType
 	$RPArr[3][$Current_Attrib_Number] = $ReparseDataLength
-	$RPArr[4][$Current_Attrib_Number] = $ReparsePadding
+;	$RPArr[4][$Current_Attrib_Number] = $ReparsePadding
 	$RPArr[5][$Current_Attrib_Number] = $ReparseSubstititeNameOffset
 	$RPArr[6][$Current_Attrib_Number] = $ReparseSubstituteNameLength
 	$RPArr[7][$Current_Attrib_Number] = $ReparsePrintNameOffset
@@ -4146,7 +4294,9 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				_Get_StandardInformation($record, 1, $RecordSize)
 				$AttributeString = "$STANDARD_INFORMATION"
 			Case $AttributeTypeCheck = "2000"
+				_DecodeAttrList($record,$IsRedo)
 				$AttributeString = "$ATTRIBUTE_LIST"
+				$TextInformation &= ";See LogFile_AttributeList.csv"
 			Case $AttributeTypeCheck = "3000"
 				_Get_FileName($record, 1, $RecordSize, 1)
 				$AttributeString = "$FILE_NAME"
@@ -4161,7 +4311,7 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 ;				ConsoleWrite(_HexEncode("0x"&$CoreAttrChunk) & @CRLF)
 				_DecodeSecurityDescriptorAttribute($CoreAttrChunk)
 				;Write information to csv
-				_WriteCsvSecureSDS()
+				_WriteCsvSecureSDS($IsRedo)
 				;Make sure all global variables for csv are cleared
 				_ClearVarSecureSDS()
 				$TextInformation &= ";See LogFile_SecurityDescriptors.csv"
@@ -4227,6 +4377,9 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				$AttributeString = "$STANDARD_INFORMATION"
 			Case $AttributeTypeCheck = "2000"
 				$AttributeString = "$ATTRIBUTE_LIST"
+				_DecodeAttrList($record,$IsRedo)
+				$AttributeString = "$ATTRIBUTE_LIST"
+				$TextInformation &= ";See LogFile_AttributeList.csv"
 			Case $AttributeTypeCheck = "3000"
 				_Get_FileName($record, 1, $RecordSize, 1)
 				$AttributeString = "$FILE_NAME"
@@ -4241,7 +4394,7 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 ;				ConsoleWrite(_HexEncode("0x"&$CoreAttrChunk) & @CRLF)
 				_DecodeSecurityDescriptorAttribute($CoreAttrChunk)
 				;Write information to csv
-				_WriteCsvSecureSDS()
+				_WriteCsvSecureSDS($IsRedo)
 				;Make sure all global variables for csv are cleared
 				_ClearVarSecureSDS()
 				$TextInformation &= ";See LogFile_SecurityDescriptors.csv"
@@ -5524,6 +5677,14 @@ Func _PrepareOutput()
 		Exit
 	EndIf
 	_DebugOut("Created output file: " & $LogFileSlackAttributeNamesDumpCsvFile)
+
+	$LogFileAttributeListCsvFile = $ParserOutDir & "\LogFile_AttributeList.csv"
+	$LogFileAttributeListCsv = FileOpen($LogFileAttributeListCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileAttributeListCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileAttributeListCsvFile)
 EndFunc
 
 Func _WriteCSVExtraHeader()
@@ -5566,119 +5727,215 @@ EndFunc
 
 Func _Decode_OpenNonresidentAttribute($datachunk)
 	Local $Unknown1, $aMFTReference, $aMFTReferenceSeqNo, $LsnOfOpenRecord, $aAttributeHex, $Unknown2, $AllocatedOrNextFree, $DirtyPagesSeen, $AttributeNamePresent, $UnknownPointer, $EndSignature, $RetVal=0
-;	_DumpOutput("OpenNonresidentAttribute: " & @CRLF)
-;	_DumpOutput("LSN: " & $this_lsn & @CRLF)
-;	_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
-	If StringLen($datachunk) = 88 Then
-		$Unknown1 = _SwapEndian(StringMid($datachunk,9,8))
-		$PredictedRefNumber = Dec(_SwapEndian(StringMid($datachunk,17,12)))
-		$KeptRef = $PredictedRefNumber
-		$aMFTReferenceSeqNo = Dec(_SwapEndian(StringMid($datachunk,29,4)))
-		$LsnOfOpenRecord = Dec(_SwapEndian(StringMid($datachunk,33,16)))
-		$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
-;		if $client_previous_lsn <> $LsnOfOpenRecord Then
-;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-;			ConsoleWrite("$client_previous_lsn: " & $client_previous_lsn & @CRLF)
-;			ConsoleWrite("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
-;			$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
-;		EndIf
-		$aAttributeHex = StringMid($datachunk,57,4)
-		$AttributeString = _ResolveAttributeType($aAttributeHex)
-	ElseIf StringLen($datachunk) = 80 Then ;OPEN_ATTRIBUTE_ENTRY
-		$AllocatedOrNextFree = _SwapEndian(StringMid($datachunk,1,8))
-		$DirtyPagesSeen = StringMid($datachunk, 9, 2)
-		$AttributeNamePresent = StringMid($datachunk, 11, 2)
-		$unknown1 = StringMid($datachunk, 13, 4)
-
-		$aAttributeHex = StringMid($datachunk,17,8)
-		$AttributeString = _ResolveAttributeType(StringLeft($aAttributeHex,4))
-
-		$unknown2 = StringMid($datachunk, 25, 8)
-
-		$PredictedRefNumber = Dec(_SwapEndian(StringMid($datachunk,33,12)))
-		$KeptRef = $PredictedRefNumber
-		$aMFTReferenceSeqNo = Dec(_SwapEndian(StringMid($datachunk,45,4)))
-		$LsnOfOpenRecord = Dec(_SwapEndian(StringMid($datachunk,49,16))) ;LsnOfOpenRecord
-		$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
-
-		$UnknownPointer = StringMid($datachunk, 65, 8)
-		$EndSignature = StringMid($datachunk,73,8)
-#cs
-		_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
-		_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
-		_DumpOutput("$AttributeNamePresent: " & $AttributeNamePresent & @CRLF)
-		_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
-		_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
-		_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
-		_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
-		_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
-		_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
-		_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
-		_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
-#ce
-		$FoundInTable = _ArraySearch($OpenAttributesArray,$target_attribute,0,0,0,2,1,0)
-		If $FoundInTable > 0 Then
-			If $OpenAttributesArray[$FoundInTable][1] <> 0xffffffff Then
-;				_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
-;				$OpenAttributesArray[$FoundInTable][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
-				$OpenAttributesArray[$FoundInTable][1] = "0xFFFFFFFF"
-				$OpenAttributesArray[$FoundInTable][2] = "0x" & $DirtyPagesSeen
-				$OpenAttributesArray[$FoundInTable][3] = "0x" & $AttributeNamePresent
-				$OpenAttributesArray[$FoundInTable][4] = "0x" & $unknown1
-				$OpenAttributesArray[$FoundInTable][5] = "0x" & $aAttributeHex
-				$OpenAttributesArray[$FoundInTable][6] = "0x" & $unknown2
-				$OpenAttributesArray[$FoundInTable][7] = $PredictedRefNumber
-				$OpenAttributesArray[$FoundInTable][8] = $aMFTReferenceSeqNo
-				$OpenAttributesArray[$FoundInTable][9] = $LsnOfOpenRecord
-				$OpenAttributesArray[$FoundInTable][10] = "0x" & $UnknownPointer
-				$OpenAttributesArray[$FoundInTable][11] = "0x" & $EndSignature
-;				$OpenAttributesArray[$FoundInTable][12] = "Attribute name in undo chunk"
-				$RetVal = $FoundInTable
-				$TextInformation &= ";Updated OpenAttributesArray"
-			Else
-				_DumpOutput("Error in OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
-				_DumpOutput("AllocatedOrNextFree was 0xffffffff" & @CRLF)
-			EndIf
-		Else
-			#cs
-			_DumpOutput("Error in OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
-			_DumpOutput("Could not update array with new entry" & @CRLF)
-			_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
-			_DumpOutput("$target_attribute: " & $target_attribute & @CRLF)
-			_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
-			_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
-			_DumpOutput("$AttributeNamePresent: " & $AttributeNamePresent & @CRLF)
-			_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
-			_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
-			_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
-			_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
-			_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
-			_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
-			_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
-			_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
-			_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
-			#ce
-			$ArrayEnd = UBound($OpenAttributesArray)
-			ReDim $OpenAttributesArray[$ArrayEnd+1][13]
-			$OpenAttributesArray[$ArrayEnd][0] = $target_attribute
-			$OpenAttributesArray[$ArrayEnd][1] = $AllocatedOrNextFree
-			$OpenAttributesArray[$ArrayEnd][2] = "0x" & $DirtyPagesSeen
-			$OpenAttributesArray[$ArrayEnd][3] = "0x" & $AttributeNamePresent
-			$OpenAttributesArray[$ArrayEnd][4] = "0x" & $unknown1
-			$OpenAttributesArray[$ArrayEnd][5] = "0x" & $aAttributeHex
-			$OpenAttributesArray[$ArrayEnd][6] = "0x" & $unknown2
-			$OpenAttributesArray[$ArrayEnd][7] = $PredictedRefNumber
-			$OpenAttributesArray[$ArrayEnd][8] = $aMFTReferenceSeqNo
-			$OpenAttributesArray[$ArrayEnd][9] = $LsnOfOpenRecord
-			$OpenAttributesArray[$ArrayEnd][10] = "0x" & $UnknownPointer
-			$OpenAttributesArray[$ArrayEnd][11] = "0x" & $EndSignature
-			$RetVal = $ArrayEnd
-			$TextInformation &= ";Updated OpenAttributesArray"
-		EndIf
-	Else
-		_DumpOutput("Unresolved OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+	If $VerboseOn Then
+		_DumpOutput("_Decode_OpenNonresidentAttribute(): " & @CRLF)
+		_DumpOutput("LSN: " & $this_lsn & @CRLF)
 		_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
 	EndIf
+
+	Select
+		Case Not $IsNt5x And StringLen($datachunk) = 88
+			$Unknown1 = _SwapEndian(StringMid($datachunk,9,8))
+			$PredictedRefNumber = Dec(_SwapEndian(StringMid($datachunk,17,12)))
+			$KeptRef = $PredictedRefNumber
+			$aMFTReferenceSeqNo = Dec(_SwapEndian(StringMid($datachunk,29,4)))
+			$LsnOfOpenRecord = Dec(_SwapEndian(StringMid($datachunk,33,16)))
+			$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
+	;		if $client_previous_lsn <> $LsnOfOpenRecord Then
+	;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
+	;			ConsoleWrite("$client_previous_lsn: " & $client_previous_lsn & @CRLF)
+	;			ConsoleWrite("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+	;			$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
+	;		EndIf
+			$aAttributeHex = StringMid($datachunk,57,4)
+			$AttributeString = _ResolveAttributeType($aAttributeHex)
+		Case Not $IsNt5x And StringLen($datachunk) = 80 ;OPEN_ATTRIBUTE_ENTRY
+			$AllocatedOrNextFree = _SwapEndian(StringMid($datachunk,1,8))
+			$DirtyPagesSeen = StringMid($datachunk, 9, 2)
+			$AttributeNamePresent = StringMid($datachunk, 11, 2)
+			$unknown1 = StringMid($datachunk, 13, 4)
+
+			$aAttributeHex = StringMid($datachunk,17,8)
+			$AttributeString = _ResolveAttributeType(StringLeft($aAttributeHex,4))
+
+			$unknown2 = StringMid($datachunk, 25, 8)
+
+			$PredictedRefNumber = Dec(_SwapEndian(StringMid($datachunk,33,12)))
+			$KeptRef = $PredictedRefNumber
+			$aMFTReferenceSeqNo = Dec(_SwapEndian(StringMid($datachunk,45,4)))
+			$LsnOfOpenRecord = Dec(_SwapEndian(StringMid($datachunk,49,16))) ;LsnOfOpenRecord
+			$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
+
+			$UnknownPointer = _SwapEndian(StringMid($datachunk, 65, 8))
+			$EndSignature = StringMid($datachunk,73,8)
+			If $VerboseOn Then
+				_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
+				_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
+				_DumpOutput("$AttributeNamePresent: " & $AttributeNamePresent & @CRLF)
+				_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+				_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+				_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
+				_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+				_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+				_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+				_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
+				_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
+			EndIf
+
+			$FoundInTable = _ArraySearch($OpenAttributesArray,$target_attribute,0,0,0,2,1,0)
+			If $FoundInTable > 0 Then
+				If $OpenAttributesArray[$FoundInTable][1] <> 0xffffffff Then
+	;				_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+	;				$OpenAttributesArray[$FoundInTable][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
+					$OpenAttributesArray[$FoundInTable][1] = "0xFFFFFFFF"
+					$OpenAttributesArray[$FoundInTable][2] = "0x" & $DirtyPagesSeen
+					$OpenAttributesArray[$FoundInTable][3] = "0x" & $AttributeNamePresent
+					$OpenAttributesArray[$FoundInTable][4] = "0x" & $unknown1
+					$OpenAttributesArray[$FoundInTable][5] = "0x" & $aAttributeHex
+					$OpenAttributesArray[$FoundInTable][6] = "0x" & $unknown2
+					$OpenAttributesArray[$FoundInTable][7] = $PredictedRefNumber
+					$OpenAttributesArray[$FoundInTable][8] = $aMFTReferenceSeqNo
+					$OpenAttributesArray[$FoundInTable][9] = $LsnOfOpenRecord
+					$OpenAttributesArray[$FoundInTable][10] = "0x" & $UnknownPointer
+					$OpenAttributesArray[$FoundInTable][11] = "0x" & $EndSignature
+	;				$OpenAttributesArray[$FoundInTable][12] = "Attribute name in undo chunk"
+					$RetVal = $FoundInTable
+					$TextInformation &= ";Updated OpenAttributesArray"
+				Else
+					_DumpOutput("Error in OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+					_DumpOutput("AllocatedOrNextFree was 0xffffffff" & @CRLF)
+				EndIf
+			Else
+				#cs
+				_DumpOutput("Error in OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+				_DumpOutput("Could not update array with new entry" & @CRLF)
+				_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
+				_DumpOutput("$target_attribute: " & $target_attribute & @CRLF)
+				_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
+				_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
+				_DumpOutput("$AttributeNamePresent: " & $AttributeNamePresent & @CRLF)
+				_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+				_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+				_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
+				_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+				_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+				_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+				_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
+				_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
+				_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+				#ce
+				$ArrayEnd = UBound($OpenAttributesArray)
+				ReDim $OpenAttributesArray[$ArrayEnd+1][13]
+				$OpenAttributesArray[$ArrayEnd][0] = $target_attribute
+				$OpenAttributesArray[$ArrayEnd][1] = $AllocatedOrNextFree
+				$OpenAttributesArray[$ArrayEnd][2] = "0x" & $DirtyPagesSeen
+				$OpenAttributesArray[$ArrayEnd][3] = "0x" & $AttributeNamePresent
+				$OpenAttributesArray[$ArrayEnd][4] = "0x" & $unknown1
+				$OpenAttributesArray[$ArrayEnd][5] = "0x" & $aAttributeHex
+				$OpenAttributesArray[$ArrayEnd][6] = "0x" & $unknown2
+				$OpenAttributesArray[$ArrayEnd][7] = $PredictedRefNumber
+				$OpenAttributesArray[$ArrayEnd][8] = $aMFTReferenceSeqNo
+				$OpenAttributesArray[$ArrayEnd][9] = $LsnOfOpenRecord
+				$OpenAttributesArray[$ArrayEnd][10] = "0x" & $UnknownPointer
+				$OpenAttributesArray[$ArrayEnd][11] = "0x" & $EndSignature
+				$RetVal = $ArrayEnd
+				$TextInformation &= ";Updated OpenAttributesArray"
+			EndIf
+		Case $IsNt5x And StringLen($datachunk) = 88 ;OPEN_ATTRIBUTE_ENTRY
+			$AllocatedOrNextFree = _SwapEndian(StringMid($datachunk,1,8))
+			$UnknownPointer = _SwapEndian(StringMid($datachunk, 9, 8))
+			$PredictedRefNumber = Dec(_SwapEndian(StringMid($datachunk,17,12)))
+			$KeptRef = $PredictedRefNumber
+			$aMFTReferenceSeqNo = Dec(_SwapEndian(StringMid($datachunk,29,4)))
+			$LsnOfOpenRecord = Dec(_SwapEndian(StringMid($datachunk,33,16))) ;LsnOfOpenRecord
+			$unknown2 = StringMid($datachunk, 49, 8)
+			$aAttributeHex = StringMid($datachunk,57,8)
+			$AttributeString = _ResolveAttributeType(StringLeft($aAttributeHex,4))
+			$unknown3 = StringMid($datachunk, 65, 8)
+			$EndSignature = StringMid($datachunk,73,8)
+			$DirtyPagesSeen = StringMid($datachunk, 81, 2)
+			$AttributeNamePresent = StringMid($datachunk, 83, 2)
+			$unknown1 = StringMid($datachunk, 85, 4)
+			$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
+
+			If $VerboseOn Then
+				_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
+				_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
+				_DumpOutput("$AttributeNamePresent: " & $AttributeNamePresent & @CRLF)
+				_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+				_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+				_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
+				_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+				_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+				_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+				_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
+				_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
+			EndIf
+
+			$FoundInTable = _ArraySearch($OpenAttributesArray,$target_attribute,0,0,0,2,1,0)
+			If $FoundInTable > 0 Then
+				If $OpenAttributesArray[$FoundInTable][1] <> 0xffffffff Then
+	;				_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+	;				$OpenAttributesArray[$FoundInTable][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
+					$OpenAttributesArray[$FoundInTable][1] = "0xFFFFFFFF"
+					$OpenAttributesArray[$FoundInTable][2] = "0x" & $DirtyPagesSeen
+					$OpenAttributesArray[$FoundInTable][3] = "0x" & $AttributeNamePresent
+					$OpenAttributesArray[$FoundInTable][4] = "0x" & $unknown1
+					$OpenAttributesArray[$FoundInTable][5] = "0x" & $aAttributeHex
+					$OpenAttributesArray[$FoundInTable][6] = "0x" & $unknown2
+					$OpenAttributesArray[$FoundInTable][7] = $PredictedRefNumber
+					$OpenAttributesArray[$FoundInTable][8] = $aMFTReferenceSeqNo
+					$OpenAttributesArray[$FoundInTable][9] = $LsnOfOpenRecord
+					$OpenAttributesArray[$FoundInTable][10] = "0x" & $UnknownPointer
+					$OpenAttributesArray[$FoundInTable][11] = "0x" & $EndSignature
+	;				$OpenAttributesArray[$FoundInTable][12] = "Attribute name in undo chunk"
+					$RetVal = $FoundInTable
+					$TextInformation &= ";Updated OpenAttributesArray"
+				Else
+					_DumpOutput("Error in OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+					_DumpOutput("AllocatedOrNextFree was 0xffffffff" & @CRLF)
+				EndIf
+			Else
+				#cs
+				_DumpOutput("Error in OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+				_DumpOutput("Could not update array with new entry" & @CRLF)
+				_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
+				_DumpOutput("$target_attribute: " & $target_attribute & @CRLF)
+				_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
+				_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
+				_DumpOutput("$AttributeNamePresent: " & $AttributeNamePresent & @CRLF)
+				_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+				_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+				_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
+				_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+				_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+				_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+				_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
+				_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
+				_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+				#ce
+				$ArrayEnd = UBound($OpenAttributesArray)
+				ReDim $OpenAttributesArray[$ArrayEnd+1][13]
+				$OpenAttributesArray[$ArrayEnd][0] = $target_attribute
+				$OpenAttributesArray[$ArrayEnd][1] = $AllocatedOrNextFree
+				$OpenAttributesArray[$ArrayEnd][2] = "0x" & $DirtyPagesSeen
+				$OpenAttributesArray[$ArrayEnd][3] = "0x" & $AttributeNamePresent
+				$OpenAttributesArray[$ArrayEnd][4] = "0x" & $unknown1
+				$OpenAttributesArray[$ArrayEnd][5] = "0x" & $aAttributeHex
+				$OpenAttributesArray[$ArrayEnd][6] = "0x" & $unknown2
+				$OpenAttributesArray[$ArrayEnd][7] = $PredictedRefNumber
+				$OpenAttributesArray[$ArrayEnd][8] = $aMFTReferenceSeqNo
+				$OpenAttributesArray[$ArrayEnd][9] = $LsnOfOpenRecord
+				$OpenAttributesArray[$ArrayEnd][10] = "0x" & $UnknownPointer
+				$OpenAttributesArray[$ArrayEnd][11] = "0x" & $EndSignature
+				$RetVal = $ArrayEnd
+				$TextInformation &= ";Updated OpenAttributesArray"
+			EndIf
+		Case Else
+			_DumpOutput("Unresolved OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
+	EndSelect
+
 	If $VerboseOn Then
 		_DumpOutput("_Decode_OpenNonresidentAttribute(): " & @CRLF)
 		_DumpOutput("$Unknown1: " & $Unknown1 & @CRLF)
@@ -6321,17 +6578,18 @@ Func _UsnDecodeRecord2($Record)
 	$UsnJrnlFileName = StringMid($Record,121,$UsnJrnlFileNameLength*2)
 	$UsnJrnlFileName = BinaryToString("0x"&$UsnJrnlFileName,2)
 	If $VerboseOn Then
-		ConsoleWrite("$UsnJrnlFileReferenceNumber: " & $UsnJrnlFileReferenceNumber & @CRLF)
-		ConsoleWrite("$UsnJrnlMFTReferenceSeqNo: " & $UsnJrnlMFTReferenceSeqNo & @CRLF)
-		ConsoleWrite("$UsnJrnlParentFileReferenceNumber: " & $UsnJrnlParentFileReferenceNumber & @CRLF)
-		ConsoleWrite("$UsnJrnlParentReferenceSeqNo: " & $UsnJrnlParentReferenceSeqNo & @CRLF)
-		ConsoleWrite("$UsnJrnlUsn: " & $UsnJrnlUsn & @CRLF)
-		ConsoleWrite("$UsnJrnlTimestamp: " & $UsnJrnlTimestamp & @CRLF)
-		ConsoleWrite("$UsnJrnlReason: " & $UsnJrnlReason & @CRLF)
-;		ConsoleWrite("$UsnJrnlSourceInfo: " & $UsnJrnlSourceInfo & @CRLF)
-;		ConsoleWrite("$UsnJrnlSecurityId: " & $UsnJrnlSecurityId & @CRLF)
-		ConsoleWrite("$UsnJrnlFileAttributes: " & $UsnJrnlFileAttributes & @CRLF)
-		ConsoleWrite("$UsnJrnlFileName: " & $UsnJrnlFileName & @CRLF)
+		_DumpOutput("_UsnDecodeRecord2(): " & @CRLF)
+		_DumpOutput("$UsnJrnlFileReferenceNumber: " & $UsnJrnlFileReferenceNumber & @CRLF)
+		_DumpOutput("$UsnJrnlMFTReferenceSeqNo: " & $UsnJrnlMFTReferenceSeqNo & @CRLF)
+		_DumpOutput("$UsnJrnlParentFileReferenceNumber: " & $UsnJrnlParentFileReferenceNumber & @CRLF)
+		_DumpOutput("$UsnJrnlParentReferenceSeqNo: " & $UsnJrnlParentReferenceSeqNo & @CRLF)
+		_DumpOutput("$UsnJrnlUsn: " & $UsnJrnlUsn & @CRLF)
+		_DumpOutput("$UsnJrnlTimestamp: " & $UsnJrnlTimestamp & @CRLF)
+		_DumpOutput("$UsnJrnlReason: " & $UsnJrnlReason & @CRLF)
+;		_DumpOutput("$UsnJrnlSourceInfo: " & $UsnJrnlSourceInfo & @CRLF)
+;		_DumpOutput("$UsnJrnlSecurityId: " & $UsnJrnlSecurityId & @CRLF)
+		_DumpOutput("$UsnJrnlFileAttributes: " & $UsnJrnlFileAttributes & @CRLF)
+		_DumpOutput("$UsnJrnlFileName: " & $UsnJrnlFileName & @CRLF)
 	EndIf
 ;	If Int($UsnJrnlFileReferenceNumber) > 0 And Int($UsnJrnlMFTReferenceSeqNo) > 0 And Int($UsnJrnlParentFileReferenceNumber) > 4 And $UsnJrnlFileNameLength > 0  And $UsnJrnlTimestamp<>"-" And StringInStr($UsnJrnlTimestamp,"1601")=0 Then
 	If Int($UsnJrnlFileReferenceNumber) > 0 And Int($UsnJrnlMFTReferenceSeqNo) > 0 And Int($UsnJrnlParentFileReferenceNumber) > 4 And $UsnJrnlFileNameLength > 0  And $UsnJrnlTimestamp<>"-" Then
@@ -6359,6 +6617,7 @@ Func _UsnDecodeRecord2($Record)
 		#ce
 		$UsnJrnlFileReferenceNumber=""
 		$UsnJrnlParentFileReferenceNumber=""
+		$UsnJrnlUsn=""
 		$UsnJrnlTimestamp=""
 		$UsnJrnlReason=""
 		$UsnJrnlFileName=""
@@ -6374,30 +6633,32 @@ Func _Decode_AttributeName($data)
 EndFunc
 
 Func _SetNameOnSystemFiles()
+	Local $LocalRef = $PredictedRefNumber
+	If $PredictedRefNumber = 0 And $RealMftRef <> 0 Then $LocalRef = $RealMftRef
 	Select
-		Case $PredictedRefNumber = 0
+		Case $LocalRef = 0
 			$FN_Name = "$MFT"
-		Case $PredictedRefNumber = 1
+		Case $LocalRef = 1
 			$FN_Name = "$MFTMirr"
-		Case $PredictedRefNumber = 2
+		Case $LocalRef = 2
 			$FN_Name = "$LogFile"
-		Case $PredictedRefNumber = 3
+		Case $LocalRef = 3
 			$FN_Name = "$Volume"
-		Case $PredictedRefNumber = 4
+		Case $LocalRef = 4
 			$FN_Name = "$AttrDef"
-		Case $PredictedRefNumber = 5
+		Case $LocalRef = 5
 			$FN_Name = "."
-		Case $PredictedRefNumber = 6
+		Case $LocalRef = 6
 			$FN_Name = "$Bitmap"
-		Case $PredictedRefNumber = 7
+		Case $LocalRef = 7
 			$FN_Name = "$Boot"
-		Case $PredictedRefNumber = 8
+		Case $LocalRef = 8
 			$FN_Name = "$BadClus"
-		Case $PredictedRefNumber = 9
+		Case $LocalRef = 9
 			$FN_Name = "$Secure"
-		Case $PredictedRefNumber = 10
+		Case $LocalRef = 10
 			$FN_Name = "$UpCase"
-		Case $PredictedRefNumber = 11
+		Case $LocalRef = 11
 			$FN_Name = "$Extend"
 	EndSelect
 EndFunc
@@ -6860,20 +7121,21 @@ Func _DecodeSDSChunk($InputData, $Hash)
 	If $PDacl > 0 Then
 		_DecodeAcl_D(StringMid($InputData,$StartOffset+40+$PDacl*2))
 	EndIf
-	#cs
-	ConsoleWrite("$SecurityDescriptorHash: " & $SecurityDescriptorHash & @CRLF)
-	ConsoleWrite("$SecurityId: " & $SecurityId & @CRLF)
-	ConsoleWrite("$EntryOffset: " & $EntryOffset & @CRLF)
-	ConsoleWrite("$EntrySize: " & $EntrySize & @CRLF)
-	ConsoleWrite("$Revision: " & $Revision & @CRLF)
-	ConsoleWrite("$Sbz1: " & $Sbz1 & @CRLF)
-	ConsoleWrite("$SECURITY_DESCRIPTOR_CONTROL: " & $SECURITY_DESCRIPTOR_CONTROL & @CRLF)
-	ConsoleWrite("$ControlText: " & $ControlText & @CRLF)
-	ConsoleWrite("$PSidOwner: " & $PSidOwner & @CRLF)
-	ConsoleWrite("$PSidGroup: " & $PSidGroup & @CRLF)
-	ConsoleWrite("$PSacl: " & $PSacl & @CRLF)
-	ConsoleWrite("$PDacl: " & $PDacl & @CRLF)
-	#ce
+	If $VerboseOn Then
+		_DumpOutput("_DecodeSDSChunk(): " & @CRLF)
+		_DumpOutput("$SecurityDescriptorHash: " & $SecurityDescriptorHash & @CRLF)
+		_DumpOutput("$SecurityId: " & $SecurityId & @CRLF)
+		_DumpOutput("$EntryOffset: " & $EntryOffset & @CRLF)
+		_DumpOutput("$EntrySize: " & $EntrySize & @CRLF)
+		_DumpOutput("$Revision: " & $Revision & @CRLF)
+		_DumpOutput("$Sbz1: " & $Sbz1 & @CRLF)
+		_DumpOutput("$SECURITY_DESCRIPTOR_CONTROL: " & $SECURITY_DESCRIPTOR_CONTROL & @CRLF)
+		_DumpOutput("$ControlText: " & $ControlText & @CRLF)
+		_DumpOutput("$PSidOwner: " & $PSidOwner & @CRLF)
+		_DumpOutput("$PSidGroup: " & $PSidGroup & @CRLF)
+		_DumpOutput("$PSacl: " & $PSacl & @CRLF)
+		_DumpOutput("$PDacl: " & $PDacl & @CRLF)
+	EndIf
 EndFunc
 
 Func _DecodeAcl_S($InputData)
@@ -7247,7 +7509,7 @@ Func _DecodeSidIdentifierAuthorityString($InputData)
 	EndSelect
 EndFunc
 
-Func _DecodeIndxEntriesSDH($InputData)
+Func _DecodeIndxEntriesSDH($InputData,$IsRedo)
 	Local $StartOffset = 1, $Counter = 0
 	Local $InputDataSize = BinaryLen("0x"&$InputData)
 	ReDim $SDHArray[100+1+$InputDataSize/48][6]
@@ -7321,7 +7583,7 @@ Func _DecodeIndxEntriesSDH($InputData)
 			Return 0
 		EndIf
 
-		FileWriteLine($LogFileSecureSDHCsv, $RecordOffset&$de&$this_lsn&$de&$Flags&$de&$SecurityDescriptorHashKey&$de&$SecurityIdKey&$de&$SecurityDescriptorHashData&$de&$SecurityIdData&$de&$OffsetInSDS&$de&$SizeInSDS&@crlf)
+		FileWriteLine($LogFileSecureSDHCsv, $RecordOffset&$de&$this_lsn&$de&$Flags&$de&$SecurityDescriptorHashKey&$de&$SecurityIdKey&$de&$SecurityDescriptorHashData&$de&$SecurityIdData&$de&$OffsetInSDS&$de&$SizeInSDS&$de&$IsRedo&@crlf)
 		$SDHArray[$Counter][0] = $OffsetInSDS
 		$SDHArray[$Counter][1] = $SizeInSDS
 		$SDHArray[$Counter][2] = $SecurityDescriptorHashKey
@@ -7355,7 +7617,7 @@ Func _DecodeIndxEntriesSDH($InputData)
 	ReDim $SDHArray[$Counter+1][6]
 EndFunc
 
-Func _DecodeIndxEntriesSII($InputData)
+Func _DecodeIndxEntriesSII($InputData,$IsRedo)
 	Local $StartOffset = 1, $Counter = 0
 	Local $InputDataSize = BinaryLen("0x"&$InputData)
 	ReDim $SIIArray[100+1+$InputDataSize/40][5]
@@ -7415,7 +7677,7 @@ Func _DecodeIndxEntriesSII($InputData)
 		$SizeInSDS = StringMid($InputData, $StartOffset + 72, 8)
 		$SizeInSDS = "0x" & _SwapEndian($SizeInSDS)
 
-		FileWriteLine($LogFileSecureSIICsv, $RecordOffset&$de&$this_lsn&$de&$Flags&$de&$SecurityIdKey&$de&$SecurityDescriptorHashData&$de&$SecurityIdData&$de&$OffsetInSDS&$de&$SizeInSDS&@crlf)
+		FileWriteLine($LogFileSecureSIICsv, $RecordOffset&$de&$this_lsn&$de&$Flags&$de&$SecurityIdKey&$de&$SecurityDescriptorHashData&$de&$SecurityIdData&$de&$OffsetInSDS&$de&$SizeInSDS&$de&$IsRedo&@crlf)
 		$SIIArray[$Counter][0] = $OffsetInSDS
 		$SIIArray[$Counter][1] = $SizeInSDS
 		$SIIArray[$Counter][2] = $SecurityIdKey
@@ -7620,25 +7882,34 @@ Func _HexToGuidStr($input,$mode)
 	Return $OutStr
 EndFunc
 
-Func _MainSecure($RawContentSDS)
+Func _MainSecure($RawContentSDS,$IsRedo)
 	$SizeSDS = StringLen($RawContentSDS)/2
 	$StartOffset = 1
 	$BytesProcessed = 0
 	$CurrentDescriptor = 0
+	If $VerboseOn Then
+		_DumpOutput("_MainSecure(): " & @CRLF)
+		_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+		_DumpOutput("$SizeSDS: " & $SizeSDS & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$RawContentSDS) & @CRLF)
+	EndIf
 	While 1
 		$CurrentDescriptor += 1
 		If $BytesProcessed >= $SizeSDS Then
-;			ConsoleWrite("End of $SDS reached" & @CRLF)
+;			_DumpOutput("End of $SDS reached 1" & @CRLF)
+;			_DumpOutput("$BytesProcessed: " & $BytesProcessed & @CRLF)
 			ExitLoop
 		EndIf
 		$TargetSDSOffset = StringMid($RawContentSDS,$StartOffset + 16, 16)
-		$TargetSDSOffset = Dec(_SwapEndian($TargetSDSOffset),2)
+;		$TargetSDSOffset = Dec(_SwapEndian($TargetSDSOffset),2)
+		$TargetSDSOffset = $BytesProcessed
 
 		$TargetSDSSize = StringMid($RawContentSDS,$StartOffset + 32, 8)
 		$TargetSDSSize = Dec(_SwapEndian($TargetSDSSize),2)
 
 		If $TargetSDSOffset >= $SizeSDS Then
-;			ConsoleWrite("End of $SDS reached" & @CRLF)
+;			_DumpOutput("End of $SDS reached 2" & @CRLF)
+;			_DumpOutput("$TargetSDSOffset: " & $TargetSDSOffset & @CRLF)
 			ExitLoop
 		EndIf
 
@@ -7662,10 +7933,15 @@ Func _MainSecure($RawContentSDS)
 		EndIf
 		$TargetSDSHash = StringMid($RawContentSDS,$StartOffset, 8)
 		$TargetSDSChunk = StringMid($RawContentSDS,$StartOffset+($TargetSDSOffset*2), $TargetSDSSize*2)
-;		ConsoleWrite("$TargetSDSSize: " & $TargetSDSSize & @CRLF)
+		If $VerboseOn Then
+			_DumpOutput("$StartOffset: " & $StartOffset & @CRLF)
+			_DumpOutput("$TargetSDSSize: " & $TargetSDSSize & @CRLF)
+			_DumpOutput("$TargetSDSOffset: " & $TargetSDSOffset & @CRLF)
+			_DumpOutput("$SizeSDS: " & $SizeSDS & @CRLF)
+		EndIf
 		_DecodeSDSChunk($TargetSDSChunk, $TargetSDSHash)
 		;Write information to csv
-		_WriteCsvSecureSDS()
+		_WriteCsvSecureSDS($IsRedo)
 		;Make sure all global variables for csv are cleared
 		_ClearVarSecureSDS()
 		$BytesProcessed+=$TargetSDSSize
@@ -7700,237 +7976,360 @@ Func _ClearVarSecureSDS()
 	$DAceObjectFlagsText = ""
 EndFunc
 
-Func _WriteCsvSecureSDS()
-	FileWriteLine($LogFileSecureSDSCsv, $RecordOffset&$de&$this_lsn&$de&$SecurityDescriptorHash&$de&$SecurityId&$de&$ControlText&$de&$SidOwner&$de&$SidGroup&$de&$SAclRevision&$de&$SAceCount&$de&$SAceTypeText&$de&$SAceFlagsText&$de&$SAceMask&$de&$SAceObjectFlagsText&$de&$SAceObjectType&$de&$SAceInheritedObjectType&$de&$SAceSIDString&$de&$DAclRevision&$de&$DAceCount&$de&$DAceTypeText&$de&$DAceFlagsText&$de&$DAceMask&$de&$DAceObjectFlagsText&$de&$DAceObjectType&$de&$DAceInheritedObjectType&$de&$DAceSIDString&@crlf)
+Func _WriteCsvSecureSDS($IsRedo)
+	FileWriteLine($LogFileSecureSDSCsv, $RecordOffset&$de&$this_lsn&$de&$SecurityDescriptorHash&$de&$SecurityId&$de&$ControlText&$de&$SidOwner&$de&$SidGroup&$de&$SAclRevision&$de&$SAceCount&$de&$SAceTypeText&$de&$SAceFlagsText&$de&$SAceMask&$de&$SAceObjectFlagsText&$de&$SAceObjectType&$de&$SAceInheritedObjectType&$de&$SAceSIDString&$de&$DAclRevision&$de&$DAceCount&$de&$DAceTypeText&$de&$DAceFlagsText&$de&$DAceMask&$de&$DAceObjectFlagsText&$de&$DAceObjectType&$de&$DAceInheritedObjectType&$de&$DAceSIDString&$de&$IsRedo&@crlf)
 EndFunc
 
 Func _WriteCSVHeaderSecureSDS()
-	$SecureSDS_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"SecurityDescriptorHash"&$de&"SecurityId"&$de&"Control"&$de&"SidOwner"&$de&"SidGroup"&$de&"SAclRevision"&$de&"SAceCount"&$de&"SAceType"&$de&"SAceFlags"&$de&"SAceMask"&$de&"SAceObjectFlags"&$de&"SAceObjectType"&$de&"SAceInheritedObjectType"&$de&"SAceSIDofTrustee"&$de&"DAclRevision"&$de&"DAceCount"&$de&"DAceType"&$de&"DAceFlags"&$de&"DAceMask"&$de&"DAceObjectFlags"&$de&"DAceObjectType"&$de&"DAceInheritedObjectType"&$de&"DAceSIDofTrustee"
+	$SecureSDS_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"SecurityDescriptorHash"&$de&"SecurityId"&$de&"Control"&$de&"SidOwner"&$de&"SidGroup"&$de&"SAclRevision"&$de&"SAceCount"&$de&"SAceType"&$de&"SAceFlags"&$de&"SAceMask"&$de&"SAceObjectFlags"&$de&"SAceObjectType"&$de&"SAceInheritedObjectType"&$de&"SAceSIDofTrustee"&$de&"DAclRevision"&$de&"DAceCount"&$de&"DAceType"&$de&"DAceFlags"&$de&"DAceMask"&$de&"DAceObjectFlags"&$de&"DAceObjectType"&$de&"DAceInheritedObjectType"&$de&"DAceSIDofTrustee"&$de&"IsRedo"
 	FileWriteLine($LogFileSecureSDSCsv, $SecureSDS_Csv_Header & @CRLF)
 EndFunc
 
 Func _WriteCSVHeaderSecureSDH()
-	$SecureSDH_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"sdh_flags"&$de&"sdh_SecurityDescriptorHashKey"&$de&"sdh_SecurityIdKey"&$de&"sdh_SecurityDescriptorHashData"&$de&"sdh_SecurityIdData"&$de&"sdh_OffsetInSDS"&$de&"sdh_SizeInSDS"
+	$SecureSDH_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"sdh_flags"&$de&"sdh_SecurityDescriptorHashKey"&$de&"sdh_SecurityIdKey"&$de&"sdh_SecurityDescriptorHashData"&$de&"sdh_SecurityIdData"&$de&"sdh_OffsetInSDS"&$de&"sdh_SizeInSDS"&$de&"IsRedo"
 	FileWriteLine($LogFileSecureSDHCsv, $SecureSDH_Csv_Header & @CRLF)
 EndFunc
 
 Func _WriteCSVHeaderSecureSII()
-	$SecureSII_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"sdh_flags"&$de&"sdh_SecurityIdKey"&$de&"sdh_SecurityDescriptorHashData"&$de&"sdh_SecurityIdData"&$de&"sdh_OffsetInSDS"&$de&"sdh_SizeInSDS"
+	$SecureSII_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"sdh_flags"&$de&"sdh_SecurityIdKey"&$de&"sdh_SecurityDescriptorHashData"&$de&"sdh_SecurityIdData"&$de&"sdh_OffsetInSDS"&$de&"sdh_SizeInSDS"&$de&"IsRedo"
 	FileWriteLine($LogFileSecureSIICsv, $SecureSII_Csv_Header & @CRLF)
 EndFunc
 
 ;-----------/Security------------------
 
-Func _Decode_ObjId_O($InputData)
+Func _Decode_ObjId_O($InputData,$IsRedo)
+	Local $Counter=1
 	;88 bytes
 	$StartOffset = 1
-	$DataOffset = StringMid($InputData, $StartOffset, 4)
-	$DataOffset = Dec(_SwapEndian($DataOffset),2)
+	$InputDataSize = StringLen($InputData)
 
-	$DataSize = StringMid($InputData, $StartOffset + 4, 4)
-	$DataSize = Dec(_SwapEndian($DataSize),2)
-
-	If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
-
-	;Padding 4 bytes
-	$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
-	$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
-
-	$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
-	$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
-
-	;1=Entry has subnodes, 2=Last entry
-	$Flags = StringMid($InputData, $StartOffset + 24, 4)
-	$Flags = "0x" & _SwapEndian($Flags)
-
-	;Padding 2 bytes
-	$GUIDObjectId = StringMid($InputData, $StartOffset + 32, 32)
-	$GUIDObjectId = _HexToGuidStr($GUIDObjectId,0)
-
-	$MftRef = StringMid($InputData, $StartOffset + 64, 12)
-	$MftRef = Dec(_SwapEndian($MftRef),2)
-
-	$MftSeqNo = StringMid($InputData, $StartOffset + 76, 4)
-	$MftSeqNo = Dec(_SwapEndian($MftSeqNo),2)
-
-	$GUIDBirthVolumeId = StringMid($InputData, $StartOffset + 80, 32)
-	$GUIDBirthVolumeId = _HexToGuidStr($GUIDBirthVolumeId,0)
-
-	$GUIDBirthObjectId = StringMid($InputData, $StartOffset + 112, 32)
-	$GUIDBirthObjectId = _HexToGuidStr($GUIDBirthObjectId,0)
-
-	$GUIDDomainId = StringMid($InputData, $StartOffset + 144, 32)
-	$GUIDDomainId = _HexToGuidStr($GUIDDomainId,0)
-
-	$TextInformation &= ";MftRef="&$MftRef&";MftSeqNo="&$MftSeqNo
-	FileWriteLine($LogFileObjIdOCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$GUIDObjectId&$de&$MftRef&$de&$MftSeqNo&$de&$GUIDBirthVolumeId&$de&$GUIDBirthObjectId&$de&$GUIDDomainId&@crlf)
-EndFunc
-
-Func _Decode_Quota_O($InputData)
-	$StartOffset = 1
-	$DataOffset = StringMid($InputData, $StartOffset, 4)
-	$DataOffset = Dec(_SwapEndian($DataOffset),2)
-
-	$DataSize = StringMid($InputData, $StartOffset + 4, 4)
-	$DataSize = Dec(_SwapEndian($DataSize),2)
-
-	If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
-
-	;Padding 4 bytes
-	$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
-	$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
-
-	$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
-	$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
-
-	$Flags = StringMid($InputData, $StartOffset + 24, 4)
-	$Flags = "0x" & _SwapEndian($Flags)
-
-	;Padding 2 bytes
-	$SID = StringMid($InputData, $StartOffset + 32, $IndexKeySize*2)
-	$SID = _DecodeSID($SID)
-
-	$OwnerId = StringMid($InputData, $StartOffset + 32 + ($IndexKeySize*2), 8)
-	$OwnerId = Dec(_SwapEndian($OwnerId),2)
-
-;	$Padding8 = StringMid($InputData, $StartOffset + 32 + ($IndexKeySize*2), 16)
-	FileWriteLine($LogFileQuotaOCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$SID&$de&$OwnerId&@crlf)
-EndFunc
-
-Func _Decode_Quota_Q($InputData)
-	$StartOffset = 1
-;	_DumpOutput("_Decode_Quota_Q()" & @CRLF)
-;	_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
-	$DataOffset = StringMid($InputData, $StartOffset, 4)
-;	_DumpOutput("$DataOffset: " & $DataOffset & @CRLF)
-	$DataOffset = Dec(_SwapEndian($DataOffset),2)
-
-	$DataSize = StringMid($InputData, $StartOffset + 4, 4)
-;	_DumpOutput("$DataSize: " & $DataSize & @CRLF)
-	$DataSize = Dec(_SwapEndian($DataSize),2)
-
-	If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
-
-	;Padding 4 bytes
-	$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
-;	_DumpOutput("$IndexEntrySize: " & $IndexEntrySize & @CRLF)
-	$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
-
-	$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
-;	_DumpOutput("$IndexKeySize: " & $IndexKeySize & @CRLF)
-	$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
-
-	;1=Entry has subnodes, 2=Last entry
-	$Flags = StringMid($InputData, $StartOffset + 24, 4)
-;	_DumpOutput("$Flags: " & $Flags & @CRLF)
-	$Flags = "0x" & _SwapEndian($Flags)
-
-	;Padding 2 bytes
-	$OwnerId = StringMid($InputData, $StartOffset + 32, 8)
-;	_DumpOutput("$OwnerId: " & $OwnerId & @CRLF)
-	$OwnerId = Dec(_SwapEndian($OwnerId),2)
-
-	$Version = StringMid($InputData, $StartOffset + 40, 8)
-;	_DumpOutput("$Version: " & $Version & @CRLF)
-	$Version = "0x" & _SwapEndian($Version)
-
-	$Flags2 = StringMid($InputData, $StartOffset + 48, 8)
-;	_DumpOutput("$Flags2: " & $Flags2 & @CRLF)
-	$Flags2 = _SwapEndian($Flags2)
-	$Flags2Text = _Decode_QuotaFlags("0x"&$Flags2)
-
-	$BytesUsed = StringMid($InputData, $StartOffset + 56, 16)
-;	_DumpOutput("$BytesUsed: " & $BytesUsed & @CRLF)
-	$BytesUsed = Dec(_SwapEndian($BytesUsed),2)
-
-	$ChangeTime = StringMid($InputData, $StartOffset + 72, 16)
-;	_DumpOutput("$ChangeTime: " & $ChangeTime & @CRLF)
-	$ChangeTime = _SwapEndian($ChangeTime)
-	$ChangeTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ChangeTime)
-	$ChangeTime = _WinTime_UTCFileTimeFormat(Dec($ChangeTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
-	If @error Then
-		$ChangeTime = "-"
-	ElseIf $TimestampPrecision = 2 Then
-		$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-4)
-		$ChangeTime_Precision = StringRight($ChangeTime,3)
-	ElseIf $TimestampPrecision = 3 Then
-		$ChangeTime = $ChangeTime & ":" & _FillZero(StringRight($ChangeTime_tmp, 4))
-		$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-9)
-		$ChangeTime_Precision = StringRight($ChangeTime,8)
-	Else
-		$ChangeTime_Core = $ChangeTime
+	If $VerboseOn Then
+		_DumpOutput("_Decode_ObjId_O():" & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
 	EndIf
 
-	$WarningLimit = StringMid($InputData, $StartOffset + 88, 16)
-;	_DumpOutput("$WarningLimit: " & $WarningLimit & @CRLF)
-	$WarningLimit = "0x" & _SwapEndian($WarningLimit)
+	Do
+		$DataOffset = StringMid($InputData, $StartOffset, 4)
+		$DataOffset = Dec(_SwapEndian($DataOffset),2)
 
-	$HardLimit = StringMid($InputData, $StartOffset + 104, 16)
-;	_DumpOutput("$HardLimit: " & $HardLimit & @CRLF)
-	$HardLimit = "0x" & _SwapEndian($HardLimit)
+		$DataSize = StringMid($InputData, $StartOffset + 4, 4)
+		$DataSize = Dec(_SwapEndian($DataSize),2)
 
-	$ExceededTime = StringMid($InputData, $StartOffset + 120, 16)
-;	_DumpOutput("$ExceededTime: " & $ExceededTime & @CRLF)
-	$ExceededTime = "0x" & _SwapEndian($ExceededTime)
+		If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
 
-	$SID = StringMid($InputData, $StartOffset + 136)
-;	_DumpOutput("$SID: " & $SID & @CRLF)
-	$SID = _DecodeSID($SID)
+		;Padding 4 bytes
+		$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
+		$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
+		If $IndexEntrySize = 0 Then ExitLoop
 
-	;$Padding8 = StringMid($InputData, $StartOffset + 32 + ($IndexKeySize*2), 16)
-	FileWriteLine($LogFileQuotaQCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$OwnerId&$de&$Version&$de&$Flags2Text&$de&$BytesUsed&$de&$ChangeTime&$de&$WarningLimit&$de&$HardLimit&$de&$ExceededTime&$de&$SID&@crlf)
+		$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
+		$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
+
+		;1=Entry has subnodes, 2=Last entry
+		$Flags = StringMid($InputData, $StartOffset + 24, 4)
+		$Flags = "0x" & _SwapEndian($Flags)
+
+		;Padding 2 bytes
+		$GUIDObjectId = StringMid($InputData, $StartOffset + 32, 32)
+		$GUIDObjectId = _HexToGuidStr($GUIDObjectId,0)
+
+		$MftRef = StringMid($InputData, $StartOffset + 64, 12)
+		$MftRef = Dec(_SwapEndian($MftRef),2)
+
+		$MftSeqNo = StringMid($InputData, $StartOffset + 76, 4)
+		$MftSeqNo = Dec(_SwapEndian($MftSeqNo),2)
+
+		$GUIDBirthVolumeId = StringMid($InputData, $StartOffset + 80, 32)
+		$GUIDBirthVolumeId = _HexToGuidStr($GUIDBirthVolumeId,0)
+
+		$GUIDBirthObjectId = StringMid($InputData, $StartOffset + 112, 32)
+		$GUIDBirthObjectId = _HexToGuidStr($GUIDBirthObjectId,0)
+
+		$GUIDDomainId = StringMid($InputData, $StartOffset + 144, 32)
+		$GUIDDomainId = _HexToGuidStr($GUIDDomainId,0)
+
+		If $VerboseOn Then
+			_DumpOutput(@CRLF)
+			_DumpOutput(_HexEncode("0x"&StringMid($InputData, $StartOffset, $IndexEntrySize*2)) & @CRLF)
+			_DumpOutput("$Counter: " & $Counter & @CRLF)
+			_DumpOutput("$DataOffset: " & $DataOffset & @CRLF)
+			_DumpOutput("$DataSize: " & $DataSize & @CRLF)
+			_DumpOutput("$IndexEntrySize: " & $IndexEntrySize & @CRLF)
+			_DumpOutput("$IndexKeySize: " & $IndexKeySize & @CRLF)
+			_DumpOutput("$Flags: " & $Flags & @CRLF)
+			_DumpOutput("$GUIDObjectId: " & $GUIDObjectId & @CRLF)
+			_DumpOutput("$MftRef: " & $MftRef & @CRLF)
+			_DumpOutput("$MftSeqNo: " & $MftSeqNo & @CRLF)
+			_DumpOutput("$GUIDBirthVolumeId: " & $GUIDBirthVolumeId & @CRLF)
+			_DumpOutput("$GUIDBirthObjectId: " & $GUIDBirthObjectId & @CRLF)
+			_DumpOutput("$GUIDDomainId: " & $GUIDDomainId & @CRLF)
+		EndIf
+
+		$TextInformation &= ";MftRef="&$MftRef&";MftSeqNo="&$MftSeqNo
+		FileWriteLine($LogFileObjIdOCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$GUIDObjectId&$de&$MftRef&$de&$MftSeqNo&$de&$GUIDBirthVolumeId&$de&$GUIDBirthObjectId&$de&$GUIDDomainId&$de&$IsRedo&@crlf)
+		$StartOffset += $IndexEntrySize*2
+		$Counter+=1
+	Until $StartOffset >= $InputDataSize
+EndFunc
+
+Func _Decode_Quota_O($InputData,$IsRedo)
+	Local $Counter=1
+	$StartOffset = 1
+	$InputDataSize = StringLen($InputData)
+
+	If $VerboseOn Then
+		_DumpOutput("_Decode_Quota_O():" & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+	EndIf
+
+	Do
+		$DataOffset = StringMid($InputData, $StartOffset, 4)
+		$DataOffset = Dec(_SwapEndian($DataOffset),2)
+
+		$DataSize = StringMid($InputData, $StartOffset + 4, 4)
+		$DataSize = Dec(_SwapEndian($DataSize),2)
+
+		If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
+
+		;Padding 4 bytes
+		$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
+		$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
+		If $IndexEntrySize = 0 Then ExitLoop
+
+		$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
+		$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
+
+		$Flags = StringMid($InputData, $StartOffset + 24, 4)
+		$Flags = "0x" & _SwapEndian($Flags)
+
+		;Padding 2 bytes
+		$SID = StringMid($InputData, $StartOffset + 32, $IndexKeySize*2)
+		$SID = _DecodeSID($SID)
+
+		$OwnerId = StringMid($InputData, $StartOffset + 32 + ($IndexKeySize*2), 8)
+		$OwnerId = Dec(_SwapEndian($OwnerId),2)
+
+		If $VerboseOn Then
+			_DumpOutput(@CRLF)
+			_DumpOutput(_HexEncode("0x"&StringMid($InputData, $StartOffset, $IndexEntrySize*2)) & @CRLF)
+			_DumpOutput("$Counter: " & $Counter & @CRLF)
+			_DumpOutput("$DataOffset: " & $DataOffset & @CRLF)
+			_DumpOutput("$DataSize: " & $DataSize & @CRLF)
+			_DumpOutput("$IndexEntrySize: " & $IndexEntrySize & @CRLF)
+			_DumpOutput("$IndexKeySize: " & $IndexKeySize & @CRLF)
+			_DumpOutput("$Flags: " & $Flags & @CRLF)
+			_DumpOutput("$SID: " & $SID & @CRLF)
+			_DumpOutput("$OwnerId: " & $OwnerId & @CRLF)
+		EndIf
+
+	;	$Padding8 = StringMid($InputData, $StartOffset + 32 + ($IndexKeySize*2), 16)
+		FileWriteLine($LogFileQuotaOCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$SID&$de&$OwnerId&$de&$IsRedo&@crlf)
+		$Counter+=1
+		$StartOffset += $IndexEntrySize*2
+	Until $StartOffset >= $InputDataSize
+EndFunc
+
+Func _Decode_Quota_Q($InputData,$IsRedo)
+	Local $Counter=1
+	$StartOffset = 1
+	$InputDataSize = StringLen($InputData)
+
+	If $VerboseOn Then
+		_DumpOutput("_Decode_Quota_Q():" & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+	EndIf
+
+	Do
+		$DataOffset = StringMid($InputData, $StartOffset, 4)
+		$DataOffset = Dec(_SwapEndian($DataOffset),2)
+
+		$DataSize = StringMid($InputData, $StartOffset + 4, 4)
+		$DataSize = Dec(_SwapEndian($DataSize),2)
+
+		If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
+
+		;Padding 4 bytes
+		$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
+		$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
+		If $IndexEntrySize = 0 Then ExitLoop
+
+		$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
+		$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
+
+		;1=Entry has subnodes, 2=Last entry
+		$Flags = StringMid($InputData, $StartOffset + 24, 4)
+		$Flags = "0x" & _SwapEndian($Flags)
+
+		;Padding 2 bytes
+		$OwnerId = StringMid($InputData, $StartOffset + 32, 8)
+		$OwnerId = Dec(_SwapEndian($OwnerId),2)
+
+		$Version = StringMid($InputData, $StartOffset + 40, 8)
+		$Version = "0x" & _SwapEndian($Version)
+
+		$Flags2 = StringMid($InputData, $StartOffset + 48, 8)
+		$Flags2 = _SwapEndian($Flags2)
+		$Flags2Text = _Decode_QuotaFlags("0x"&$Flags2)
+
+		$BytesUsed = StringMid($InputData, $StartOffset + 56, 16)
+		$BytesUsed = Dec(_SwapEndian($BytesUsed),2)
+
+		$ChangeTime = StringMid($InputData, $StartOffset + 72, 16)
+		$ChangeTime = _SwapEndian($ChangeTime)
+		$ChangeTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ChangeTime)
+		$ChangeTime = _WinTime_UTCFileTimeFormat(Dec($ChangeTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+		If @error Then
+			$ChangeTime = "-"
+		ElseIf $TimestampPrecision = 2 Then
+			$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-4)
+			$ChangeTime_Precision = StringRight($ChangeTime,3)
+		ElseIf $TimestampPrecision = 3 Then
+			$ChangeTime = $ChangeTime & ":" & _FillZero(StringRight($ChangeTime_tmp, 4))
+			$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-9)
+			$ChangeTime_Precision = StringRight($ChangeTime,8)
+		Else
+			$ChangeTime_Core = $ChangeTime
+		EndIf
+		$TextInformation &= ";ChangeTime=" & $ChangeTime
+
+		$WarningLimit = StringMid($InputData, $StartOffset + 88, 16)
+		$WarningLimit = "0x" & _SwapEndian($WarningLimit)
+
+		$HardLimit = StringMid($InputData, $StartOffset + 104, 16)
+		$HardLimit = "0x" & _SwapEndian($HardLimit)
+
+		$ExceededTime = StringMid($InputData, $StartOffset + 120, 16)
+
+		If $ExceededTime <> "0000000000000000" Then
+			$ExceededTime = _SwapEndian($ExceededTime)
+			$ExceededTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ExceededTime)
+			$ExceededTime = _WinTime_UTCFileTimeFormat(Dec($ExceededTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+			If @error Then
+				$ExceededTime = "-"
+			ElseIf $TimestampPrecision = 2 Then
+				$ExceededTime_Core = StringMid($ExceededTime,1,StringLen($ExceededTime)-4)
+				$ExceededTime_Precision = StringRight($ExceededTime,3)
+			ElseIf $TimestampPrecision = 3 Then
+				$ExceededTime = $ExceededTime & ":" & _FillZero(StringRight($ExceededTime_tmp, 4))
+				$ExceededTime_Core = StringMid($ExceededTime,1,StringLen($ExceededTime)-9)
+				$ExceededTime_Precision = StringRight($ExceededTime,8)
+			Else
+				$ExceededTime_Core = $ExceededTime
+			EndIf
+		Else
+			$ExceededTime = 0
+		EndIf
+
+		$SID = StringMid($InputData, $StartOffset + 136)
+		$SID = _DecodeSID($SID)
+
+		If $VerboseOn Then
+			_DumpOutput(@CRLF)
+			_DumpOutput(_HexEncode("0x"&StringMid($InputData, $StartOffset, $IndexEntrySize*2)) & @CRLF)
+			_DumpOutput("$Counter: " & $Counter & @CRLF)
+			_DumpOutput("$DataOffset: " & $DataOffset & @CRLF)
+			_DumpOutput("$DataSize: " & $DataSize & @CRLF)
+			_DumpOutput("$IndexEntrySize: " & $IndexEntrySize & @CRLF)
+			_DumpOutput("$IndexKeySize: " & $IndexKeySize & @CRLF)
+			_DumpOutput("$Flags: " & $Flags & @CRLF)
+			_DumpOutput("$OwnerId: " & $OwnerId & @CRLF)
+			_DumpOutput("$Version: " & $Version & @CRLF)
+			_DumpOutput("$Flags2Text: " & $Flags2Text & @CRLF)
+			_DumpOutput("$BytesUsed: " & $BytesUsed & @CRLF)
+			_DumpOutput("$ChangeTime: " & $ChangeTime & @CRLF)
+			_DumpOutput("$WarningLimit: " & $WarningLimit & @CRLF)
+			_DumpOutput("$HardLimit: " & $HardLimit & @CRLF)
+			_DumpOutput("$ExceededTime: " & $ExceededTime & @CRLF)
+			_DumpOutput("$SID: " & $SID & @CRLF)
+		EndIf
+
+		;$Padding8 = StringMid($InputData, $StartOffset + 32 + ($IndexKeySize*2), 16)
+		FileWriteLine($LogFileQuotaQCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$OwnerId&$de&$Version&$de&$Flags2Text&$de&$BytesUsed&$de&$ChangeTime&$de&$WarningLimit&$de&$HardLimit&$de&$ExceededTime&$de&$SID&$de&$IsRedo&@crlf)
+		$Counter+=1
+		$StartOffset += $IndexEntrySize*2
+	Until $StartOffset >= $InputDataSize
 EndFunc
 
 Func _Decode_QuotaFlags($InputData)
-	If $InputData = 0x0001 Then Return "Default Limits"
-	If $InputData = 0x0002 Then Return "Limit Reached"
-	If $InputData = 0x0004 Then Return "Id Deleted"
-	If $InputData = 0x0010 Then Return "Tracking Enabled"
-	If $InputData = 0x0020 Then Return "Enforcement Enabled"
-	If $InputData = 0x0040 Then Return "Tracking Requested"
-	If $InputData = 0x0080 Then Return "Log Threshold"
-	If $InputData = 0x0100 Then Return "Log Limit"
-	If $InputData = 0x0200 Then Return "Out Of Date"
-	If $InputData = 0x0400 Then Return "Corrupt"
-	If $InputData = 0x0800 Then Return "Pending Deletes"
-	Return "UNKNOWN"
+	Local $Output=""
+	If BitAND($InputData, 0x0001) Then $Output &= "Default Limits+"
+	If BitAND($InputData, 0x0002) Then $Output &= "Limit Reached+"
+	If BitAND($InputData, 0x0004) Then $Output &= "Id Deleted+"
+	If BitAND($InputData, 0x0010) Then $Output &= "Tracking Enabled+"
+	If BitAND($InputData, 0x0020) Then $Output &= "Enforcement Enabled+"
+	If BitAND($InputData, 0x0040) Then $Output &= "Tracking Requested+"
+	If BitAND($InputData, 0x0080) Then $Output &= "Log Threshold+"
+	If BitAND($InputData, 0x0100) Then $Output &= "Log Limit+"
+	If BitAND($InputData, 0x0200) Then $Output &= "Out Of Date+"
+	If BitAND($InputData, 0x0400) Then $Output &= "Corrupt+"
+	If BitAND($InputData, 0x0800) Then $Output &= "Pending Deletes+"
+	$Output = StringTrimRight($Output, 1)
+	Return $Output
 EndFunc
 
-Func _Decode_Reparse_R($InputData)
+Func _Decode_Reparse_R($InputData,$IsRedo)
+	Local $Counter=1
 	$StartOffset = 1
-	$DataOffset = StringMid($InputData, $StartOffset, 4)
-	$DataOffset = Dec(_SwapEndian($DataOffset),2)
+	$InputDataSize = StringLen($InputData)
 
-	$DataSize = StringMid($InputData, $StartOffset + 4, 4)
-	$DataSize = Dec(_SwapEndian($DataSize),2)
+	If $VerboseOn Then
+		_DumpOutput("_Decode_Reparse_R():" & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+	EndIf
 
-	If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
+	Do
+		$DataOffset = StringMid($InputData, $StartOffset, 4)
+		$DataOffset = Dec(_SwapEndian($DataOffset),2)
 
-	;Padding 4 bytes
-	$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
-	$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
+		$DataSize = StringMid($InputData, $StartOffset + 4, 4)
+		$DataSize = Dec(_SwapEndian($DataSize),2)
 
-	$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
-	$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
+;		If $DataOffset = 0 Or $DataSize = 0 Then $StartOffset+=16
 
-	$Flags = StringMid($InputData, $StartOffset + 24, 4)
-	$Flags = "0x" & _SwapEndian($Flags)
+		;Padding 4 bytes
+		$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
+		$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
+		If $IndexEntrySize = 0 Then ExitLoop
 
-	;Padding 2 bytes
-	$KeyReparseTag = StringMid($InputData, $StartOffset + 32, 8)
-	$KeyReparseTag = "0x" & _SwapEndian($KeyReparseTag)
+		$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
+		$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
 
-	$KeyMftRefOfReparsePoint = StringMid($InputData, $StartOffset + 40, 12)
-	$KeyMftRefOfReparsePoint = Dec(_SwapEndian($KeyMftRefOfReparsePoint),2)
+		$Flags = StringMid($InputData, $StartOffset + 24, 4)
+		$Flags = "0x" & _SwapEndian($Flags)
 
-	$KeyMftRefSeqNoOfReparsePoint = StringMid($InputData, $StartOffset + 52, 4)
-	$KeyMftRefSeqNoOfReparsePoint = Dec(_SwapEndian($KeyMftRefSeqNoOfReparsePoint),2)
+		;Padding 2 bytes
+		$KeyReparseTag = StringMid($InputData, $StartOffset + 32, 8)
+		$KeyReparseTag = "0x" & _SwapEndian($KeyReparseTag)
+		$KeyReparseTag = _GetReparseType($KeyReparseTag)
 
-;	$Padding4 = StringMid($InputData, $StartOffset + 56, 8)
-	FileWriteLine($LogFileReparseRCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$KeyReparseTag&$de&$KeyMftRefOfReparsePoint&$de&$KeyMftRefSeqNoOfReparsePoint&@crlf)
+		$KeyMftRefOfReparsePoint = StringMid($InputData, $StartOffset + 40, 12)
+		$KeyMftRefOfReparsePoint = Dec(_SwapEndian($KeyMftRefOfReparsePoint),2)
+
+		$KeyMftRefSeqNoOfReparsePoint = StringMid($InputData, $StartOffset + 52, 4)
+		$KeyMftRefSeqNoOfReparsePoint = Dec(_SwapEndian($KeyMftRefSeqNoOfReparsePoint),2)
+
+		If $VerboseOn Then
+			_DumpOutput(@CRLF)
+			_DumpOutput(_HexEncode("0x"&StringMid($InputData, $StartOffset, $IndexEntrySize*2)) & @CRLF)
+			_DumpOutput("$Counter: " & $Counter & @CRLF)
+			_DumpOutput("$DataOffset: " & $DataOffset & @CRLF)
+			_DumpOutput("$DataSize: " & $DataSize & @CRLF)
+			_DumpOutput("$IndexEntrySize: " & $IndexEntrySize & @CRLF)
+			_DumpOutput("$IndexKeySize: " & $IndexKeySize & @CRLF)
+			_DumpOutput("$Flags: " & $Flags & @CRLF)
+			_DumpOutput("$KeyReparseTag: " & $KeyReparseTag & @CRLF)
+			_DumpOutput("$KeyMftRefOfReparsePoint: " & $KeyMftRefOfReparsePoint & @CRLF)
+			_DumpOutput("$KeyMftRefSeqNoOfReparsePoint: " & $KeyMftRefSeqNoOfReparsePoint & @CRLF)
+		EndIf
+
+	;	$Padding4 = StringMid($InputData, $StartOffset + 56, 8)
+		FileWriteLine($LogFileReparseRCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$KeyReparseTag&$de&$KeyMftRefOfReparsePoint&$de&$KeyMftRefSeqNoOfReparsePoint&$de&$IsRedo&@crlf)
+		$Counter+=1
+		$StartOffset += $IndexEntrySize*2
+	Until $StartOffset >= $InputDataSize
 EndFunc
 
-Func _Decode_OpenAttributeTableDump($InputData)
+Func _Decode_OpenAttributeTableDumpNt6x($InputData)
 	Local $StartOffset = 1,$EntryCounter=1
 	;Header
 	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
@@ -7941,7 +8340,7 @@ Func _Decode_OpenAttributeTableDump($InputData)
 
 	$NumberOfEntries = StringMid($InputData, $StartOffset + 8, 8)
 	$NumberOfEntries = Dec(_SwapEndian($NumberOfEntries),2)
-	If ($MaxEntries = 0 Or $NumberOfEntries = 0) Then MsgBox(0,"Info","Entries was 0")
+	If ($MaxEntries = 0 Or $NumberOfEntries = 0) Then _DumpOutput("VerboseInfo: Entries was 0 in _Decode_OpenAttributeTableDumpNt6x() at lsn " & $this_lsn & @CRLF)
 
 
 	$EntrySignature = StringMid($InputData, $StartOffset + 24, 8)
@@ -7957,13 +8356,13 @@ Func _Decode_OpenAttributeTableDump($InputData)
 	$NumberOfEntries = $MaxEntries
 
 	If $VerboseOn Then
-		ConsoleWrite("_Decode_OpenAttributeTableDump: " & @CRLF)
-		ConsoleWrite("$TableEntrySize: " & $TableEntrySize & @CRLF)
-		ConsoleWrite("$MaxEntries: " & $MaxEntries & @CRLF)
-		ConsoleWrite("$EntrySignature: " & $EntrySignature & @CRLF)
-		ConsoleWrite("$OffsetLastRealEntry: " & $OffsetLastRealEntry & @CRLF)
-		ConsoleWrite("$OffsetLastReservedEntry: " & $OffsetLastReservedEntry & @CRLF)
-		ConsoleWrite("$NumberOfEntries: " & $NumberOfEntries & @CRLF)
+		_DumpOutput("_Decode_OpenAttributeTableDumpNt6x: " & @CRLF)
+		_DumpOutput("$TableEntrySize: " & $TableEntrySize & @CRLF)
+		_DumpOutput("$MaxEntries: " & $MaxEntries & @CRLF)
+		_DumpOutput("$EntrySignature: " & $EntrySignature & @CRLF)
+		_DumpOutput("$OffsetLastRealEntry: " & $OffsetLastRealEntry & @CRLF)
+		_DumpOutput("$OffsetLastReservedEntry: " & $OffsetLastReservedEntry & @CRLF)
+		_DumpOutput("$NumberOfEntries: " & $NumberOfEntries & @CRLF)
 	EndIf
 
 	$OpenAttributesArray[0][0] = "TableOffset"
@@ -8022,6 +8421,152 @@ Func _Decode_OpenAttributeTableDump($InputData)
 		$OpenAttributesArray[$EntryCounter][9] = $TargetLsn
 		$OpenAttributesArray[$EntryCounter][10] = "0x" & $UnknownPointer
 		$OpenAttributesArray[$EntryCounter][11] = "0x" & $TargetEndSignature
+
+		If $VerboseOn Then
+			_DumpOutput(@CRLF)
+			_DumpOutput("$EntryCounter: " & $EntryCounter & @CRLF)
+			_DumpOutput(_HexEncode("0x"&StringMid($InputData,$StartOffset+$OffsetFirstEntry,$TableEntrySize*2)) & @CRLF)
+			_DumpOutput("Offset: " & $OpenAttributesArray[$EntryCounter][0] & @CRLF)
+			_DumpOutput("AllocatedOrNextFree: " & $OpenAttributesArray[$EntryCounter][1] & @CRLF)
+			_DumpOutput("DirtyPagesSeen: " & $OpenAttributesArray[$EntryCounter][2] & @CRLF)
+			_DumpOutput("AttributeNamePresent: " & $OpenAttributesArray[$EntryCounter][3] & @CRLF)
+			_DumpOutput("unknown1: " & $OpenAttributesArray[$EntryCounter][4] & @CRLF)
+			_DumpOutput("TargetAttributeCode: " & $OpenAttributesArray[$EntryCounter][5] & @CRLF)
+			_DumpOutput("unknown2: " & $OpenAttributesArray[$EntryCounter][6] & @CRLF)
+			_DumpOutput("TargetMftRef: " & $OpenAttributesArray[$EntryCounter][7] & @CRLF)
+			_DumpOutput("TargetMftRefSeqNo: " & $OpenAttributesArray[$EntryCounter][8] & @CRLF)
+			_DumpOutput("TargetLsn: " & $OpenAttributesArray[$EntryCounter][9] & @CRLF)
+			_DumpOutput("UnknownPointer: " & $OpenAttributesArray[$EntryCounter][10] & @CRLF)
+			_DumpOutput("TargetEndSignature: " & $OpenAttributesArray[$EntryCounter][11] & @CRLF)
+		EndIf
+
+		$StartOffset += $TableEntrySize*2
+		$EntryCounter += 1
+;	Until $StartOffset >= $OffsetLastRealEntry*2
+;	Until $StartOffset-$OffsetFirstEntry >= $OffsetLastReservedEntry*2
+	Until $StartOffset >= $OffsetLastReservedEntry*2
+	ReDim $OpenAttributesArray[$EntryCounter][13]
+
+	$lsn_openattributestable = $this_lsn
+	If $VerboseOn Then
+		_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+		_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+;		_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+	EndIf
+EndFunc
+
+Func _Decode_OpenAttributeTableDumpNt5x($InputData)
+	Local $StartOffset = 1,$EntryCounter=1
+	;Header
+	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
+	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
+
+	$MaxEntries = StringMid($InputData, $StartOffset + 4, 4)
+	$MaxEntries = Dec(_SwapEndian($MaxEntries),2)
+
+	$NumberOfEntries = StringMid($InputData, $StartOffset + 8, 8)
+	$NumberOfEntries = Dec(_SwapEndian($NumberOfEntries),2)
+	If ($MaxEntries = 0 Or $NumberOfEntries = 0) Then _DumpOutput("VerboseInfo: Entries was 0 in _Decode_OpenAttributeTableDumpNt5x() at lsn " & $this_lsn & @CRLF)
+
+
+	$EntrySignature = StringMid($InputData, $StartOffset + 24, 8)
+
+	$OffsetLastRealEntry = StringMid($InputData, $StartOffset + 32, 8)
+	$OffsetLastRealEntry = Dec(_SwapEndian($OffsetLastRealEntry),2)
+
+;	$OffsetLastReservedEntry = StringMid($InputData, $StartOffset + 40, 8)
+;	$OffsetLastReservedEntry = Dec(_SwapEndian($OffsetLastReservedEntry),2)
+	$OffsetLastReservedEntry = $MaxEntries*$TableEntrySize
+
+;	$NumberOfEntries = Round($OffsetLastReservedEntry/40)
+	$NumberOfEntries = $MaxEntries
+
+	If $VerboseOn Then
+		_DumpOutput("_Decode_OpenAttributeTableDumpNt5x: " & @CRLF)
+		_DumpOutput("$TableEntrySize: " & $TableEntrySize & @CRLF)
+		_DumpOutput("$MaxEntries: " & $MaxEntries & @CRLF)
+		_DumpOutput("$EntrySignature: " & $EntrySignature & @CRLF)
+		_DumpOutput("$OffsetLastRealEntry: " & $OffsetLastRealEntry & @CRLF)
+		_DumpOutput("$OffsetLastReservedEntry: " & $OffsetLastReservedEntry & @CRLF)
+		_DumpOutput("$NumberOfEntries: " & $NumberOfEntries & @CRLF)
+	EndIf
+
+	$OpenAttributesArray[0][0] = "TableOffset"
+	$OpenAttributesArray[0][1] = "AllocatedOrNextFree"
+	$OpenAttributesArray[0][2] = "DirtyPagesSeen"
+	$OpenAttributesArray[0][3] = "AttributeNamePresent"
+	$OpenAttributesArray[0][4] = "unknown1"
+	$OpenAttributesArray[0][5] = "AttributeCode"
+	$OpenAttributesArray[0][6] = "unknown2"
+	$OpenAttributesArray[0][7] = "MftRef"
+	$OpenAttributesArray[0][8] = "MftRefSeqNo"
+	$OpenAttributesArray[0][9] = "Lsn"
+	$OpenAttributesArray[0][10] = "UnknownPointer"
+	$OpenAttributesArray[0][11] = "EndSignature"
+	$OpenAttributesArray[0][12] = "AttributeName"
+
+	$OffsetFirstEntry = 48
+	ReDim $OpenAttributesArray[1+$NumberOfEntries][13]
+	Do
+		$AllocatedOrNextFree = StringMid($InputData, $StartOffset + $OffsetFirstEntry, 8) ;AllocatedOrNextFree
+
+		$UnknownPointer = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 8, 8) ;An offset to NamesDump?
+		$UnknownPointer = _SwapEndian($UnknownPointer)
+
+		$TargetMftRef = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 16, 12)
+		$TargetMftRef = Dec(_SwapEndian($TargetMftRef),2)
+
+		$TargetMftRefSeqNo = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 28, 4)
+		$TargetMftRefSeqNo = Dec(_SwapEndian($TargetMftRefSeqNo),2)
+
+		$TargetLsn = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 32, 16)
+		$TargetLsn = Dec(_SwapEndian($TargetLsn),2)
+
+		$unknown2 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 48, 8)
+
+		$TargetAttributeCode = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 56, 8)
+
+		;$unknown3 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 64, 8)
+
+		$TargetEndSignature = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 72, 8)
+
+		$DirtyPagesSeen = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 80, 2)
+
+		$AttributeNamePresent = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 82, 2)
+
+		$unknown1 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 84, 4)
+
+		$OpenAttributesArray[$EntryCounter][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
+		$OpenAttributesArray[$EntryCounter][1] = "0x" & $AllocatedOrNextFree
+		$OpenAttributesArray[$EntryCounter][2] = "0x" & $DirtyPagesSeen
+		$OpenAttributesArray[$EntryCounter][3] = "0x" & $AttributeNamePresent
+		$OpenAttributesArray[$EntryCounter][4] = "0x" & $unknown1
+		$OpenAttributesArray[$EntryCounter][5] = "0x" & $TargetAttributeCode
+		$OpenAttributesArray[$EntryCounter][6] = "0x" & $unknown2
+		$OpenAttributesArray[$EntryCounter][7] = $TargetMftRef
+		$OpenAttributesArray[$EntryCounter][8] = $TargetMftRefSeqNo
+		$OpenAttributesArray[$EntryCounter][9] = $TargetLsn
+		$OpenAttributesArray[$EntryCounter][10] = "0x" & $UnknownPointer
+		$OpenAttributesArray[$EntryCounter][11] = "0x" & $TargetEndSignature
+
+		If $VerboseOn Then
+			_DumpOutput(@CRLF)
+			_DumpOutput("$EntryCounter: " & $EntryCounter & @CRLF)
+			_DumpOutput(_HexEncode("0x"&StringMid($InputData,$StartOffset+$OffsetFirstEntry,$TableEntrySize*2)) & @CRLF)
+			_DumpOutput("Offset: " & $OpenAttributesArray[$EntryCounter][0] & @CRLF)
+			_DumpOutput("AllocatedOrNextFree: " & $OpenAttributesArray[$EntryCounter][1] & @CRLF)
+			_DumpOutput("DirtyPagesSeen: " & $OpenAttributesArray[$EntryCounter][2] & @CRLF)
+			_DumpOutput("AttributeNamePresent: " & $OpenAttributesArray[$EntryCounter][3] & @CRLF)
+			_DumpOutput("unknown1: " & $OpenAttributesArray[$EntryCounter][4] & @CRLF)
+			_DumpOutput("TargetAttributeCode: " & $OpenAttributesArray[$EntryCounter][5] & @CRLF)
+			_DumpOutput("unknown2: " & $OpenAttributesArray[$EntryCounter][6] & @CRLF)
+			_DumpOutput("TargetMftRef: " & $OpenAttributesArray[$EntryCounter][7] & @CRLF)
+			_DumpOutput("TargetMftRefSeqNo: " & $OpenAttributesArray[$EntryCounter][8] & @CRLF)
+			_DumpOutput("TargetLsn: " & $OpenAttributesArray[$EntryCounter][9] & @CRLF)
+			_DumpOutput("UnknownPointer: " & $OpenAttributesArray[$EntryCounter][10] & @CRLF)
+			_DumpOutput("TargetEndSignature: " & $OpenAttributesArray[$EntryCounter][11] & @CRLF)
+		EndIf
 
 		$StartOffset += $TableEntrySize*2
 		$EntryCounter += 1
@@ -8222,22 +8767,22 @@ Func _DumpOutput($text)
 EndFunc
 
 Func _WriteCSVHeaderObjIdO()
-	$ObjIdO_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"GUIDObjectId"&$de&"MftRef"&$de&"MftSeqNo"&$de&"GUIDBirthVolumeId"&$de&"GUIDBirthObjectId"&$de&"GUIDDomainId"
+	$ObjIdO_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"GUIDObjectId"&$de&"MftRef"&$de&"MftSeqNo"&$de&"GUIDBirthVolumeId"&$de&"GUIDBirthObjectId"&$de&"GUIDDomainId"&$de&"IsRedo"
 	FileWriteLine($LogFileObjIdOCsv, $ObjIdO_Csv_Header & @CRLF)
 EndFunc
 
 Func _WriteCSVHeaderQuotaO()
-	$QuotaO_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"SID"&$de&"OwnerId"
+	$QuotaO_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"SID"&$de&"OwnerId"&$de&"IsRedo"
 	FileWriteLine($LogFileQuotaOCsv, $QuotaO_Csv_Header & @CRLF)
 EndFunc
 
 Func _WriteCSVHeaderQuotaQ()
-	$QuotaQ_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"OwnerId"&$de&"Version"&$de&"Flags2"&$de&"BytesUsed"&$de&"ChangeTime"&$de&"WarningLimit"&$de&"HardLimit"&$de&"ExceededTime"&$de&"SID"
+	$QuotaQ_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"OwnerId"&$de&"Version"&$de&"Flags2"&$de&"BytesUsed"&$de&"ChangeTime"&$de&"WarningLimit(bytes)"&$de&"HardLimit(bytes)"&$de&"ExceededTime"&$de&"SID"&$de&"IsRedo"
 	FileWriteLine($LogFileQuotaQCsv, $QuotaQ_Csv_Header & @CRLF)
 EndFunc
 
 Func _WriteCSVHeaderReparseR()
-	$ReparseR_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"KeyReparseTag"&$de&"KeyMftRefOfReparsePoint"&$de&"KeyMftRefSeqNoOfReparsePoint"
+	$ReparseR_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"KeyReparseTag"&$de&"KeyMftRefOfReparsePoint"&$de&"KeyMftRefSeqNoOfReparsePoint"&$de&"IsRedo"
 	FileWriteLine($LogFileReparseRCsv, $ReparseR_Csv_Header & @CRLF)
 EndFunc
 
@@ -8252,7 +8797,7 @@ Func _Decode_TransactionTableDump($InputData)
 
 	$NumberOfEntries = StringMid($InputData, $StartOffset + 8, 8)
 	$NumberOfEntries = Dec(_SwapEndian($NumberOfEntries),2)
-	If ($MaxEntries = 0 Or $NumberOfEntries = 0) Then MsgBox(0,"Info","Entries was 0")
+	If ($MaxEntries = 0 Or $NumberOfEntries = 0) Then _DumpOutput("VerboseInfo: Entries was 0 in _Decode_TransactionTableDump() at lsn " & $this_lsn & @CRLF)
 
 	$EntrySignature = StringMid($InputData, $StartOffset + 24, 8)
 
@@ -8359,7 +8904,7 @@ Func _WriteCSVHeaderSlackOpenAttributeTable()
 	FileWriteLine($LogFileSlackOpenAttributeTableCsv, $SlackOpenAttributeTable_Csv_Header & @CRLF)
 EndFunc
 
-Func _Decode_SlackOpenAttributeTableDump($InputData)
+Func _Decode_SlackOpenAttributeTableDumpNt6x($InputData)
 	Local $StartOffset = 1,$EntryCounter=1, $InputDataSize = StringLen($InputData)
 	;Header
 	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
@@ -8370,7 +8915,7 @@ Func _Decode_SlackOpenAttributeTableDump($InputData)
 
 	$NumberOfEntries = StringMid($InputData, $StartOffset + 8, 8)
 	$NumberOfEntries = Dec(_SwapEndian($NumberOfEntries),2)
-	If ($MaxEntries = 0 Or $NumberOfEntries = 0) Then MsgBox(0,"Info","Entries was 0")
+	If ($MaxEntries = 0 Or $NumberOfEntries = 0) Then _DumpOutput("VerboseInfo: Entries was 0 in _Decode_SlackOpenAttributeTableDumpNt6x() at lsn " & $this_lsn & @CRLF)
 
 
 	$EntrySignature = StringMid($InputData, $StartOffset + 24, 8)
@@ -8386,7 +8931,7 @@ Func _Decode_SlackOpenAttributeTableDump($InputData)
 	$NumberOfEntries = $MaxEntries
 
 	If $VerboseOn Then
-		ConsoleWrite("_Decode_SlackOpenAttributeTableDump: " & @CRLF)
+		ConsoleWrite("_Decode_SlackOpenAttributeTableDumpNt6x: " & @CRLF)
 		ConsoleWrite("$TableEntrySize: " & $TableEntrySize & @CRLF)
 		ConsoleWrite("$MaxEntries: " & $MaxEntries & @CRLF)
 		ConsoleWrite("$EntrySignature: " & $EntrySignature & @CRLF)
@@ -8439,6 +8984,123 @@ Func _Decode_SlackOpenAttributeTableDump($InputData)
 		$UnknownPointer = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 64, 8)
 		$UnknownPointer = _SwapEndian($UnknownPointer)
 		$TargetEndSignature = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 72, 8)
+
+		$SlackOpenAttributesArray[$EntryCounter][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
+		$SlackOpenAttributesArray[$EntryCounter][1] = "0x" & $AllocatedOrNextFree
+		$SlackOpenAttributesArray[$EntryCounter][2] = "0x" & $DirtyPagesSeen
+		$SlackOpenAttributesArray[$EntryCounter][3] = "0x" & $AttributeNamePresent
+		$SlackOpenAttributesArray[$EntryCounter][4] = "0x" & $unknown1
+		$SlackOpenAttributesArray[$EntryCounter][5] = "0x" & $TargetAttributeCode
+		$SlackOpenAttributesArray[$EntryCounter][6] = "0x" & $unknown2
+		$SlackOpenAttributesArray[$EntryCounter][7] = $TargetMftRef
+		$SlackOpenAttributesArray[$EntryCounter][8] = $TargetMftRefSeqNo
+		$SlackOpenAttributesArray[$EntryCounter][9] = $TargetLsn
+		$SlackOpenAttributesArray[$EntryCounter][10] = "0x" & $UnknownPointer
+		$SlackOpenAttributesArray[$EntryCounter][11] = "0x" & $TargetEndSignature
+
+		$StartOffset += $TableEntrySize*2
+;		If $StartOffset >= $InputDataSize Then ExitLoop
+		$EntryCounter += 1
+
+;	Until $StartOffset >= $OffsetLastRealEntry*2
+;	Until $StartOffset-$OffsetFirstEntry >= $OffsetLastReservedEntry*2
+	Until $StartOffset >= $OffsetLastReservedEntry*2
+	ReDim $SlackOpenAttributesArray[$EntryCounter][13]
+
+	For $i = 1 To UBound($SlackOpenAttributesArray)-1
+		FileWriteLine($LogFileSlackOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$SlackOpenAttributesArray[$i][0]&$de&$SlackOpenAttributesArray[$i][12]&$de&$SlackOpenAttributesArray[$i][1]&$de&$SlackOpenAttributesArray[$i][2]&$de&$SlackOpenAttributesArray[$i][3]&$de&$SlackOpenAttributesArray[$i][4]&$de&$SlackOpenAttributesArray[$i][5]&$de&_ResolveAttributeType(StringMid($SlackOpenAttributesArray[$i][5],3,4))&$de&$SlackOpenAttributesArray[$i][6]&$de&$SlackOpenAttributesArray[$i][7]&$de&$SlackOpenAttributesArray[$i][8]&$de&$SlackOpenAttributesArray[$i][9]&$de&$SlackOpenAttributesArray[$i][10]&$de&$SlackOpenAttributesArray[$i][11]&@crlf)
+	Next
+
+;	$lsn_openattributestable = $this_lsn
+	If $VerboseOn Then
+		_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+		_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+;		_ArrayDisplay($SlackOpenAttributesArray,"$SlackOpenAttributesArray")
+	EndIf
+EndFunc
+
+Func _Decode_SlackOpenAttributeTableDumpNt5x($InputData)
+	Local $StartOffset = 1,$EntryCounter=1, $InputDataSize = StringLen($InputData)
+	;Header
+	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
+	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
+
+	$MaxEntries = StringMid($InputData, $StartOffset + 4, 4)
+	$MaxEntries = Dec(_SwapEndian($MaxEntries),2)
+
+	$NumberOfEntries = StringMid($InputData, $StartOffset + 8, 8)
+	$NumberOfEntries = Dec(_SwapEndian($NumberOfEntries),2)
+	If ($MaxEntries = 0 Or $NumberOfEntries = 0) Then _DumpOutput("VerboseInfo: Entries was 0 in _Decode_SlackOpenAttributeTableDumpNt5x() at lsn " & $this_lsn & @CRLF)
+
+
+	$EntrySignature = StringMid($InputData, $StartOffset + 24, 8)
+
+	$OffsetLastRealEntry = StringMid($InputData, $StartOffset + 32, 8)
+	$OffsetLastRealEntry = Dec(_SwapEndian($OffsetLastRealEntry),2)
+
+;	$OffsetLastReservedEntry = StringMid($InputData, $StartOffset + 40, 8)
+;	$OffsetLastReservedEntry = Dec(_SwapEndian($OffsetLastReservedEntry),2)
+	$OffsetLastReservedEntry = $MaxEntries*$TableEntrySize
+
+;	$NumberOfEntries = Round($OffsetLastReservedEntry/40)
+	$NumberOfEntries = $MaxEntries
+
+	If $VerboseOn Then
+		ConsoleWrite("_Decode_SlackOpenAttributeTableDumpNt5x: " & @CRLF)
+		ConsoleWrite("$TableEntrySize: " & $TableEntrySize & @CRLF)
+		ConsoleWrite("$MaxEntries: " & $MaxEntries & @CRLF)
+		ConsoleWrite("$EntrySignature: " & $EntrySignature & @CRLF)
+		ConsoleWrite("$OffsetLastRealEntry: " & $OffsetLastRealEntry & @CRLF)
+		ConsoleWrite("$OffsetLastReservedEntry: " & $OffsetLastReservedEntry & @CRLF)
+		ConsoleWrite("$NumberOfEntries: " & $NumberOfEntries & @CRLF)
+	EndIf
+
+	$SlackOpenAttributesArray[0][0] = "TableOffset"
+	$SlackOpenAttributesArray[0][1] = "AllocatedOrNextFree"
+	$SlackOpenAttributesArray[0][2] = "DirtyPagesSeen"
+	$SlackOpenAttributesArray[0][3] = "AttributeNamePresent"
+	$SlackOpenAttributesArray[0][4] = "unknown1"
+	$SlackOpenAttributesArray[0][5] = "AttributeCode"
+	$SlackOpenAttributesArray[0][6] = "unknown2"
+	$SlackOpenAttributesArray[0][7] = "MftRef"
+	$SlackOpenAttributesArray[0][8] = "MftRefSeqNo"
+	$SlackOpenAttributesArray[0][9] = "Lsn"
+	$SlackOpenAttributesArray[0][10] = "UnknownPointer"
+	$SlackOpenAttributesArray[0][11] = "EndSignature"
+	$SlackOpenAttributesArray[0][12] = "AttributeName"
+
+	$OffsetFirstEntry = 48
+	ReDim $SlackOpenAttributesArray[1+$NumberOfEntries][13]
+	Do
+		If $StartOffset >= $InputDataSize Then ExitLoop
+		$AllocatedOrNextFree = StringMid($InputData, $StartOffset + $OffsetFirstEntry, 8) ;AllocatedOrNextFree
+
+		$UnknownPointer = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 8, 8) ;An offset to NamesDump?
+		$UnknownPointer = _SwapEndian($UnknownPointer)
+
+		$TargetMftRef = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 16, 12)
+		$TargetMftRef = Dec(_SwapEndian($TargetMftRef),2)
+
+		$TargetMftRefSeqNo = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 28, 4)
+		$TargetMftRefSeqNo = Dec(_SwapEndian($TargetMftRefSeqNo),2)
+
+		$TargetLsn = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 32, 16)
+		$TargetLsn = Dec(_SwapEndian($TargetLsn),2)
+
+		$unknown2 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 48, 8)
+
+		$TargetAttributeCode = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 56, 8)
+
+		;$unknown3 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 64, 8)
+
+		$TargetEndSignature = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 72, 8)
+
+		$DirtyPagesSeen = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 80, 2)
+
+		$AttributeNamePresent = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 82, 2)
+
+		$unknown1 = StringMid($InputData, $StartOffset + $OffsetFirstEntry + 84, 4)
 
 		$SlackOpenAttributesArray[$EntryCounter][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
 		$SlackOpenAttributesArray[$EntryCounter][1] = "0x" & $AllocatedOrNextFree
@@ -9242,4 +9904,182 @@ Func _CheckFragment($InputData)
 		_DumpOutput("Success verifying data:" & @CRLF)
 		_DumpOutput(_HexEncode("0x"&$result) & @CRLF)
 	EndIf
+EndFunc
+
+Func _Decode_Attribute_List($InputData)
+
+EndFunc
+
+;Func _DecodeAttrList($TargetFile, $AttrList)
+Func _DecodeAttrList($AttrList,$IsRedo)
+	Local $offset, $LocalAttribID, $LocalName, $ALRecordLength, $ALNameLength, $ALNameOffset
+	$offset=0
+	$list=$AttrList
+	$str=";BaseRef="
+	While StringLen($list) > $offset*2
+		$type=StringMid($List, ($offset*2)+1, 4)
+		$type = _ResolveAttributeType($type)
+		$ALRecordLength = Dec(_SwapEndian(StringMid($List, $offset*2 + 9, 4)))
+		$ALNameLength = Dec(_SwapEndian(StringMid($List, $offset*2 + 13, 2)))
+		$ALNameOffset = Dec(_SwapEndian(StringMid($List, $offset*2 + 15, 2)))
+		$TestVCN = Dec(_SwapEndian(StringMid($List, $offset*2 + 17, 16)))
+		$ref=Dec(_SwapEndian(StringMid($List, $offset*2 + 33, 8)))
+		$LocalAttribID = "0x" & StringMid($List, $offset*2 + 49, 2) & StringMid($List, $offset*2 + 51, 2)
+		If $ALNameLength > 0 Then
+			$LocalName = StringMid($List, $offset*2 + 53, $ALNameLength*2*2)
+			$LocalName = BinaryToString("0x"&$LocalName,2)
+		Else
+			$LocalName = ""
+		EndIf
+		If Not StringInStr($str, $ref) Then $str &= $ref & "-"
+		If $ALRecordLength=0 Or $type="UNKNOWN" Then ExitLoop
+		$EntryOffset = "0x"&Hex(Int($offset),8)
+		FileWriteLine($LogFileAttributeListCsv, $this_lsn&$de&$EntryOffset&$de&$IsRedo&$de&$type&$de&"0x"&Hex($TestVCN,8)&$de&$ref&$de&$LocalName&$de&$LocalAttribID&@crlf)
+		$offset += Dec(_SwapEndian(StringMid($List, $offset*2 + 9, 4)))
+	WEnd
+EndFunc
+
+Func _WriteCSVHeaderAttributeList()
+	$AttributeList_Csv_Header = "lf_LSN"&$de&"ListOffset"&$de&"IsRedoOp"&$de&"AttributeType"&$de&"VCN"&$de&"BaseMFTRef"&$de&"Name"&$de&"AttributeId"
+	FileWriteLine($LogFileAttributeListCsv, $AttributeList_Csv_Header & @CRLF)
+EndFunc
+
+Func _Decode_Quota_Q_SingleEntry($InputData,$IsRedo)
+	Local $Counter=1
+	$StartOffset = 1
+	$InputDataSize = StringLen($InputData)
+
+	If $VerboseOn Then
+		_DumpOutput("_Decode_Quota_Q_SingleEntry():" & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+	EndIf
+
+	$DataOffset = "-"
+	$DataSize = "-"
+	$IndexEntrySize = "-"
+	$IndexKeySize = "-"
+	$Flags = "-"
+	$OwnerId = "-"
+
+	$Version = StringMid($InputData, $StartOffset, 8)
+	$Version = "0x" & _SwapEndian($Version)
+
+	$Flags2 = StringMid($InputData, $StartOffset + 8, 8)
+	$Flags2 = _SwapEndian($Flags2)
+	$Flags2Text = _Decode_QuotaFlags("0x"&$Flags2)
+
+	$BytesUsed = StringMid($InputData, $StartOffset + 16, 16)
+	$BytesUsed = Dec(_SwapEndian($BytesUsed),2)
+
+	If $InputDataSize = 96 Then
+		$ChangeTime = StringMid($InputData, $StartOffset + 32, 16)
+		$ChangeTime = _SwapEndian($ChangeTime)
+		$ChangeTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ChangeTime)
+		$ChangeTime = _WinTime_UTCFileTimeFormat(Dec($ChangeTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+		If @error Then
+			$ChangeTime = "-"
+		ElseIf $TimestampPrecision = 2 Then
+			$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-4)
+			$ChangeTime_Precision = StringRight($ChangeTime,3)
+		ElseIf $TimestampPrecision = 3 Then
+			$ChangeTime = $ChangeTime & ":" & _FillZero(StringRight($ChangeTime_tmp, 4))
+			$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-9)
+			$ChangeTime_Precision = StringRight($ChangeTime,8)
+		Else
+			$ChangeTime_Core = $ChangeTime
+		EndIf
+		$TextInformation &= ";ChangeTime=" & $ChangeTime
+
+		$WarningLimit = StringMid($InputData, $StartOffset + 48, 16)
+		$WarningLimit = "0x" & _SwapEndian($WarningLimit)
+
+		$HardLimit = StringMid($InputData, $StartOffset + 64, 16)
+		$HardLimit = "0x" & _SwapEndian($HardLimit)
+
+
+		$ExceededTime = StringMid($InputData, $StartOffset + 80, 16)
+
+		If $ExceededTime <> "0000000000000000" Then
+			$ExceededTime = _SwapEndian($ExceededTime)
+			$ExceededTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ExceededTime)
+			$ExceededTime = _WinTime_UTCFileTimeFormat(Dec($ExceededTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+			If @error Then
+				$ExceededTime = "-"
+			ElseIf $TimestampPrecision = 2 Then
+				$ExceededTime_Core = StringMid($ExceededTime,1,StringLen($ExceededTime)-4)
+				$ExceededTime_Precision = StringRight($ExceededTime,3)
+			ElseIf $TimestampPrecision = 3 Then
+				$ExceededTime = $ExceededTime & ":" & _FillZero(StringRight($ExceededTime_tmp, 4))
+				$ExceededTime_Core = StringMid($ExceededTime,1,StringLen($ExceededTime)-9)
+				$ExceededTime_Precision = StringRight($ExceededTime,8)
+			Else
+				$ExceededTime_Core = $ExceededTime
+			EndIf
+		Else
+			$ExceededTime = 0
+		EndIf
+
+	Else
+		$ChangeTime = "-"
+		$WarningLimit = "-"
+		$HardLimit = "-"
+		$ExceededTime = "-"
+	EndIf
+
+	$SID = "-"
+
+	If $VerboseOn Then
+		_DumpOutput(@CRLF)
+		_DumpOutput("$DataOffset: " & $DataOffset & @CRLF)
+		_DumpOutput("$DataSize: " & $DataSize & @CRLF)
+		_DumpOutput("$IndexEntrySize: " & $IndexEntrySize & @CRLF)
+		_DumpOutput("$IndexKeySize: " & $IndexKeySize & @CRLF)
+		_DumpOutput("$Flags: " & $Flags & @CRLF)
+		_DumpOutput("$OwnerId: " & $OwnerId & @CRLF)
+		_DumpOutput("$Version: " & $Version & @CRLF)
+		_DumpOutput("$Flags2Text: " & $Flags2Text & @CRLF)
+		_DumpOutput("$BytesUsed: " & $BytesUsed & @CRLF)
+		_DumpOutput("$ChangeTime: " & $ChangeTime & @CRLF)
+		_DumpOutput("$WarningLimit: " & $WarningLimit & @CRLF)
+		_DumpOutput("$HardLimit: " & $HardLimit & @CRLF)
+		_DumpOutput("$ExceededTime: " & $ExceededTime & @CRLF)
+		_DumpOutput("$SID: " & $SID & @CRLF)
+	EndIf
+
+	FileWriteLine($LogFileQuotaQCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$OwnerId&$de&$Version&$de&$Flags2Text&$de&$BytesUsed&$de&$ChangeTime&$de&$WarningLimit&$de&$HardLimit&$de&$ExceededTime&$de&$SID&$de&$IsRedo&@crlf)
+EndFunc
+
+Func _GetReparseType($ReparseType)
+	;http://msdn.microsoft.com/en-us/library/dd541667(v=prot.10).aspx
+	;http://msdn.microsoft.com/en-us/library/windows/desktop/aa365740(v=vs.85).aspx
+	Select
+		Case $ReparseType = '0x80000005'
+			Return 'DRIVER_EXTENDER'
+		Case $ReparseType = '0x80000006'
+			Return 'HSM2'
+		Case $ReparseType = '0x80000007'
+			Return 'SIS'
+		Case $ReparseType = '0x80000008'
+			Return 'WIM'
+		Case $ReparseType = '0x80000009'
+			Return 'CSV'
+		Case $ReparseType = '0x8000000A'
+			Return 'DFS'
+		Case $ReparseType = '0x8000000B'
+			Return 'FILTER_MANAGER'
+		Case $ReparseType = '0x80000012'
+			Return 'DFSR'
+		Case $ReparseType = '0x80000013'
+			Return 'DEDUP'
+		Case $ReparseType = '0x80000014'
+			Return 'NFS'
+		Case $ReparseType = '0xA0000003'
+			Return 'MOUNT_POINT'
+		Case $ReparseType = '0xA000000C'
+			Return 'SYMLINK'
+		Case $ReparseType = '0xC0000004'
+			Return 'HSM'
+		Case Else
+			Return 'UNKNOWN(' & $ReparseType & ')'
+	EndSelect
 EndFunc

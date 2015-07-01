@@ -1,5 +1,22 @@
 LogFileParser Changelog
 
+v2.0.0.4. 
+Added decode and separate logging of $ATTRIBUTE_LIST attributes.
+Added sanity check of certain csv's before importing. 
+Added logging of unicode configuration. 
+Added test for Removed more meaningless messageboxes.
+Added clearing of $UsnJrnlUsn variable when failure in _UsnDecodeRecord2().
+Improved identification of correct filename on certain systemfiles.
+Activated the already existing $Reparse:$R parser.
+Added option to select if source is from an nt5x system (XP,2003).
+Added logging of nt5x configuration.
+Fixed OpenAttributesTableDump for nt5x (which in turn led to lots of improvements for nt5x parsing).
+Added much improved decode of WriteEndOfIndexBuffer (undo).
+Added an IsRedo flag to output of index related outputs to distinguish where the data comes from (redo vs undo).
+Fixed bug in function _Decode_QuotaFlags() that caused certain flags not to be identified.
+Added decode of UpdateRecordDataRoot and UpdateRecordDataAllocation.
+Fixed bug with reparse point handling.
+
 v2.0.0.3. Removed more meaningless messageboxes.
 
 v2.0.0.2. Added decode of deletion of indexes with $ObjId, $Quota and $Secure.

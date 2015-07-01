@@ -44,9 +44,12 @@ OpenAttributeTableDump
 AttributeNamesDump
 DirtyPageTableDump
 TransactionTableDump
+UpdateRecordDataRoot
+UpdateRecordDataAllocation
 
 The list of currently supported attributes:
 $STANDARD_INFORMATION
+$ATTRIBUTE_LIST
 $FILE_NAME
 $OBJECT_ID
 $SECURITY_DESCRIPTOR
@@ -60,8 +63,8 @@ $EA_INFORMATION
 $EA
 $LOGGED_UTILITY_STREAM
 
-So basically there's only 1 missing in the decode; $ATTRIBUTE_LIST. However, $ATTRIBUTE_LIST is kind of implemented as records from attribute lists are processed through InitializeFileRecordSegment as separate MFT records, and information about base ref is already logged.
 
+So basically all attributes are supported.
 
 Explanation of the different output generated:
 
@@ -191,6 +194,7 @@ Importing og Mft2Csv output is broken if csv is UNICODE (ANSI is ok).
 Partial updates to IndexRecords (IndexRoot/IndexAllocation) are very hard to interpret, as we likely do not have knowledge of the original index. Complete records are OK though.
 Circularity of a 65 MB file poses inherent and absolute restriction on how many historical FS transtions. Systemdrives thus have limited history in $LogFile, whereas external/secondary drives have more histrocal transtions stored. Can increase size of $LogFile with chkdsk (chkdsk c: /L:262144).
 Changes to the data of resident files are not stored within $LogFile, only information that a change was done is stored.
+
 
 Note
 The $UsnJrnl contains information in a more human friendly way. For instance each record contains fileref, filename, timestamp and explanation of what occurred. It also contains far more historical information than $LogFile, though without a lot of details. If $UsnJrnl is active, then all transactions written to it during the recycle life of the $LogFile are also present within $LogFile. This means that there is no reason to decode the $UsnJrnl in order to understand $LogFile any better.
