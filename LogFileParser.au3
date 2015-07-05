@@ -1,7 +1,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.4
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.5
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -42,7 +42,7 @@ Global $LogFileOpenAttributeTableCsv,$LogFileOpenAttributeTableCsvFile,$LogFileD
 Global $LogFileReparseRCsv,$LogFileQuotaQCsv,$LogFileQuotaOCsv,$LogFileObjIdOCsv,$LogFileReparseRCsvFile,$LogFileQuotaQCsvFile,$LogFileQuotaOCsvFile,$LogFileObjIdOCsvFile,$LogFileRCRDCsv,$LogFileRCRDCsvFile
 Global $client_index,$record_type,$transaction_id,$lf_flags,$target_attribute,$lcns_to_follow,$record_offset_in_mft,$attribute_offset,$MftClusterIndex,$target_vcn,$target_lcn,$InOpenAttributeTable=-1,$LsnValidationLevel
 Global $LogFileTransactionHeaderCsv,$LogFileTransactionHeaderCsvFile,$LogFileSlackOpenAttributeTableCsv,$LogFileSlackOpenAttributeTableCsvFile,$LogFileSlackAttributeNamesDumpCsv,$LogFileSlackAttributeNamesDumpCsvFile,$LogFileAttributeListCsv,$LogFileAttributeListCsvFile
-Global $GlobalDataKeepCounter=0,$GlobalRecordSpreadCounter=0,$GlobalRecordSpreadReset=0,$GlobalRecordSpreadReset2=0,$DoRebuildBrokenHeader=False,$MinSizeBrokenTransaction = 80, $IsNt5x=0
+Global $GlobalDataKeepCounter=0,$GlobalRecordSpreadCounter=0,$GlobalRecordSpreadReset=0,$GlobalRecordSpreadReset2=0,$DoRebuildBrokenHeader=False,$MinSizeBrokenTransaction = 80, $IsNt5x=0, $DoExtractResidentUpdates=0
 Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $DataQ[1], $AttrQ[1], $BytesPerCluster
 Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
@@ -77,7 +77,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.4", 540, 480, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.5", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -146,10 +146,13 @@ GUICtrlSetState($InputErrorLevelTranslated, $GUI_DISABLE)
 
 $CheckNt5x = GUICtrlCreateCheckbox("Source is from Nt5x (XP,2003)", 20, 205, 160, 20)
 GUICtrlSetState($CheckNt5x, $GUI_UNCHECKED)
+$CheckExtractResident = GUICtrlCreateCheckbox("Extract resident updates of min size:",190, 205, 190, 20)
+GUICtrlSetState($CheckExtractResident, $GUI_UNCHECKED)
+$MinSizeResidentExtraction = GUICtrlCreateInput("4",380,205,30,20)
 
 $ButtonStart = GUICtrlCreateButton("Start", 450, 195, 80, 30)
 
-$myctredit = GUICtrlCreateEdit("", 0, 225, 540, 55, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
+$myctredit = GUICtrlCreateEdit("", 0, 230, 540, 85, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
 _GUICtrlEdit_SetLimitText($myctredit, 128000)
 
 _InjectTimeZoneInfo()
@@ -243,6 +246,13 @@ If GUICtrlRead($CheckReconstruct) = 1 Then
 	EndIf
 EndIf
 
+If GUICtrlRead($CheckExtractResident) = 1 Then
+	$MinSizeResidentExtraction = GUICtrlRead($MinSizeResidentExtraction)
+	If $MinSizeResidentExtraction > 0 Then
+		$DoExtractResidentUpdates=1
+	EndIf
+EndIf
+
 If GUICtrlRead($CheckBrokenHeaderRebuild) = 1 Then
 	$DoRebuildBrokenHeader = True
 EndIf
@@ -266,6 +276,9 @@ If $LsnValidationLevel = 0 Then
 EndIf
 
 _PrepareOutput()
+If $DoExtractResidentUpdates Then
+	DirCreate($ParserOutDir&"\ResidentExtract")
+EndIf
 ;Put output filenames into an array
 $FileOutputTesterArray[0] = $LogFileCsvFile
 $FileOutputTesterArray[1] = $LogFileIndxCsvFile
@@ -338,6 +351,7 @@ _DebugOut("Sectors per cluster: " & $SectorsPerCluster)
 _DebugOut("DataRun reconstruct configuration: " & $DoReconstructDataRuns)
 _DebugOut("Rebuild broken header for transactions found in slack: " & $DoRebuildBrokenHeader)
 _DebugOut("Nt5x: " & $IsNt5x)
+_DebugOut("DoExtractResidentUpdates: " & $DoExtractResidentUpdates)
 
 $tBuffer = DllStructCreate("byte[" & $Record_Size & "]")
 $tBuffer2 = DllStructCreate("byte[" & $SectorSize & "]")
@@ -354,13 +368,14 @@ _DebugOut("Using DateTime format: " & $DateTimeFormat)
 _DebugOut("Using timestamp precision: " & $TimestampPrecision)
 _DebugOut("------------------- END CONFIGURATION -----------------------")
 
-$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 280,540,20)
+;$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 280,540,20)
+$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 320,540,20)
 GUICtrlSetFont($Progress, 12)
-$ProgressStatus = GUICtrlCreateLabel("", 10, 310, 520, 20)
-$ElapsedTime = GUICtrlCreateLabel("", 10, 325, 520, 20)
-$ProgressLogFile = GUICtrlCreateProgress(10, 350, 520, 30)
-$ProgressUsnJrnl = GUICtrlCreateProgress(10,  385, 520, 30)
-$ProgressReconstruct = GUICtrlCreateProgress(10, 420, 520, 30)
+$ProgressStatus = GUICtrlCreateLabel("", 10, 350, 520, 20)
+$ElapsedTime = GUICtrlCreateLabel("", 10, 365, 520, 20)
+$ProgressLogFile = GUICtrlCreateProgress(10, 390, 520, 30)
+$ProgressUsnJrnl = GUICtrlCreateProgress(10,  425, 520, 30)
+$ProgressReconstruct = GUICtrlCreateProgress(10, 460, 520, 30)
 $begin = TimerInit()
 AdlibRegister("_LogFileProgress", 500)
 $InputFileSize = _WinAPI_GetFileSizeEx($hFile)
@@ -523,9 +538,9 @@ GUICtrlSetData($ProgressStatus, "Processing LogFile transaction " & $CurrentReco
 GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
 GUICtrlSetData($ProgressLogFile, 100 * ($CurrentRecord+1) / $MaxRecords)
 
-_DisplayInfo("$LogFile processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
+_DisplayInfo("$LogFile processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & "." & @CRLF)
 _DumpOutput("------------------ END PROCESSING -------------------" & @CRLF)
-_DumpOutput("$LogFile processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
+_DumpOutput("$LogFile processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & "." & @CRLF)
 
 For $FileNumber = 0 To UBound($FileOutputTesterArray)-1
 	If FileExists($FileOutputTesterArray[$FileNumber]) Then
@@ -577,6 +592,7 @@ EndIf
 
 ; Create database with tables and import csv
 _DisplayInfo("Importing csv's to db and updating tables." & @CRLF)
+_DumpOutput("Importing csv's to db and updating tables." & @CRLF)
 $begin = TimerInit()
 If $DoReconstructDataRuns Then
 	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE DataRuns (lf_Offset TEXT,lf_MFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_FileName TEXT,lf_LSN INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_AttributeOffset INTEGER,lf_SI_USN INTEGER,lf_DataName TEXT,lf_Flags TEXT,lf_NonResident TEXT,lf_CompressionUnitSize TEXT,lf_FileSize INTEGER,lf_InitializedStreamSize INTEGER,lf_OffsetToDataRuns INTEGER,lf_DataRuns TEXT);", $sOutputFile)
@@ -706,7 +722,8 @@ If $TargetMftCsvFile Then
 	_SQLite_SQLiteExe2($NtfsDbFile, "DROP TABLE LogFile;", $sOutputFile)
 	_SQLite_SQLiteExe2($NtfsDbFile, "ALTER TABLE LogFileTmp rename to LogFile;", $sOutputFile)
 EndIf
-_DisplayInfo("Job took " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
+_DisplayInfo("Job took " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & "." & @CRLF)
+_DumpOutput("Job took " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & "." & @CRLF)
 
 ;----------------- UsnJrnl
 If FileExists($UsnJrnlFile) Then
@@ -1586,29 +1603,18 @@ Else
 	$VerboseOn=0
 EndIf
 #ce
-;#cs
-;If $this_lsn=102092945091 or $this_lsn=102092945130 or $this_lsn=102092946307 or $this_lsn=102093057739  or $this_lsn=102093057761  Then
-;If $this_lsn = 7892979208  Then ;56375452416,56375452487,56375452507
-;	$VerboseOn=1
-;	MsgBox(0,"Info","Check output: " & $this_lsn)
-;	ConsoleWrite("Exiting" & @CRLF)
-;	Exit
-;Else
-;	$VerboseOn=0
-;EndIf
-;#ce
+
 ;If $this_lsn=105054169 Or $this_lsn=105054288  Or $this_lsn=5693203315 Or $this_lsn=105061642  Or $this_lsn=100666594 Or $this_lsn= 100666924 Then
 ;	$VerboseOn=1
 ;Else
 ;	$VerboseOn=0
 ;EndIf
-;If $this_lsn=11539784 Or $this_lsn=11538546 Then
+;If $this_lsn=92061840 Or $this_lsn=92065713 Or $this_lsn=92072989 Then
 ;	$VerboseOn=1
 ;Else
 ;	$VerboseOn=0
 ;EndIf
-;_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
-;_DumpOutput("$target_attribute: " & $target_attribute & @CRLF)
+
 If $VerboseOn Then
 ;If Dec($client_undo_next_lsn) <> $client_previous_lsn Then
 ;If $redo_operation_hex="1b00" Then
@@ -1670,7 +1676,7 @@ If $redo_length > 0 Then
 ;			$TestAttributeType = _Decode_AttributeType($undo_chunk)
 ;			If $TestAttributeType <> '' Then _RemoveSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $TestAttributeType)
 		Case $redo_operation_hex="0700" ; UpdateResidentValue
-			_Decode_UpdateResidentValue($redo_chunk)
+			_Decode_UpdateResidentValue($redo_chunk,1)
 			$ResolvedAttributeOffset = _CheckOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft)
 			If Not @error Then
 ;				$AttributeString&= '->('&$ResolvedAttributeOffset&')'
@@ -2054,7 +2060,7 @@ If $undo_length > 0 Then ; Not needed I guess
 			If $TestAttributeType <> '' Then _RemoveSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $UndoChunkSize, $TestAttributeType)
 			_Decode_CreateAttribute($undo_chunk,0)
 		Case $undo_operation_hex="0700" ; UpdateResidentValue
-;			_Decode_UpdateResidentValue($undo_chunk)
+			_Decode_UpdateResidentValue($undo_chunk,0)
 		Case $undo_operation_hex="0900"
 ;			_Decode_UpdateMappingPairs($undo_chunk)
 		Case $undo_operation_hex="0800" ; UpdateNonResidentValue
@@ -4245,23 +4251,30 @@ Func _Get_LoggedUtilityStream($Entry,$Current_Attrib_Number,$CurrentAttributeNam
 	$TextInformation &= ";LoggedUtilityStream="&$TheLoggedUtilityStream
 EndFunc
 
-Func _Decode_UpdateResidentValue($record)
-	If $record_offset_in_mft = 56 Then ;$STANDARD_INFORMATION attribute 0x38
-		If $VerboseOn Then ConsoleWrite("########### UpdateResidentValue in $STANDARD_INFORMATION ###########" & @CRLF)
-		_Decode_StandardInformation($record)
-		$AttributeString = "$STANDARD_INFORMATION"
-	Else
-		If $client_previous_lsn=0 And $undo_length=0 Then
-;			If $PreviousUsnReason<>"" Then
-;			If $SI_USN = $PreviousUsn Then $FN_Name = $PreviousUsnFileName
-;			If $client_previous_lsn= Then $RealMftRef = $PreviousRealRef
-;			EndIf
-;			$AttributeString = $PreviousAttribute
-			$FN_Name = $PreviousUsnFileName
+Func _Decode_UpdateResidentValue($record,$IsRedo)
+	If $IsRedo Then
+		If $record_offset_in_mft = 56 Then ;$STANDARD_INFORMATION attribute 0x38
+			If $VerboseOn Then ConsoleWrite("########### UpdateResidentValue in $STANDARD_INFORMATION ###########" & @CRLF)
+			_Decode_StandardInformation($record)
+			$AttributeString = "$STANDARD_INFORMATION"
 		Else
-;
+			If $DoExtractResidentUpdates And $MinSizeResidentExtraction > 0 And $redo_length > $MinSizeResidentExtraction And $undo_length > 0 And $redo_length=$undo_length Then
+;				If Not $PredictedRefNumber > 0 Then MsgBox(0,"Hey","Extraction of resident info")
+				_ExtractResidentUpdates($record,$IsRedo)
+			ElseIf $client_previous_lsn=0 And $undo_length=0 Then
+	;			If $PreviousUsnReason<>"" Then
+	;			If $SI_USN = $PreviousUsn Then $FN_Name = $PreviousUsnFileName
+	;			If $client_previous_lsn= Then $RealMftRef = $PreviousRealRef
+	;			EndIf
+	;			$AttributeString = $PreviousAttribute
+				$FN_Name = $PreviousUsnFileName
+			EndIf
+			;In order to determine the correct attribute, we need to look into MFT and hope its layout or occupying file has not changed since this change occurred
 		EndIf
-		;In order to determine the correct attribute, we need to look into MFT and hope its layout or occupying file has not changed since this change occurred
+	Else
+		If $record_offset_in_mft <> 56 And $DoExtractResidentUpdates And $MinSizeResidentExtraction > 0 And $redo_length > $MinSizeResidentExtraction And $undo_length > 0 And $redo_length=$undo_length Then
+			_ExtractResidentUpdates($record,$IsRedo)
+		EndIf
 	EndIf
 EndFunc
 
@@ -10082,4 +10095,20 @@ Func _GetReparseType($ReparseType)
 		Case Else
 			Return 'UNKNOWN(' & $ReparseType & ')'
 	EndSelect
+EndFunc
+
+Func _ExtractResidentUpdates($InputData,$IsRedo)
+	If $IsRedo Then
+		$OutResident = $ParserOutDir&"\ResidentExtract\MFT("&$PredictedRefNumber&")_0x"&Hex(Int($record_offset_in_mft),4)&"_0x"&Hex(Int($attribute_offset),4)&"_LSN("&$this_lsn&")redo.bin"
+	Else
+		$OutResident = $ParserOutDir&"\ResidentExtract\MFT("&$PredictedRefNumber&")_0x"&Hex(Int($record_offset_in_mft),4)&"_0x"&Hex(Int($attribute_offset),4)&"_LSN("&$this_lsn&")undo.bin"
+	EndIf
+	$hFileOutResident = FileOpen($OutResident,18)
+	If $VerboseOn Then
+		_DumpOutput("_ExtractResidentUpdates(): " & @CRLF)
+		_DumpOutput("$OutResident: " & $OutResident & @CRLF)
+		_DumpOutput("$hFileOutResident: " & $hFileOutResident & @CRLF)
+	EndIf
+	FileWrite($hFileOutResident,"0x"&$InputData)
+	FileClose($hFileOutResident)
 EndFunc

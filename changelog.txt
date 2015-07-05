@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.5.
+Added option to extract resident attribute updates.
+
 v2.0.0.4. 
 Added decode and separate logging of $ATTRIBUTE_LIST attributes.
 Added sanity check of certain csv's before importing. 
