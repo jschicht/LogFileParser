@@ -1,5 +1,14 @@
 LogFileParser Changelog
 
+v2.0.0.6.
+Added association of stream name to DeleteAttribute with $DATA.
+Removed unneded checks within decode of UpdateResidentValue.
+Added information to TextInformation field when content areas with UpdateResidentValue are being initialized with zeros.
+Added information to TextInformation field when new MFT records are initialized as empty records.
+Fixed a tiny bug that caused renames of certain system files to not be caught.
+Implemented a new csv with all file names, MftRef and MftRefSeqNo being parsed, so that a partial $MFT record name history table are built.
+Highly improved file name identification.
+
 v2.0.0.5.
 Added option to extract resident attribute updates.
 

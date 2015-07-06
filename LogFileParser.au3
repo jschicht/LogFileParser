@@ -1,7 +1,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.5
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.6
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -20,7 +20,7 @@ Global $VerboseOn = 0, $CharReplacement=":", $de="|", $PrecisionSeparator=".", $
 Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef, $FromRcrdSlack, $IncompleteTransaction
 Global $ProgressLogFile, $ProgressReconstruct, $CurrentProgress=-1, $ProgressStatus, $ProgressUsnJrnl, $ProgressSize
 Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $SectorSize=512, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,$LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile
-Global $RecordOffset, $PredictedRefNumber, $this_lsn, $client_previous_lsn, $redo_operation, $undo_operation, $record_offset_in_mft, $attribute_offset, $hOutFileMFT, $tBuffer, $nBytes2, $HDR_BaseRecord, $FilePath
+Global $RecordOffset, $PredictedRefNumber, $this_lsn, $client_previous_lsn, $redo_operation, $undo_operation, $record_offset_in_mft, $attribute_offset, $hOutFileMFT, $tBuffer, $nBytes2, $HDR_BaseRecord, $FilePath, $HDR_SequenceNo
 Global $nBytes, $rFile, $IRArr[12][2], $RPArr[11][2], $LUSArr[3][2],$EAInfoArr[5][2],$EAArr[8][2], $DataRunArr[2][18], $NewDataRunArr[1][18], $RowsProcessed, $MaxRows, $hQuery, $aRow, $aRow2, $iRows, $iColumns, $aRes, $sOutputFile
 Global $RSTRsig = "52535452", $RCRDsig = "52435244", $BAADsig = "44414142", $CHKDsig = "444b4843", $Emptysig = "ffffffff"
 Global $SI_CTime, $SI_ATime, $SI_MTime, $SI_RTime, $SI_FilePermission, $SI_MaxVersions, $SI_VersionNumber, $SI_ClassID, $SI_SecurityID, $SI_QuotaCharged, $SI_USN, $SI_PartialValue
@@ -32,12 +32,12 @@ Global $UsnJrnlCsv, $UsnJrnlCsvFile, $AttributeString, $KeptRef=-1, $TextInforma
 Global $DT_NonResidentFlag, $DT_Flags, $DT_ComprUnitSize, $DT_RealSize, $DT_DataRuns, $DT_InitStreamSize, $DT_OffsetToDataRuns, $DT_StartVCN, $DT_LastVCN, $DT_AllocSize, $DT_Name
 Global $FN_CTime_Core,$FN_CTime_Precision,$FN_ATime_Core,$FN_ATime_Precision,$FN_MTime_Core,$FN_MTime_Precision,$FN_RTime_Core,$FN_RTime_Precision
 Global $SI_CTime_Core,$SI_CTime_Precision,$SI_ATime_Core,$SI_ATime_Precision,$SI_MTime_Core,$SI_MTime_Precision,$SI_RTime_Core,$SI_RTime_Precision
-;Global $GlobalCounter = 1,$AttrArray[$GlobalCounter][2]
+Global $LogFileFileNamesCsv,$LogFileFileNamesCsvFile
 Global $SDHArray[1][1],$SIIArray[1][1],$de2=":",$LogFileSecureSDSCsv,$LogFileSecureSDHCsv,$LogFileSecureSIICsv,$LogFileSecureSDSCsvFile,$LogFileSecureSDHCsvFile,$LogFileSecureSIICsvFile
 Global $TargetSDSOffsetHex,$SecurityDescriptorHash,$SecurityId,$ControlText,$SidOwner,$SidGroup
 Global $SAclRevision,$SAceCount,$SAceTypeText,$SAceFlagsText,$SAceMask,$SAceObjectType,$SAceInheritedObjectType,$SAceSIDString,$SAceObjectFlagsText
 Global $DAclRevision,$DAceCount,$DAceTypeText,$DAceFlagsText,$DAceMask,$DAceObjectType,$DAceInheritedObjectType,$DAceSIDString,$DAceObjectFlagsText
-Global $OpenAttributesArray[1][13],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray[1][10],$lsn_openattributestable=0,$FileOutputTesterArray[19],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][13],$SlackAttributeNamesDumpArray[1][4]
+Global $OpenAttributesArray[1][13],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray[1][10],$lsn_openattributestable=0,$FileOutputTesterArray[20],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][13],$SlackAttributeNamesDumpArray[1][4]
 Global $LogFileOpenAttributeTableCsv,$LogFileOpenAttributeTableCsvFile,$LogFileDirtyPageTableCsv,$LogFileDirtyPageTableCsvFile,$LogFileBitsInNonresidentBitMapCsv,$LogFileBitsInNonresidentBitMapCsvFile,$LogFileTransactionTableCsv,$LogFileTransactionTableCsvFile
 Global $LogFileReparseRCsv,$LogFileQuotaQCsv,$LogFileQuotaOCsv,$LogFileObjIdOCsv,$LogFileReparseRCsvFile,$LogFileQuotaQCsvFile,$LogFileQuotaOCsvFile,$LogFileObjIdOCsvFile,$LogFileRCRDCsv,$LogFileRCRDCsvFile
 Global $client_index,$record_type,$transaction_id,$lf_flags,$target_attribute,$lcns_to_follow,$record_offset_in_mft,$attribute_offset,$MftClusterIndex,$target_vcn,$target_lcn,$InOpenAttributeTable=-1,$LsnValidationLevel
@@ -77,7 +77,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.5", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.6", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -148,7 +148,7 @@ $CheckNt5x = GUICtrlCreateCheckbox("Source is from Nt5x (XP,2003)", 20, 205, 160
 GUICtrlSetState($CheckNt5x, $GUI_UNCHECKED)
 $CheckExtractResident = GUICtrlCreateCheckbox("Extract resident updates of min size:",190, 205, 190, 20)
 GUICtrlSetState($CheckExtractResident, $GUI_UNCHECKED)
-$MinSizeResidentExtraction = GUICtrlCreateInput("4",380,205,30,20)
+$MinSizeResidentExtraction = GUICtrlCreateInput("2",380,205,30,20)
 
 $ButtonStart = GUICtrlCreateButton("Start", 450, 195, 80, 30)
 
@@ -299,6 +299,7 @@ $FileOutputTesterArray[15] = $LogFileRCRDCsvFile
 $FileOutputTesterArray[16] = $LogFileSlackOpenAttributeTableCsvFile
 $FileOutputTesterArray[17] = $LogFileSlackAttributeNamesDumpCsvFile
 $FileOutputTesterArray[18] = $LogFileAttributeListCsvFile
+$FileOutputTesterArray[19] = $LogFileFileNamesCsvFile
 
 
 
@@ -324,6 +325,7 @@ _WriteCSVHeaderTransactionHeader()
 _WriteCSVHeaderSlackOpenAttributeTable()
 _WriteCSVHeaderSlackAttributeNamesDump()
 _WriteCSVHeaderAttributeList()
+_WriteCSVHeaderFileNames()
 
 $FileNamesArray[0][0] = "Ref"
 $FileNamesArray[0][1] = "FileName"
@@ -532,6 +534,7 @@ _WinAPI_CloseHandle($LogFileTransactionTableCsv)
 _WinAPI_CloseHandle($LogFileSlackOpenAttributeTableCsv)
 _WinAPI_CloseHandle($LogFileSlackAttributeNamesDumpCsv)
 _WinAPI_CloseHandle($LogFileAttributeListCsv)
+_WinAPI_CloseHandle($LogFileFileNamesCsv)
 
 AdlibUnRegister("_LogFileProgress")
 GUICtrlSetData($ProgressStatus, "Processing LogFile transaction " & $CurrentRecord+1 & " of " & $MaxRecords)
@@ -551,7 +554,7 @@ For $FileNumber = 0 To UBound($FileOutputTesterArray)-1
 		EndIf
 	EndIf
 Next
-
+;_ArrayDisplay($FileNamesArray,"$FileNamesArray")
 ;#cs
 ;x64 dll not working properly?
 If @AutoItX64 Then
@@ -1609,7 +1612,7 @@ EndIf
 ;Else
 ;	$VerboseOn=0
 ;EndIf
-;If $this_lsn=92061840 Or $this_lsn=92065713 Or $this_lsn=92072989 Then
+;If $this_lsn=2105735 Then
 ;	$VerboseOn=1
 ;Else
 ;	$VerboseOn=0
@@ -1660,7 +1663,18 @@ If $redo_length > 0 Then
 	$RedoChunkSize = StringLen($redo_chunk)/2
 	Select
 		Case $redo_operation_hex="0200" ;InitializeFileRecordSegment
-			_ParserCodeOldVersion($redo_chunk)
+;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+;			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+			If $redo_length <= 60 Then
+				$TextInformation &= ";Initializing empty record"
+			Else
+				_ParserCodeOldVersion($redo_chunk)
+				If Not $FromRcrdSlack Then
+					_UpdateFileNameArray($PredictedRefNumber,$HDR_SequenceNo,$FN_Name,$this_lsn)
+				EndIf
+			EndIf
 		Case $redo_operation_hex="0300" ;DeallocateFileRecordSegment
 			_RemoveAllOffsetOfAttribute($PredictedRefNumber)
 		Case $redo_operation_hex="0400" ;WriteEndOfFileRecordSegment
@@ -1672,7 +1686,7 @@ If $redo_length > 0 Then
 			$TestAttributeType = _Decode_AttributeType($redo_chunk)
 			If $TestAttributeType <> '' Then _UpdateSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $RedoChunkSize, $TestAttributeType)
 			_Decode_CreateAttribute($redo_chunk,1)
-;		Case $redo_operation_hex="0600" ; DeleteAttribute
+		Case $redo_operation_hex="0600" ; DeleteAttribute
 ;			$TestAttributeType = _Decode_AttributeType($undo_chunk)
 ;			If $TestAttributeType <> '' Then _RemoveSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $TestAttributeType)
 		Case $redo_operation_hex="0700" ; UpdateResidentValue
@@ -1806,9 +1820,10 @@ If $redo_length > 0 Then
 							_MainSecure($redo_chunk,1)
 							$TextInformation &= ";$Secure:$SDS;See LogFile_SecurityDescriptors.csv"
 						EndIf
-	;					ConsoleWrite("_UsnDecodeRecord2() failed for $this_lsn: " & $this_lsn & @CRLF)
-	;					ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
 					Else
+						If Not $FromRcrdSlack Then
+							_UpdateFileNameArray($PredictedRefNumber,$HDR_SequenceNo,$FN_Name,$this_lsn)
+						EndIf
 						$TextInformation &= ";$UsnJrnl"
 					EndIf
 				EndIf
@@ -1844,51 +1859,62 @@ If $redo_length > 0 Then
 ;				_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 			EndIf
 		Case $redo_operation_hex="0c00" Or $redo_operation_hex="0d00" Or $redo_operation_hex="0e00" Or $redo_operation_hex="0f00" ;AddindexEntryRoot,DeleteindexEntryRoot,AddIndexEntryAllocation,DeleteIndexEntryAllocation
-			If $redo_operation_hex="0c00" Or $redo_operation_hex="0d00" Then $AttributeString = "$INDEX_ROOT"
-;			If $redo_operation_hex="0e00" Or $redo_operation_hex="0f00" Then $AttributeString = "$INDEX_ALLOCATION"
-;			if $redo_operation_hex="0f00" Then ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
-			Select
-				Case $PredictedRefNumber = 9 Or $RealMftRef = 9 ;$Secure
-					If $redo_length = 40 Then ;$SII
-						_DecodeIndxEntriesSII($redo_chunk,1)
-						$TextInformation &= ";$Secure:$SII;See LogFile_SecureSII.csv"
-						$AttributeString &= ":$SII"
-					ElseIf $redo_length = 48 Then  ;$SDH
-						_DecodeIndxEntriesSDH($redo_chunk,1)
-						$TextInformation &= ";$Secure:$SDH;See LogFile_SecureSDH.csv"
-						$AttributeString &= ":$SDH"
-					EndIf
+			If ($redo_operation_hex="0c00" Or $redo_operation_hex="0d00") And $AttributeString="" Then $AttributeString = "$INDEX_ROOT"
 
-				Case $PredictedRefNumber = 24 Or $RealMftRef = 24 ;$Quota
-					If $redo_length > 68 Then
-						_Decode_Quota_Q($redo_chunk,1)
-						$TextInformation &= ";See LogFile_QuotaQ.csv"
-					Else
-						_Decode_Quota_O($redo_chunk,1)
-						$TextInformation &= ";See LogFile_QuotaO.csv"
-					EndIf
+			If StringInStr($AttributeString,"$I30") Then
+				$DecodeOk=0
+				$DecodeOk = _Decode_IndexEntry($redo_chunk,$redo_operation_hex,1)
+				If Not $DecodeOk Then
+					If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
+					_DumpOutput("_Decode_IndexEntry() failed for $this_lsn: " & $this_lsn & @CRLF)
+					_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+				Else
+					If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
+				EndIf
+			Else
+				Select
+					Case $PredictedRefNumber = 9 Or $RealMftRef = 9 ;$Secure
+						If $redo_length = 40 Then ;$SII
+							_DecodeIndxEntriesSII($redo_chunk,1)
+							$TextInformation &= ";$Secure:$SII;See LogFile_SecureSII.csv"
+							$AttributeString &= ":$SII"
+						ElseIf $redo_length = 48 Then  ;$SDH
+							_DecodeIndxEntriesSDH($redo_chunk,1)
+							$TextInformation &= ";$Secure:$SDH;See LogFile_SecureSDH.csv"
+							$AttributeString &= ":$SDH"
+						EndIf
 
-				Case $PredictedRefNumber = 25 Or $RealMftRef = 25 ;$ObjId
-;					If $redo_length = 88 Then ;also 96..
-						_Decode_ObjId_O($redo_chunk,1)
-						$TextInformation &= ";See LogFile_ObjIdO.csv"
-;					EndIf
+					Case $PredictedRefNumber = 24 Or $RealMftRef = 24 ;$Quota
+						If $redo_length > 68 Then
+							_Decode_Quota_Q($redo_chunk,1)
+							$TextInformation &= ";See LogFile_QuotaQ.csv"
+						Else
+							_Decode_Quota_O($redo_chunk,1)
+							$TextInformation &= ";See LogFile_QuotaO.csv"
+						EndIf
 
-				Case $PredictedRefNumber = 26 Or $RealMftRef = 26 ;$Reparse
-					_Decode_Reparse_R($redo_chunk,1)
-					$TextInformation &= ";See LogFile_ReparseR.csv"
+					Case $PredictedRefNumber = 25 Or $RealMftRef = 25 ;$ObjId
+	;					If $redo_length = 88 Then ;also 96..
+							_Decode_ObjId_O($redo_chunk,1)
+							$TextInformation &= ";See LogFile_ObjIdO.csv"
+	;					EndIf
 
-				Case Else
-					$DecodeOk=0
-					$DecodeOk = _Decode_IndexEntry($redo_chunk,$redo_operation_hex,1)
-					If Not $DecodeOk Then
-						If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
-						_DumpOutput("_Decode_IndexEntry() failed for $this_lsn: " & $this_lsn & @CRLF)
-						_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
-					Else
-						If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
-					EndIf
-			EndSelect
+					Case $PredictedRefNumber = 26 Or $RealMftRef = 26 ;$Reparse
+						_Decode_Reparse_R($redo_chunk,1)
+						$TextInformation &= ";See LogFile_ReparseR.csv"
+
+					Case Else
+						$DecodeOk=0
+						$DecodeOk = _Decode_IndexEntry($redo_chunk,$redo_operation_hex,1)
+						If Not $DecodeOk Then
+							If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
+							_DumpOutput("_Decode_IndexEntry() failed for $this_lsn: " & $this_lsn & @CRLF)
+							_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+						Else
+							If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
+						EndIf
+				EndSelect
+			EndIf
 		Case $redo_operation_hex="1000" ; WriteEndOfIndexBuffer -> always 0 (on nt6x?) but check undo
 			If $AttributeString="" Then $AttributeString = "$INDEX_ALLOCATION"
 ;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
@@ -2313,6 +2339,10 @@ If Not $FromRcrdSlack Then
 	EndIf
 EndIf
 
+If $PredictedRefNumber > 0 And $FN_Name="" Then
+	$FN_Name = _GetFileNameFromArray($PredictedRefNumber,$this_lsn)
+EndIf
+
 If $FN_Name="" Then _SetNameOnSystemFiles()
 
 _WriteLogFileCsv()
@@ -2575,7 +2605,7 @@ Func _HexEncode($bInput)
 EndFunc
 
 Func _ParserCodeOldVersion($MFTEntry)
-	Local $UpdSeqArrOffset, $HDR_LSN, $HDR_SequenceNo, $HDR_HardLinkCount, $HDR_Flags, $HDR_RecRealSize, $HDR_RecAllocSize, $HDR_BaseRecSeqNo, $HDR_NextAttribID, $HDR_MFTREcordNumber, $NextAttributeOffset, $AttributeType, $AttributeSize, $RecordActive
+	Local $UpdSeqArrOffset, $HDR_LSN, $HDR_HardLinkCount, $HDR_Flags, $HDR_RecRealSize, $HDR_RecAllocSize, $HDR_BaseRecSeqNo, $HDR_NextAttribID, $HDR_MFTREcordNumber, $NextAttributeOffset, $AttributeType, $AttributeSize, $RecordActive
 	Local $AttributeArray[17][2], $TestAttributeString
 	$AttributeArray[0][0] = "Attribute name"
 	$AttributeArray[0][1] = "Number"
@@ -3334,12 +3364,12 @@ Func _Get_Data($MFTEntry, $DT_Offset, $DT_Size, $DT_Number)
 	$DT_Flags = _SwapEndian($DT_Flags)
 	$DT_Flags = _AttribHeaderFlags("0x" & $DT_Flags)
 	If $VerboseOn Then
-		ConsoleWrite("### $DATA ATTRIBUTE " & $DT_Number & " ###" & @CRLF)
-		ConsoleWrite("$DT_Flags: " & $DT_Flags & @CRLF)
-		ConsoleWrite("$DT_NonResidentFlag: " & $DT_NonResidentFlag & @CRLF)
-		ConsoleWrite("$DT_NameLength: " & $DT_NameLength & @CRLF)
-		ConsoleWrite("$DT_NameRelativeOffset: " & $DT_NameRelativeOffset & @CRLF)
-		ConsoleWrite("$DT_Flags: " & $DT_Flags & @CRLF)
+		_DumpOutput("### $DATA ATTRIBUTE " & $DT_Number & " ###" & @CRLF)
+		_DumpOutput("$DT_Flags: " & $DT_Flags & @CRLF)
+		_DumpOutput("$DT_NonResidentFlag: " & $DT_NonResidentFlag & @CRLF)
+		_DumpOutput("$DT_NameLength: " & $DT_NameLength & @CRLF)
+		_DumpOutput("$DT_NameRelativeOffset: " & $DT_NameRelativeOffset & @CRLF)
+		_DumpOutput("$DT_Flags: " & $DT_Flags & @CRLF)
 	EndIf
 	If $DT_NameLength > 0 Then
 		$DT_NameSpace = $DT_NameLength - 1
@@ -3347,7 +3377,7 @@ Func _Get_Data($MFTEntry, $DT_Offset, $DT_Size, $DT_Number)
 		$DT_Name = BinaryToString("0x"&$DT_Name,2)
 		$DT_Name = StringReplace($DT_Name,$de,$CharReplacement)
 		$FileNameModified = @extended
-		If $VerboseOn Then ConsoleWrite("$DT_Name: " & $DT_Name & @CRLF)
+		If $VerboseOn Then _DumpOutput("$DT_Name: " & $DT_Name & @CRLF)
 	EndIf
 	If $DT_NonResidentFlag = '01' Then
 		$DT_StartVCN = StringMid($MFTEntry, $DT_Offset + 32, 16)
@@ -3368,14 +3398,14 @@ Func _Get_Data($MFTEntry, $DT_Offset, $DT_Size, $DT_Number)
 		$DT_InitStreamSize = Dec(_SwapEndian($DT_InitStreamSize),2)
 		$DT_DataRuns = StringMid($MFTEntry,$DT_Offset+($DT_OffsetToDataRuns*2),(StringLen($MFTEntry)-$DT_OffsetToDataRuns)*2)
 		If $VerboseOn Then
-			ConsoleWrite("$DT_StartVCN: " & $DT_StartVCN & @CRLF)
-			ConsoleWrite("$DT_LastVCN: " & $DT_LastVCN & @CRLF)
-			ConsoleWrite("$DT_VCNs: " & $DT_VCNs & @CRLF)
-			ConsoleWrite("$DT_OffsetToDataRuns: " & $DT_OffsetToDataRuns & @CRLF)
-			ConsoleWrite("$DT_ComprUnitSize: " & $DT_ComprUnitSize & @CRLF)
-			ConsoleWrite("$DT_AllocSize: " & $DT_AllocSize & @CRLF)
-			ConsoleWrite("$DT_InitStreamSize: " & $DT_InitStreamSize & @CRLF)
-			ConsoleWrite("$DT_DataRuns: " & $DT_DataRuns & @CRLF)
+			_DumpOutput("$DT_StartVCN: " & $DT_StartVCN & @CRLF)
+			_DumpOutput("$DT_LastVCN: " & $DT_LastVCN & @CRLF)
+			_DumpOutput("$DT_VCNs: " & $DT_VCNs & @CRLF)
+			_DumpOutput("$DT_OffsetToDataRuns: " & $DT_OffsetToDataRuns & @CRLF)
+			_DumpOutput("$DT_ComprUnitSize: " & $DT_ComprUnitSize & @CRLF)
+			_DumpOutput("$DT_AllocSize: " & $DT_AllocSize & @CRLF)
+			_DumpOutput("$DT_InitStreamSize: " & $DT_InitStreamSize & @CRLF)
+			_DumpOutput("$DT_DataRuns: " & $DT_DataRuns & @CRLF)
 		EndIf
 	ElseIf $DT_NonResidentFlag = '00' Then
 		$DT_LengthOfAttribute = StringMid($MFTEntry, $DT_Offset + 32, 8)
@@ -3387,9 +3417,9 @@ Func _Get_Data($MFTEntry, $DT_Offset, $DT_Size, $DT_Number)
 		$DT_OffsetToAttribute = Dec(_SwapEndian($DT_OffsetToAttribute),2)
 		$DT_IndexedFlag = Dec(StringMid($MFTEntry, $DT_Offset + 44, 2))
 		If $VerboseOn Then
-			ConsoleWrite("$DT_LengthOfAttribute: " & $DT_LengthOfAttribute & @CRLF)
-			ConsoleWrite("$DT_OffsetToAttribute: " & $DT_OffsetToAttribute & @CRLF)
-			ConsoleWrite("$DT_IndexedFlag: " & $DT_IndexedFlag & @CRLF)
+			_DumpOutput("$DT_LengthOfAttribute: " & $DT_LengthOfAttribute & @CRLF)
+			_DumpOutput("$DT_OffsetToAttribute: " & $DT_OffsetToAttribute & @CRLF)
+			_DumpOutput("$DT_IndexedFlag: " & $DT_IndexedFlag & @CRLF)
 		EndIf
 	EndIf
 	_WriteLogFileDataRunsCsv()
@@ -3414,10 +3444,10 @@ Func _Decode_SetNewAttributeSize($input)
 ;		EndIf
 	EndIf
 	If $VerboseOn Then
-		ConsoleWrite("### SetNewAttributeSizes decoder ###" & @CRLF)
-		ConsoleWrite("$DT_AllocSize = " & $DT_AllocSize & @crlf)
-		ConsoleWrite("$DT_RealSize = " & $DT_RealSize & @crlf)
-		ConsoleWrite("$DT_InitStreamSize = " & $DT_InitStreamSize & @crlf)
+		_DumpOutput("_Decode_SetNewAttributeSize():" & @CRLF)
+		_DumpOutput("$DT_AllocSize = " & $DT_AllocSize & @crlf)
+		_DumpOutput("$DT_RealSize = " & $DT_RealSize & @crlf)
+		_DumpOutput("$DT_InitStreamSize = " & $DT_InitStreamSize & @crlf)
 	EndIf
 	_WriteLogFileDataRunsCsv()
 EndFunc
@@ -3429,7 +3459,7 @@ Func _Decode_UpdateMappingPairs($input)
 EndFunc
 
 Func _Decode_INDX($Entry)
-	If $VerboseOn Then ConsoleWrite("### INDX record decoder ###" & @CRLF)
+	If $VerboseOn Then _DumpOutput("_Decode_INDX():" & @CRLF)
 	Local $IndxEntryNumberArr[1],$IndxMFTReferenceArr[1],$IndxMFTRefSeqNoArr[1],$IndxIndexFlagsArr[1],$IndxMFTReferenceOfParentArr[1],$IndxMFTParentRefSeqNoArr[1],$IndxCTimeArr[1],$IndxATimeArr[1],$IndxMTimeArr[1],$IndxRTimeArr[1],$IndxAllocSizeArr[1],$IndxRealSizeArr[1],$IndxFileFlagsArr[1],$IndxFileNameArr[1],$IndxSubNodeVCNArr[1],$IndxNameSpaceArr[1],$IndxFilenameModified[1]
 	Local $LocalAttributeOffset = 1,$NewLocalAttributeOffset,$IndxHdrMagic,$IndxHdrUpdateSeqArrOffset,$IndxHdrUpdateSeqArrSize,$IndxHdrLogFileSequenceNo,$IndxHdrVCNOfIndx,$IndxHdrOffsetToIndexEntries,$IndxHdrSizeOfIndexEntries,$IndxHdrAllocatedSizeOfIndexEntries
 	Local $IndxHdrFlag,$IndxHdrPadding,$IndxHdrUpdateSequence,$IndxHdrUpdSeqArr,$IndxHdrUpdSeqArrPart0,$IndxHdrUpdSeqArrPart1,$IndxHdrUpdSeqArrPart2,$IndxHdrUpdSeqArrPart3,$IndxRecordEnd4,$IndxRecordEnd1,$IndxRecordEnd2,$IndxRecordEnd3,$IndxRecordEnd4
@@ -3609,6 +3639,9 @@ Func _Decode_INDX($Entry)
 		$PredictedRefNumber = $MFTReferenceOfParent
 		$KeptRef = $MFTReferenceOfParent
 		$AttributeString = "$INDEX_ALLOCATION"
+		If Not $FromRcrdSlack Then
+			If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
+		EndIf
 ;		If $PreviousRedoOp = "1c00" Then
 ;			$AttributeString = $PreviousAttribute
 ;		Else
@@ -3795,6 +3828,9 @@ Func _Decode_INDX($Entry)
 			$PredictedRefNumber = $MFTReferenceOfParent
 			$KeptRef = $MFTReferenceOfParent
 			$AttributeString = "$INDEX_ALLOCATION"
+			If Not $FromRcrdSlack Then
+				If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
+			EndIf
 ;			If $PreviousRedoOp = "1c00" Then
 ;				$AttributeString = $PreviousAttribute
 ;			Else
@@ -3808,7 +3844,6 @@ Func _Decode_INDX($Entry)
 EndFunc
 
 Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
-	If $VerboseOn Then ConsoleWrite("### IndexEntry decoder ###" & @CRLF)
 	Local $LocalAttributeOffset = 1,$NewLocalAttributeOffset;,$IndxHdrMagic,$IndxHdrUpdateSeqArrOffset,$IndxHdrUpdateSeqArrSize,$IndxHdrLogFileSequenceNo,$IndxHdrVCNOfIndx,$IndxHdrOffsetToIndexEntries,$IndxHdrSizeOfIndexEntries,$IndxHdrAllocatedSizeOfIndexEntries
 ;	Local $IndxHdrFlag,$IndxHdrPadding,$IndxHdrUpdateSequence,$IndxHdrUpdSeqArr,$IndxHdrUpdSeqArrPart0,$IndxHdrUpdSeqArrPart1,$IndxHdrUpdSeqArrPart2,$IndxHdrUpdSeqArrPart3,$IndxRecordEnd4,$IndxRecordEnd1,$IndxRecordEnd2,$IndxRecordEnd3,$IndxRecordEnd4
 	Local $FileReference,$IndexEntryLength,$StreamLength,$Flags,$Stream,$SubNodeVCN,$tmp0=0,$tmp1=0,$tmp2=0,$tmp3=0,$EntryCounter=1,$Padding2,$EntryCounter=1,$DecodeOk=False
@@ -3950,8 +3985,14 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 	If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0 And $Indx_CTime<>"-" And $Indx_ATime<>"-" And $Indx_MTime<>"-" And $Indx_RTime<>"-" Then
 		if $IsRedo Then
 			FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
+			If Not $FromRcrdSlack Then
+				If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
+			EndIf
 		Else
 			FileWriteLine($LogFileUndoWipeIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
+			If Not $FromRcrdSlack Then
+				If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
+			EndIf
 		EndIf
 		$DecodeOk=True
 		$RealMftRef = $MFTReferenceOfParent
@@ -3971,25 +4012,25 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 		if $AttrType = "0e00" Or $AttrType = "0f00" Then $AttributeString = "$INDEX_ALLOCATION"
 	EndIf
 	if $VerboseOn Then
-;	if Not $DecodeOk Then
-		ConsoleWrite("$MFTReference = " & $MFTReference & @crlf)
-		ConsoleWrite("$MFTReferenceSeqNo = " & $MFTReferenceSeqNo & @crlf)
-		ConsoleWrite("$IndexEntryLength = " & $IndexEntryLength & @crlf)
-		ConsoleWrite("$OffsetToFileName = " & $OffsetToFileName & @crlf)
-		ConsoleWrite("$IndexFlags = " & $IndexFlags & @crlf)
-		ConsoleWrite("$MFTReferenceOfParent = " & $MFTReferenceOfParent & @crlf)
-		ConsoleWrite("$Indx_CTime = " & $Indx_CTime & @crlf)
-		ConsoleWrite("$Indx_ATime = " & $Indx_ATime & @crlf)
-		ConsoleWrite("$Indx_MTime = " & $Indx_MTime & @crlf)
-		ConsoleWrite("$Indx_RTime = " & $Indx_RTime & @crlf)
-		ConsoleWrite("$Indx_AllocSize = " & $Indx_AllocSize & @crlf)
-		ConsoleWrite("$Indx_RealSize = " & $Indx_RealSize & @crlf)
-		ConsoleWrite("$Indx_File_Flags = " & $Indx_File_Flags & @crlf)
-		ConsoleWrite("$Indx_NameLength = " & $Indx_NameLength & @crlf)
-		ConsoleWrite("$Indx_NameSpace = " & $Indx_NameSpace & @crlf)
-		ConsoleWrite("$Indx_FileName = " & $Indx_FileName & @crlf)
-		ConsoleWrite("$SubNodeVCN = " & $SubNodeVCN & @crlf)
-		ConsoleWrite(@crlf)
+		_DumpOutput("_Decode_IndexEntry():" & @CRLF)
+		_DumpOutput("$MFTReference = " & $MFTReference & @crlf)
+		_DumpOutput("$MFTReferenceSeqNo = " & $MFTReferenceSeqNo & @crlf)
+		_DumpOutput("$IndexEntryLength = " & $IndexEntryLength & @crlf)
+		_DumpOutput("$OffsetToFileName = " & $OffsetToFileName & @crlf)
+		_DumpOutput("$IndexFlags = " & $IndexFlags & @crlf)
+		_DumpOutput("$MFTReferenceOfParent = " & $MFTReferenceOfParent & @crlf)
+		_DumpOutput("$Indx_CTime = " & $Indx_CTime & @crlf)
+		_DumpOutput("$Indx_ATime = " & $Indx_ATime & @crlf)
+		_DumpOutput("$Indx_MTime = " & $Indx_MTime & @crlf)
+		_DumpOutput("$Indx_RTime = " & $Indx_RTime & @crlf)
+		_DumpOutput("$Indx_AllocSize = " & $Indx_AllocSize & @crlf)
+		_DumpOutput("$Indx_RealSize = " & $Indx_RealSize & @crlf)
+		_DumpOutput("$Indx_File_Flags = " & $Indx_File_Flags & @crlf)
+		_DumpOutput("$Indx_NameLength = " & $Indx_NameLength & @crlf)
+		_DumpOutput("$Indx_NameSpace = " & $Indx_NameSpace & @crlf)
+		_DumpOutput("$Indx_FileName = " & $Indx_FileName & @crlf)
+		_DumpOutput("$SubNodeVCN = " & $SubNodeVCN & @crlf)
+		_DumpOutput(@crlf)
 	EndIf
 	Return $DecodeOk
 EndFunc
@@ -4020,17 +4061,17 @@ Func _Get_IndexRoot($Entry,$Current_Attrib_Number,$CurrentAttributeName)
 	EndIf
 ;	$IRPadding2 = StringMid($Entry,$LocalAttributeOffset+58,6)
 	if $VerboseOn Then
-		ConsoleWrite("### $INDEX_ROOT ATTRIBUTE ###" & @CRLF)
-		ConsoleWrite("$AttributeType = " & $AttributeType & @crlf)
-		ConsoleWrite("$CollationRule = " & $CollationRule & @crlf)
-		ConsoleWrite("$SizeOfIndexAllocationEntry = " & $SizeOfIndexAllocationEntry & @crlf)
-		ConsoleWrite("$ClustersPerIndexRoot = " & $ClustersPerIndexRoot & @crlf)
-;		ConsoleWrite("$IRPadding = " & $IRPadding & @crlf)
-		ConsoleWrite("$OffsetToFirstEntry = " & $OffsetToFirstEntry & @crlf)
-		ConsoleWrite("$TotalSizeOfEntries = " & $TotalSizeOfEntries & @crlf)
-		ConsoleWrite("$AllocatedSizeOfEntries = " & $AllocatedSizeOfEntries & @crlf)
-		ConsoleWrite("$Flags = " & $Flags & @crlf)
-;		ConsoleWrite("$IRPadding2 = " & $IRPadding2 & @crlf)
+		_DumpOutput("_Get_IndexRoot():" & @CRLF)
+		_DumpOutput("$AttributeType = " & $AttributeType & @crlf)
+		_DumpOutput("$CollationRule = " & $CollationRule & @crlf)
+		_DumpOutput("$SizeOfIndexAllocationEntry = " & $SizeOfIndexAllocationEntry & @crlf)
+		_DumpOutput("$ClustersPerIndexRoot = " & $ClustersPerIndexRoot & @crlf)
+;		_DumpOutput("$IRPadding = " & $IRPadding & @crlf)
+		_DumpOutput("$OffsetToFirstEntry = " & $OffsetToFirstEntry & @crlf)
+		_DumpOutput("$TotalSizeOfEntries = " & $TotalSizeOfEntries & @crlf)
+		_DumpOutput("$AllocatedSizeOfEntries = " & $AllocatedSizeOfEntries & @crlf)
+		_DumpOutput("$Flags = " & $Flags & @crlf)
+;		_DumpOutput("$IRPadding2 = " & $IRPadding2 & @crlf)
 	EndIf
 	$IRArr[0][$Current_Attrib_Number] = "IndexRoot Number " & $Current_Attrib_Number
 	$IRArr[1][$Current_Attrib_Number] = $CurrentAttributeName
@@ -4152,11 +4193,11 @@ Func _Get_EaInformation($Entry,$Current_Attrib_Number,$CurrentAttributeName)
 	$SizeOfUnpackedEas = StringMid($Entry,$LocalAttributeOffset+8,8)
 	Global $SizeOfUnpackedEas = Dec(StringMid($SizeOfUnpackedEas,7,2) & StringMid($SizeOfUnpackedEas,5,2) & StringMid($SizeOfUnpackedEas,3,2) & StringMid($SizeOfUnpackedEas,1,2))
 	If $VerboseOn Then
-		ConsoleWrite("### $EA_INFORMATION ATTRIBUTE ###" & @CRLF)
-		ConsoleWrite("$TheEaInformation = " & $TheEaInformation & @crlf)
-		ConsoleWrite("$SizeOfPackedEas = " & $SizeOfPackedEas & @crlf)
-		ConsoleWrite("$NumberOfEaWithFlagSet = " & $NumberOfEaWithFlagSet & @crlf)
-		ConsoleWrite("$SizeOfUnpackedEas = " & $SizeOfUnpackedEas & @crlf)
+		_DumpOutput("_Get_EaInformation():" & @CRLF)
+		_DumpOutput("$TheEaInformation = " & $TheEaInformation & @crlf)
+		_DumpOutput("$SizeOfPackedEas = " & $SizeOfPackedEas & @crlf)
+		_DumpOutput("$NumberOfEaWithFlagSet = " & $NumberOfEaWithFlagSet & @crlf)
+		_DumpOutput("$SizeOfUnpackedEas = " & $SizeOfUnpackedEas & @crlf)
 	EndIf
 	$EAInfoArr[0][$Current_Attrib_Number] = "EA Info Number " & $Current_Attrib_Number
 	$EAInfoArr[1][$Current_Attrib_Number] = $CurrentAttributeName
@@ -4179,15 +4220,15 @@ Func _Get_Ea($Entry,$Current_Attrib_Number,$CurrentAttributeName)
 	$EaName = _HexToString($EaName)
 	$EaValue = StringMid($Entry,$LocalAttributeOffset+16+($EaNameLength*2),$EaValueLength*2)
 	If $VerboseOn Then
-		ConsoleWrite("### $EA ATTRIBUTE ###" & @CRLF)
-		ConsoleWrite("$TheEa = " & $TheEa & @crlf)
-		ConsoleWrite(_HexEncode("0x"&$TheEa) & @crlf)
-		ConsoleWrite("$OffsetToNextEa = " & $OffsetToNextEa & @crlf)
-		ConsoleWrite("$EaFlags = " & $EaFlags & @crlf)
-		ConsoleWrite("$EaNameLength = " & $EaNameLength & @crlf)
-		ConsoleWrite("$EaValueLength = " & $EaValueLength & @crlf)
-		ConsoleWrite("$EaName = " & $EaName & @crlf)
-		ConsoleWrite("$EaValue = " & $EaValue & @crlf)
+		_DumpOutput("_Get_Ea():" & @CRLF)
+		_DumpOutput("$TheEa = " & $TheEa & @crlf)
+		_DumpOutput(_HexEncode("0x"&$TheEa) & @crlf)
+		_DumpOutput("$OffsetToNextEa = " & $OffsetToNextEa & @crlf)
+		_DumpOutput("$EaFlags = " & $EaFlags & @crlf)
+		_DumpOutput("$EaNameLength = " & $EaNameLength & @crlf)
+		_DumpOutput("$EaValueLength = " & $EaValueLength & @crlf)
+		_DumpOutput("$EaName = " & $EaName & @crlf)
+		_DumpOutput("$EaValue = " & $EaValue & @crlf)
 	EndIf
 	$EAArr[0][$Current_Attrib_Number] = "EA Number " & $Current_Attrib_Number
 	$EAArr[1][$Current_Attrib_Number] = $CurrentAttributeName
@@ -4209,12 +4250,12 @@ Func _Get_Ea($Entry,$Current_Attrib_Number,$CurrentAttributeName)
 		$NextEaName = _HexToString($NextEaName)
 		$NextEaValue = StringMid($Entry,$NextEaOffset+16+($NextEaNameLength*2),$NextEaValueLength*2)
 		If $VerboseOn Then
-			ConsoleWrite("$NextEaFlag = " & $NextEaFlag & @crlf)
-			ConsoleWrite("$NextEaNameLength = " & $NextEaNameLength & @crlf)
-			ConsoleWrite("$NextEaValueLength = " & $NextEaValueLength & @crlf)
-			ConsoleWrite("$NextEaName = " & $NextEaName & @crlf)
-			ConsoleWrite("$NextEaName = " & $NextEaName & @crlf)
-			ConsoleWrite("$NextEaValue = " & $NextEaValue & @crlf)
+			_DumpOutput("$NextEaFlag = " & $NextEaFlag & @crlf)
+			_DumpOutput("$NextEaNameLength = " & $NextEaNameLength & @crlf)
+			_DumpOutput("$NextEaValueLength = " & $NextEaValueLength & @crlf)
+			_DumpOutput("$NextEaName = " & $NextEaName & @crlf)
+			_DumpOutput("$NextEaName = " & $NextEaName & @crlf)
+			_DumpOutput("$NextEaValue = " & $NextEaValue & @crlf)
 		EndIf
 		$NextEaOffset = $NextEaOffset+22+2+($NextEaNameLength*2)+($NextEaValueLength*2)
 		ReDim $EAArr[8+$EaCounter][$Current_Attrib_Number+1]
@@ -4242,8 +4283,8 @@ Func _Get_LoggedUtilityStream($Entry,$Current_Attrib_Number,$CurrentAttributeNam
 	Local $LocalAttributeOffset = 1
 	$TheLoggedUtilityStream = StringMid($Entry,$LocalAttributeOffset)
 	If $VerboseOn Then
-		ConsoleWrite("### $LOGGED_UTILITY_STREAM ATTRIBUTE ###" & @CRLF)
-		ConsoleWrite("$TheLoggedUtilityStream = " & $TheLoggedUtilityStream & @crlf)
+		_DumpOutput("_Get_LoggedUtilityStream():" & @CRLF)
+		_DumpOutput("$TheLoggedUtilityStream = " & $TheLoggedUtilityStream & @crlf)
 	EndIf
 	$LUSArr[0][$Current_Attrib_Number] = "LoggedUtilityStream Number " & $Current_Attrib_Number
 	$LUSArr[1][$Current_Attrib_Number] = $CurrentAttributeName
@@ -4258,7 +4299,8 @@ Func _Decode_UpdateResidentValue($record,$IsRedo)
 			_Decode_StandardInformation($record)
 			$AttributeString = "$STANDARD_INFORMATION"
 		Else
-			If $DoExtractResidentUpdates And $MinSizeResidentExtraction > 0 And $redo_length > $MinSizeResidentExtraction And $undo_length > 0 And $redo_length=$undo_length Then
+;			If $DoExtractResidentUpdates And $MinSizeResidentExtraction > 0 And $redo_length >= $MinSizeResidentExtraction And $undo_length > 0 And $redo_length=$undo_length Then
+			If $DoExtractResidentUpdates And $redo_length >= $MinSizeResidentExtraction And $undo_length > 0 Then
 ;				If Not $PredictedRefNumber > 0 Then MsgBox(0,"Hey","Extraction of resident info")
 				_ExtractResidentUpdates($record,$IsRedo)
 			ElseIf $client_previous_lsn=0 And $undo_length=0 Then
@@ -4267,12 +4309,14 @@ Func _Decode_UpdateResidentValue($record,$IsRedo)
 	;			If $client_previous_lsn= Then $RealMftRef = $PreviousRealRef
 	;			EndIf
 	;			$AttributeString = $PreviousAttribute
+				$TextInformation &= ";Initializing with zeros"
 				$FN_Name = $PreviousUsnFileName
 			EndIf
 			;In order to determine the correct attribute, we need to look into MFT and hope its layout or occupying file has not changed since this change occurred
 		EndIf
 	Else
-		If $record_offset_in_mft <> 56 And $DoExtractResidentUpdates And $MinSizeResidentExtraction > 0 And $redo_length > $MinSizeResidentExtraction And $undo_length > 0 And $redo_length=$undo_length Then
+;		If $record_offset_in_mft <> 56 And $DoExtractResidentUpdates And $MinSizeResidentExtraction > 0 And $redo_length >= $MinSizeResidentExtraction And $undo_length > 0 And $redo_length=$undo_length Then
+		If $record_offset_in_mft <> 56 And $DoExtractResidentUpdates And $redo_length >= $MinSizeResidentExtraction Then
 			_ExtractResidentUpdates($record,$IsRedo)
 		EndIf
 	EndIf
@@ -4293,7 +4337,7 @@ Func _ResolveAttributeFromUsnReason($data)
 EndFunc
 
 Func _Decode_CreateAttribute($record,$IsRedo)
-	Local $RecordSize,$DecodeOk=False,$CoreAttr,$CoreAttrName,$CoreAttrChunk
+	Local $RecordSize,$DecodeOk=False,$CoreAttr,$CoreAttrName,$CoreAttrChunk, $LocalStreamName
 	Global $CurrentAttribute
 	$AttributeTypeCheck = StringMid($record,1,4)
 	If $VerboseOn Then
@@ -4337,7 +4381,11 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				$AttributeString = "$VOLUME_INFORMATION"
 			Case $AttributeTypeCheck = "8000"
 				_Get_Data($record, 1, $RecordSize, 1 )
-				$AttributeString = "$DATA"
+				If $DT_Name <> "" Then
+					$AttributeString = "$DATA:"&$DT_Name
+				Else
+					$AttributeString = "$DATA"
+				EndIf
 			Case $AttributeTypeCheck = "9000"
 				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
 				$CoreAttrChunk = $CoreAttr[0]
@@ -4420,6 +4468,12 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				$AttributeString = "$VOLUME_INFORMATION"
 			Case $AttributeTypeCheck = "8000"
 				$AttributeString = "$DATA"
+				$LocalStreamName = _Get_DataName($record)
+				If $LocalStreamName <> "" Then
+					$AttributeString = "$DATA:"&$LocalStreamName
+				Else
+					$AttributeString = "$DATA"
+				EndIf
 			Case $AttributeTypeCheck = "9000"
 				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
 				$CoreAttrChunk = $CoreAttr[0]
@@ -5472,6 +5526,7 @@ Func _ClearVar()
 	$UsnJrnlUsn=""
 	$AttributeString=""
 	$HDR_BaseRecord=""
+	$HDR_SequenceNo=""
 	$TextInformation=""
 	$RedoChunkSize=""
 	$UndoChunkSize=""
@@ -5698,6 +5753,14 @@ Func _PrepareOutput()
 		Exit
 	EndIf
 	_DebugOut("Created output file: " & $LogFileAttributeListCsvFile)
+
+	$LogFileFileNamesCsvFile = $ParserOutDir & "\LogFile_FileNames.csv"
+	$LogFileFilenamesCsv = FileOpen($LogFileFileNamesCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileFileNamesCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileFileNamesCsvFile)
 EndFunc
 
 Func _WriteCSVExtraHeader()
@@ -6371,6 +6434,9 @@ Func _Decode_UndoWipeINDX($Entry)
 		$PredictedRefNumber = $MFTReferenceOfParent
 		$KeptRef = $MFTReferenceOfParent
 		$AttributeString = "$INDEX_ALLOCATION"
+		If Not $FromRcrdSlack Then
+			If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
+		EndIf
 	EndIf
 ; Work through the rest of the index entries
 	$NextEntryOffset = $NewLocalAttributeOffset+164+($Indx_NameLength*2*2)+$PaddingLength+$SubNodeVCNLength
@@ -6550,6 +6616,9 @@ Func _Decode_UndoWipeINDX($Entry)
 			$PredictedRefNumber = $MFTReferenceOfParent
 			$KeptRef = $MFTReferenceOfParent
 			$AttributeString = "$INDEX_ALLOCATION"
+			If Not $FromRcrdSlack Then
+				If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
+			EndIf
 		EndIf
 ;		_ArrayDisplay($IndxMFTReferenceOfParentArr,"$IndxMFTReferenceOfParentArr")
 	Until $NextEntryOffset+32 >= StringLen($Entry)
@@ -6613,6 +6682,7 @@ Func _UsnDecodeRecord2($Record)
 		$PredictedRefNumber = $UsnJrnlFileReferenceNumber
 		$KeptRef = $UsnJrnlFileReferenceNumber
 		$FN_Name = $UsnJrnlFileName
+		$HDR_SequenceNo = $UsnJrnlMFTReferenceSeqNo
 		$AttributeString = "$DATA:$J"
 	Else
 		#cs
@@ -8872,32 +8942,54 @@ Func _WriteCSVHeaderTransactionTable()
 EndFunc
 
 #cs
-$FN_Name
 Global $FileNamesArray[1][3]
 $FileNamesArray[0][0] = "Ref"
 $FileNamesArray[0][1] = "FileName"
 $FileNamesArray[0][2] = "LSN"
 #ce
-;Insert FileName1;FileName2 etc per SeqNo1;SeqNO2 and LSN1;LSN2
-;NewRecord,UpdatefileName,UsnJrnl
+
 Func _GetFileNameFromArray($InputRef,$InputLsn)
+	$InputRef=Int($InputRef)
 	$FoundInTable = _ArraySearch($FileNamesArray,$InputRef,0,0,0,2,1,0)
 	If $FoundInTable > 0 Then
-		If $InputLsn > $FileNamesArray[$FoundInTable][3] Then
+		If $InputLsn > $FileNamesArray[$FoundInTable][2] Then
 			Return $FileNamesArray[$FoundInTable][1]
 		EndIf
 	EndIf
 	Return ""
 EndFunc
 
-Func _UpdateFileNameArray($InputRef,$InputName,$InputLsn)
-	$FoundInTable = _ArraySearch($FileNamesArray,$InputRef,0,0,0,2,1,0)
-	If Not $FoundInTable > 0 Then
+Func _UpdateFileNameArray($InputRef,$InputRefSeqNo,$InputName,$InputLsn)
+	$InputRef=Int($InputRef)
+	$InputName=String($InputName)
+;	Local $FoundInTable = _ArraySearch($FileNamesArray,$InputRef,0,0,0,0,0,0)
+	Local $FoundInTable = _ArraySearch($FileNamesArray,$InputRef,0,0,0,2,1,0)
+	If $VerboseOn Then
+		_DumpOutput("_UpdateFileNameArray(): " & @CRLF)
+		_DumpOutput("$InputRef: " & $InputRef & @CRLF)
+		_DumpOutput("$InputRefSeqNo: " & $InputRefSeqNo & @CRLF)
+		_DumpOutput("$InputName: " & $InputName & @CRLF)
+		_DumpOutput("$InputLsn: " & $InputLsn & @CRLF)
+		_DumpOutput("$FoundInTable: " & $FoundInTable & @CRLF)
+		_DumpOutput("@error: " & @error & @CRLF)
+;		_ArrayDisplay($FileNamesArray,"$FileNamesArray")
+	EndIf
+	If $FoundInTable < 1 Then
+		;Add new entry
 		$ArrayEnd = UBound($FileNamesArray)
 		ReDim $FileNamesArray[$ArrayEnd+1][3]
 		$FileNamesArray[$ArrayEnd][0] = $InputRef
 		$FileNamesArray[$ArrayEnd][1] = $InputName
 		$FileNamesArray[$ArrayEnd][2] = $InputLsn
+		FileWriteLine($LogFileFileNamesCsv, $RecordOffset & $de & $InputLsn & $de & $InputRef & $de & $InputRefSeqNo & $de & $InputName & @crlf)
+	Else
+		;Update existing entry
+		If $FileNamesArray[$FoundInTable][1] <> $InputName Then
+			$FileNamesArray[$FoundInTable][0] = $InputRef
+			$FileNamesArray[$FoundInTable][1] = $InputName
+			$FileNamesArray[$FoundInTable][2] = $InputLsn
+			FileWriteLine($LogFileFileNamesCsv, $RecordOffset & $de & $InputLsn & $de & $InputRef & $de & $InputRefSeqNo & $de & $InputName & @crlf)
+		EndIf
 	EndIf
 	Return $FoundInTable
 EndFunc
@@ -10111,4 +10203,29 @@ Func _ExtractResidentUpdates($InputData,$IsRedo)
 	EndIf
 	FileWrite($hFileOutResident,"0x"&$InputData)
 	FileClose($hFileOutResident)
+EndFunc
+
+Func _Get_DataName($MFTEntry)
+	Local $DT_NameLength, $DT_NameRelativeOffset, $DT_NameSpace, $DT_Name, $DT_Offset=1
+	$DT_NameLength = Dec(StringMid($MFTEntry, $DT_Offset + 18, 2))
+	$DT_NameRelativeOffset = StringMid($MFTEntry, $DT_Offset + 20, 4)
+	$DT_NameRelativeOffset = Dec(_SwapEndian($DT_NameRelativeOffset),2)
+	If $DT_NameLength > 0 Then
+		$DT_NameSpace = $DT_NameLength - 1
+		$DT_Name = StringMid($MFTEntry, $DT_Offset + ($DT_NameRelativeOffset * 2), $DT_NameLength*4)
+		$DT_Name = BinaryToString("0x"&$DT_Name,2)
+		$DT_Name = StringReplace($DT_Name,$de,$CharReplacement)
+	EndIf
+	If $VerboseOn Then
+		_DumpOutput("_Get_DataName():" & @CRLF)
+		_DumpOutput("$DT_NameLength: " & $DT_NameLength & @CRLF)
+		_DumpOutput("$DT_NameRelativeOffset: " & $DT_NameRelativeOffset & @CRLF)
+		_DumpOutput("$DT_Name: " & $DT_Name & @CRLF)
+	EndIf
+	Return $DT_Name
+EndFunc
+
+Func _WriteCSVHeaderFileNames()
+	$FileNames_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"FileName"
+	FileWriteLine($LogFileFileNamesCsv, $FileNames_Csv_Header & @CRLF)
 EndFunc
