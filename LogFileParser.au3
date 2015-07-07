@@ -1612,11 +1612,11 @@ EndIf
 ;Else
 ;	$VerboseOn=0
 ;EndIf
-If $this_lsn=5754588358 or $this_lsn=5754593657 or $this_lsn=5754593764 Then
-	$VerboseOn=1
-Else
-	$VerboseOn=0
-EndIf
+;If $this_lsn=5754588358 or $this_lsn=5754593657 or $this_lsn=5754593764 Then
+;	$VerboseOn=1
+;Else
+;	$VerboseOn=0
+;EndIf
 
 If $VerboseOn Then
 ;If Dec($client_undo_next_lsn) <> $client_previous_lsn Then
