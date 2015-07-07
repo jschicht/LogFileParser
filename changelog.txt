@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.7
+Fixed bug introduced in v2.0.0.4 that caused many $UsnJrnl transactions to fail on identifiaction.
+
 v2.0.0.6.
 Added association of stream name to DeleteAttribute with $DATA.
 Removed unneded checks within decode of UpdateResidentValue.

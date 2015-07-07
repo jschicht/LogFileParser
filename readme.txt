@@ -139,6 +139,9 @@ All entries from decoded OpenAttributeTableDump transactions found in slack spac
 LogFile_TransactionTable.csv
 Decoded TransactionTableDump transactions.
 
+LogFile_Filenames.csv
+All resolved filenames with MftRef, MftRefSeqNo and Lsn.
+
 Ntfs.db
 An sqlite database file with tables almost equivalent to the above csv's. The database contains 5 tables:
 DataRuns

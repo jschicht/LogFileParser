@@ -1,7 +1,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.6
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.7
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -77,7 +77,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.6", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.7", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -1612,11 +1612,11 @@ EndIf
 ;Else
 ;	$VerboseOn=0
 ;EndIf
-;If $this_lsn=2105735 Then
-;	$VerboseOn=1
-;Else
-;	$VerboseOn=0
-;EndIf
+If $this_lsn=5754588358 or $this_lsn=5754593657 or $this_lsn=5754593764 Then
+	$VerboseOn=1
+Else
+	$VerboseOn=0
+EndIf
 
 If $VerboseOn Then
 ;If Dec($client_undo_next_lsn) <> $client_previous_lsn Then
@@ -1791,6 +1791,18 @@ If $redo_length > 0 Then
 						Case ($PredictedRefNumber = 26 Or $RealMftRef = 26) And ($AttributeString = "$INDEX_ALLOCATION:$R" Or $AttributeString = "$INDEX_ROOT:$R" Or $AttributeString = "UNKNOWN:$R")
 							_Decode_Reparse_R($redo_chunk,1)
 							$TextInformation &= ";See LogFile_ReparseR.csv"
+						Case $AttributeString = "$DATA:$J"
+							$UsnOk=0
+							$UsnOk = _UsnDecodeRecord2($redo_chunk)
+							If $UsnOk Then
+								If Not $FromRcrdSlack Then
+									_UpdateFileNameArray($PredictedRefNumber,$HDR_SequenceNo,$FN_Name,$this_lsn)
+								EndIf
+								$TextInformation &= ";$UsnJrnl"
+							Else
+								_DumpOutput("_UsnDecodeRecord2() failed and probably not Filling of zeros to page boundary for $this_lsn: " & $this_lsn & @CRLF)
+								_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+							EndIf
 					EndSelect
 				Else
 					$UsnOk=0
