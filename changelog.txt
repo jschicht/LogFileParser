@@ -1,7 +1,13 @@
 LogFileParser Changelog
 
+v2.0.0.8
+Fixed a minor bug that some very few filenames to be incorrect (bug present for a long time).
+Added feature to automatically detect structure of OpenAttributeTableDump and use the appropriate decoding function.
+Improved decode of partial updates to $INDEX_ALLOCATION:$Q in $Quota.
+Added a $TXF_DATA stream decoder (deactivated).
+
 v2.0.0.7
-Fixed bug introduced in v2.0.0.4 that caused many $UsnJrnl transactions to fail on identification.
+Fixed bug introduced in v2.0.0.4 that caused many $UsnJrnl transactions to fail on identifiaction.
 
 v2.0.0.6.
 Added association of stream name to DeleteAttribute with $DATA.
