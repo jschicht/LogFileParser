@@ -1,7 +1,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.8
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.9
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -32,12 +32,12 @@ Global $UsnJrnlCsv, $UsnJrnlCsvFile, $AttributeString, $KeptRef=-1, $TextInforma
 Global $DT_NonResidentFlag, $DT_Flags, $DT_ComprUnitSize, $DT_RealSize, $DT_DataRuns, $DT_InitStreamSize, $DT_OffsetToDataRuns, $DT_StartVCN, $DT_LastVCN, $DT_AllocSize, $DT_Name
 Global $FN_CTime_Core,$FN_CTime_Precision,$FN_ATime_Core,$FN_ATime_Precision,$FN_MTime_Core,$FN_MTime_Precision,$FN_RTime_Core,$FN_RTime_Precision
 Global $SI_CTime_Core,$SI_CTime_Precision,$SI_ATime_Core,$SI_ATime_Precision,$SI_MTime_Core,$SI_MTime_Precision,$SI_RTime_Core,$SI_RTime_Precision
-Global $LogFileFileNamesCsv,$LogFileFileNamesCsvFile
+Global $LogFileFileNamesCsv,$LogFileFileNamesCsvFile,$LogFileTxfDataCsv,$LogFileTxfDataCsvFile
 Global $SDHArray[1][1],$SIIArray[1][1],$de2=":",$LogFileSecureSDSCsv,$LogFileSecureSDHCsv,$LogFileSecureSIICsv,$LogFileSecureSDSCsvFile,$LogFileSecureSDHCsvFile,$LogFileSecureSIICsvFile
 Global $TargetSDSOffsetHex,$SecurityDescriptorHash,$SecurityId,$ControlText,$SidOwner,$SidGroup
 Global $SAclRevision,$SAceCount,$SAceTypeText,$SAceFlagsText,$SAceMask,$SAceObjectType,$SAceInheritedObjectType,$SAceSIDString,$SAceObjectFlagsText
 Global $DAclRevision,$DAceCount,$DAceTypeText,$DAceFlagsText,$DAceMask,$DAceObjectType,$DAceInheritedObjectType,$DAceSIDString,$DAceObjectFlagsText
-Global $OpenAttributesArray[1][13],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray[1][10],$lsn_openattributestable=0,$FileOutputTesterArray[20],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][13],$SlackAttributeNamesDumpArray[1][4]
+Global $OpenAttributesArray[1][13],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray[1][10],$lsn_openattributestable=0,$FileOutputTesterArray[21],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][13],$SlackAttributeNamesDumpArray[1][4]
 Global $LogFileOpenAttributeTableCsv,$LogFileOpenAttributeTableCsvFile,$LogFileDirtyPageTableCsv,$LogFileDirtyPageTableCsvFile,$LogFileBitsInNonresidentBitMapCsv,$LogFileBitsInNonresidentBitMapCsvFile,$LogFileTransactionTableCsv,$LogFileTransactionTableCsvFile
 Global $LogFileReparseRCsv,$LogFileQuotaQCsv,$LogFileQuotaOCsv,$LogFileObjIdOCsv,$LogFileReparseRCsvFile,$LogFileQuotaQCsvFile,$LogFileQuotaOCsvFile,$LogFileObjIdOCsvFile,$LogFileRCRDCsv,$LogFileRCRDCsvFile
 Global $client_index,$record_type,$transaction_id,$lf_flags,$target_attribute,$lcns_to_follow,$record_offset_in_mft,$attribute_offset,$MftClusterIndex,$target_vcn,$target_lcn,$InOpenAttributeTable=-1,$LsnValidationLevel
@@ -77,7 +77,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.8", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.9", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -130,7 +130,7 @@ GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
 $CheckReconstruct = GUICtrlCreateCheckbox("Reconstruct data runs", 220, 135, 120, 20)
 GUICtrlSetState($CheckReconstruct, $GUI_UNCHECKED)
 
-$CheckBrokenHeaderRebuild = GUICtrlCreateCheckbox("Rebuild header", 350, 135, 90, 20)
+$CheckBrokenHeaderRebuild = GUICtrlCreateCheckbox("Rebuild headers (in slack)", 350, 135, 140, 20)
 GUICtrlSetState($CheckBrokenHeaderRebuild, $GUI_UNCHECKED)
 
 $Label2 = GUICtrlCreateLabel("Sectors per cluster:",20,170,100,20)
@@ -300,6 +300,7 @@ $FileOutputTesterArray[16] = $LogFileSlackOpenAttributeTableCsvFile
 $FileOutputTesterArray[17] = $LogFileSlackAttributeNamesDumpCsvFile
 $FileOutputTesterArray[18] = $LogFileAttributeListCsvFile
 $FileOutputTesterArray[19] = $LogFileFileNamesCsvFile
+$FileOutputTesterArray[20] = $LogFileTxfDataCsvFile
 
 
 
@@ -326,6 +327,7 @@ _WriteCSVHeaderSlackOpenAttributeTable()
 _WriteCSVHeaderSlackAttributeNamesDump()
 _WriteCSVHeaderAttributeList()
 _WriteCSVHeaderFileNames()
+_WriteCSVHeaderTxfData()
 
 $FileNamesArray[0][0] = "Ref"
 $FileNamesArray[0][1] = "FileName"
@@ -4326,6 +4328,7 @@ Func _Decode_UpdateResidentValue($record,$IsRedo)
 				$AttributeString = "$STANDARD_INFORMATION"
 
 			Case $AttributeString = "$LOGGED_UTILITY_STREAM" And $undo_length > 0
+				_Decode_TXF_DATA($record,$IsRedo)
 
 			Case $AttributeString = "$BITMAP" And $undo_length > 0
 
@@ -5791,6 +5794,14 @@ Func _PrepareOutput()
 		Exit
 	EndIf
 	_DebugOut("Created output file: " & $LogFileFileNamesCsvFile)
+
+	$LogFileTxfDataCsvFile = $ParserOutDir & "\LogFile_TxfData.csv"
+	$LogFileTxfDataCsv = FileOpen($LogFileTxfDataCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileTxfDataCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileTxfDataCsvFile)
 EndFunc
 
 Func _WriteCSVExtraHeader()
@@ -10416,7 +10427,8 @@ Func _WriteCSVHeaderFileNames()
 EndFunc
 
 Func _Decode_TXF_DATA($InputData,$IsRedo)
-	Local $Counter=1
+	Local $Counter=1, $replacechars = ""
+
 	$StartOffset = 1
 	$InputDataSize = StringLen($InputData)
 
@@ -10426,32 +10438,171 @@ Func _Decode_TXF_DATA($InputData,$IsRedo)
 		_DumpOutput("$InputDataSize: " & $InputDataSize/2 & @CRLF)
 		_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
 	EndIf
+	$TextInformation &= ";See LogFile_TxfData.csv"
 
-	$MftRef_RM_Root = StringMid($InputData, $StartOffset, 12)
-	$MftRef_RM_Root = _SwapEndian($MftRef_RM_Root)
-	$MftRefSeqNo_RM_Root = StringMid($InputData, $StartOffset + 12, 4)
-	$MftRefSeqNo_RM_Root = _SwapEndian($MftRefSeqNo_RM_Root)
+	If Mod($InputDataSize,16) Then
+		While 1
+			$InputData = "0" & $InputData
+			$Counter += 1
+			$replacechars &= "-"
+			If Mod(StringLen($InputData),16) = 0 Then ExitLoop
+		WEnd
+	EndIf
 
-	$UsnIndex = StringMid($InputData, $StartOffset + 16, 16)
-	$UsnIndex = _SwapEndian($UsnIndex)
+;	If $Counter > 1 Then $TextInformation &= ";Partial update"
+	If $InputDataSize < 112 Then $TextInformation &= ";Partial update"
 
-	;Increments with 1. The last TxfFileId is referenced in $Tops standard $DATA stream at offset 0x28
-	$TxfFileId = StringMid($InputData, $StartOffset + 32, 16)
-	$TxfFileId = _SwapEndian($TxfFileId)
+	Select
+		Case $InputDataSize < 113 And $InputDataSize > 96
 
-	;Offset into $TxfLogContainer00000000000000000001
-	$LsnUserData = StringMid($InputData, $StartOffset + 48, 16)
-	$LsnUserData = _SwapEndian($LsnUserData)
+			$MftRef_RM_Root = StringMid($InputData, $StartOffset, 12)
+			$MftRef_RM_Root = Dec(_SwapEndian($MftRef_RM_Root),2)
+			$MftRefSeqNo_RM_Root = StringMid($InputData, $StartOffset + 12, 4)
+			$MftRefSeqNo_RM_Root = Dec(_SwapEndian($MftRefSeqNo_RM_Root),2)
 
-	;Offset into $TxfLogContainer00000000000000000001
-	$LsnNtfsMetadata = StringMid($InputData, $StartOffset + 64, 16)
-	$LsnNtfsMetadata = _SwapEndian($LsnNtfsMetadata)
+			$UsnIndex = StringMid($InputData, $StartOffset + 16, 16)
+			$UsnIndex = "0x"&_SwapEndian($UsnIndex)
 
-	$LsnDirectoryIndex = StringMid($InputData, $StartOffset + 80, 16)
-	$LsnDirectoryIndex = _SwapEndian($LsnDirectoryIndex)
+			;Increments with 1. The last TxfFileId is referenced in $Tops standard $DATA stream at offset 0x28
+			$TxfFileId = StringMid($InputData, $StartOffset + 32, 16)
+			$TxfFileId = "0x"&_SwapEndian($TxfFileId)
 
-	$UnknownFlag = StringMid($InputData, $StartOffset + 96, 16)
-	$UnknownFlag = _SwapEndian($UnknownFlag)
+			;Offset into $TxfLogContainer00000000000000000001
+			$LsnUserData = StringMid($InputData, $StartOffset + 48, 16)
+			$LsnUserData = "0x"&_SwapEndian($LsnUserData)
+
+			;Offset into $TxfLogContainer00000000000000000001
+			$LsnNtfsMetadata = StringMid($InputData, $StartOffset + 64, 16)
+			$LsnNtfsMetadata = "0x"&_SwapEndian($LsnNtfsMetadata)
+
+			$LsnDirectoryIndex = StringMid($InputData, $StartOffset + 80, 16)
+			$LsnDirectoryIndex = "0x"&_SwapEndian($LsnDirectoryIndex)
+
+			$UnknownFlag = StringMid($InputData, $StartOffset + 96, 16)
+			$UnknownFlag = "0x"&_SwapEndian($UnknownFlag)
+
+		Case $InputDataSize < 97 And $InputDataSize > 80
+			$StartOffset = -15
+
+			$MftRef_RM_Root = "-"
+			$MftRefSeqNo_RM_Root = "-"
+
+			$UsnIndex = StringMid($InputData, $StartOffset + 16, 16)
+			$UsnIndex = _SwapEndian($UsnIndex)
+			$UsnIndex = StringMid($UsnIndex,1,StringLen($UsnIndex)-($Counter-1)) & $replacechars
+			$UsnIndex = "0x" & $UsnIndex
+
+			$TxfFileId = StringMid($InputData, $StartOffset + 32, 16)
+			$TxfFileId = "0x"&_SwapEndian($TxfFileId)
+
+			$LsnUserData = StringMid($InputData, $StartOffset + 48, 16)
+			$LsnUserData = "0x"&_SwapEndian($LsnUserData)
+
+			$LsnNtfsMetadata = StringMid($InputData, $StartOffset + 64, 16)
+			$LsnNtfsMetadata = "0x"&_SwapEndian($LsnNtfsMetadata)
+
+			$LsnDirectoryIndex = StringMid($InputData, $StartOffset + 80, 16)
+			$LsnDirectoryIndex = "0x"&_SwapEndian($LsnDirectoryIndex)
+
+			$UnknownFlag = StringMid($InputData, $StartOffset + 96, 16)
+			$UnknownFlag = "0x"&_SwapEndian($UnknownFlag)
+
+		Case $InputDataSize < 81 And $InputDataSize > 64
+			$StartOffset = -31
+
+			$MftRef_RM_Root = "-"
+			$MftRefSeqNo_RM_Root = "-"
+			$UsnIndex = "-"
+
+			$TxfFileId = StringMid($InputData, $StartOffset + 32, 16)
+			$TxfFileId = _SwapEndian($TxfFileId)
+			$TxfFileId = StringMid($TxfFileId,1,StringLen($TxfFileId)-($Counter-1)) & $replacechars
+			$TxfFileId = "0x" & $TxfFileId
+
+			$LsnUserData = StringMid($InputData, $StartOffset + 48, 16)
+			$LsnUserData = "0x"&_SwapEndian($LsnUserData)
+
+			$LsnNtfsMetadata = StringMid($InputData, $StartOffset + 64, 16)
+			$LsnNtfsMetadata = "0x"&_SwapEndian($LsnNtfsMetadata)
+
+			$LsnDirectoryIndex = StringMid($InputData, $StartOffset + 80, 16)
+			$LsnDirectoryIndex = "0x"&_SwapEndian($LsnDirectoryIndex)
+
+			$UnknownFlag = StringMid($InputData, $StartOffset + 96, 16)
+			$UnknownFlag = "0x"&_SwapEndian($UnknownFlag)
+
+		Case $InputDataSize < 65 And $InputDataSize > 48
+			$StartOffset = -47
+
+			$MftRef_RM_Root = "-"
+			$MftRefSeqNo_RM_Root = "-"
+			$UsnIndex = "-"
+			$TxfFileId = "-"
+
+			$LsnUserData = StringMid($InputData, $StartOffset + 48, 16)
+			$LsnUserData = _SwapEndian($LsnUserData)
+			$LsnUserData = StringMid($LsnUserData,1,StringLen($LsnUserData)-($Counter-1)) & $replacechars
+			$LsnUserData = "0x" & $LsnUserData
+
+			$LsnNtfsMetadata = StringMid($InputData, $StartOffset + 64, 16)
+			$LsnNtfsMetadata = "0x"&_SwapEndian($LsnNtfsMetadata)
+
+			$LsnDirectoryIndex = StringMid($InputData, $StartOffset + 80, 16)
+			$LsnDirectoryIndex = "0x"&_SwapEndian($LsnDirectoryIndex)
+
+			$UnknownFlag = StringMid($InputData, $StartOffset + 96, 16)
+			$UnknownFlag = "0x"&_SwapEndian($UnknownFlag)
+
+		Case $InputDataSize < 49 And $InputDataSize > 32
+			$StartOffset = -63
+
+			$MftRef_RM_Root = "-"
+			$MftRefSeqNo_RM_Root = "-"
+			$UsnIndex = "-"
+			$TxfFileId = "-"
+			$LsnUserData = "-"
+
+			$LsnNtfsMetadata = StringMid($InputData, $StartOffset + 64, 16)
+			$LsnNtfsMetadata = _SwapEndian($LsnNtfsMetadata)
+			$LsnNtfsMetadata = StringMid($LsnNtfsMetadata,1,StringLen($LsnNtfsMetadata)-($Counter-1)) & $replacechars
+			$LsnNtfsMetadata = "0x" & $LsnNtfsMetadata
+
+			$LsnDirectoryIndex = StringMid($InputData, $StartOffset + 80, 16)
+			$LsnDirectoryIndex = "0x"&_SwapEndian($LsnDirectoryIndex)
+
+			$UnknownFlag = StringMid($InputData, $StartOffset + 96, 16)
+			$UnknownFlag = "0x"&_SwapEndian($UnknownFlag)
+
+		Case $InputDataSize < 33 And $InputDataSize > 16
+			$StartOffset = -79
+
+			$MftRef_RM_Root = "-"
+			$MftRefSeqNo_RM_Root = "-"
+			$UsnIndex = "-"
+			$TxfFileId = "-"
+			$LsnUserData = "-"
+			$LsnNtfsMetadata = "-"
+
+			$LsnDirectoryIndex = StringMid($InputData, $StartOffset + 80, 16)
+			$LsnDirectoryIndex = _SwapEndian($LsnDirectoryIndex)
+			$LsnDirectoryIndex = StringMid($LsnDirectoryIndex,1,StringLen($LsnDirectoryIndex)-($Counter-1)) & $replacechars
+			$LsnDirectoryIndex = "0x" & $LsnDirectoryIndex
+
+			$UnknownFlag = StringMid($InputData, $StartOffset + 96, 16)
+			$UnknownFlag = "0x"&_SwapEndian($UnknownFlag)
+
+
+		Case Else
+			$MftRef_RM_Root = "-"
+			$MftRefSeqNo_RM_Root = "-"
+			$UsnIndex = "-"
+			$TxfFileId = "-"
+			$LsnUserData = "-"
+			$LsnNtfsMetadata = "-"
+			$LsnDirectoryIndex = "-"
+			$UnknownFlag = "-"
+
+	EndSelect
 
 	If $VerboseOn Then
 		_DumpOutput("$MftRef_RM_Root: " & $MftRef_RM_Root & @CRLF)
@@ -10462,5 +10613,11 @@ Func _Decode_TXF_DATA($InputData,$IsRedo)
 		_DumpOutput("$LsnNtfsMetadata: " & $LsnNtfsMetadata & @CRLF)
 		_DumpOutput("$LsnDirectoryIndex: " & $LsnDirectoryIndex & @CRLF)
 	EndIf
+	FileWriteLine($LogFileTxfDataCsv, $RecordOffset&$de&$PredictedRefNumber&$de&$this_lsn&$de&$MftRef_RM_Root&$de&$MftRefSeqNo_RM_Root&$de&$UsnIndex&$de&$TxfFileId&$de&$LsnUserData&$de&$LsnNtfsMetadata&$de&$LsnDirectoryIndex&$de&$UnknownFlag)
 
+EndFunc
+
+Func _WriteCSVHeaderTxfData()
+	$TxfData_Csv_Header = "Offset"&$de&"MftRef"&$de&"lf_LSN"&$de&"MftRef_RM_Root"&$de&"MftRefSeqNo_RM_Root"&$de&"UsnIndex"&$de&"TxfFileId"&$de&"LsnUserData"&$de&"LsnNtfsMetadata"&$de&"LsnDirectoryIndex"&$de&"UnknownFlag"
+	FileWriteLine($LogFileTxfDataCsv, $TxfData_Csv_Header & @CRLF)
 EndFunc

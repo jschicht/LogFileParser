@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.9
+Improved and finalized the $TXF_DATA parser and activated it.
+
 v2.0.0.8
 Fixed a minor bug that some very few filenames to be incorrect (bug present for a long time).
 Added feature to automatically detect structure of OpenAttributeTableDump and use the appropriate decoding function.

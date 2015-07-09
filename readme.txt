@@ -142,6 +142,9 @@ Decoded TransactionTableDump transactions.
 LogFile_Filenames.csv
 All resolved filenames with MftRef, MftRefSeqNo and Lsn.
 
+LogFile_TxfData.csv
+Decoded data from $DATA:$TXF_DATA in $LOGGED_UTILITY_STREAM.
+
 Ntfs.db
 An sqlite database file with tables almost equivalent to the above csv's. The database contains 5 tables:
 DataRuns
@@ -220,6 +223,9 @@ The UpdateResidentValue operation is for updates to the content of resident attr
 
 Filenames csv
 From version 2.0.0.6 there was implemented a new feature to dump all identified filenames. The source of these entries come from InitializeFileRecordSegment, UpdateNonResidentValue, AddindexEntryRoot, DeleteindexEntryRoot, AddIndexEntryAllocation, DeleteIndexEntryAllocation and WriteEndOfIndexBuffer. The csv with these filenames, LogFile_FileNames.csv, thus contains a rebuilt history of all filename, MftRef and MftRefSeqNo for the duration of the $LogFile hostory. You will thus be able to see all the various filenames a given Mft Record have had during the timespan that the $LogFile covered. When a file is renamed, the MftrefSeqNo is not incremented. When a MFT record is marked as deleted, and later reused, the MftRefSeqNo is incremented by one with the new initialization.
+
+$TXF_DATA
+With Transactional NTFS (TxF), there will be occurences of the named stream $TXF_DATA in the attribute $LOGGED_UTILITY_STREAM. It is always resident, and there can be several per file. The usage is not widespread, and Microsoft actually encourage alternative methods. [quote]Microsoft strongly recommends developers utilize alternative means to achieve your application’s needs.[/quote]. It seems only few software update mechanisms uses it. Every file/folder created with it, get a unique fileref (not to be confused with MFT record numbers). This unique fileref is what the file with be named when it is deleted later on (and moved into the \$Extend\$RmMetadata\$Txf folder). The $Tops file's standard unamed $DATA attribute contains information about where in the $TxfLogContainer00000000000000000001 the next transaction would go. The $Tops named $DATA stream $T contains actual data (from transactional file operations) that is recycled. Within $TXF_DATA there is also a field called LsnUserData that is an offset into the $TxfLogContainer00000000000000000001 where a lot more transaction details are found. LsnNtfsMetadata also contains an offset into the same $TxfLogContainer00000000000000000001 file. Note that these offsets may be changed at a later stage, and is then referred to in an UpdateResidentValue operation in the $LogFile. The MftRef_RM_Root field is the file record number of the root of the resource manager responsible for the transaction associated with this file (default is 5 which is root directory). For updates to $TXF_DATA through UpdateResidentValue, the text "Partial update" is appended in the TextInformation field. For this reason, there may also exist values like 0x0000000000007E-- in LsnUserData. This is because an UpdateResidentValue of size 31 bytes means, the first 3 members of the complete structure is missing, and also 1 byte from LsnUserData is missing. The missing byte is the "low byte", thus 2 characters/nibbles of "-" each, as replacement to indicate the missing unknown byte (actually just the existing byte). If UpdateResidentValue was at 32 bytes, then no replacement characters/nibbles would be needed as the full LsnUserData was provided.
 
 
 References:
