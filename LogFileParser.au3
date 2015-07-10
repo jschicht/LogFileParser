@@ -1,7 +1,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.9
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.10
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -37,7 +37,7 @@ Global $SDHArray[1][1],$SIIArray[1][1],$de2=":",$LogFileSecureSDSCsv,$LogFileSec
 Global $TargetSDSOffsetHex,$SecurityDescriptorHash,$SecurityId,$ControlText,$SidOwner,$SidGroup
 Global $SAclRevision,$SAceCount,$SAceTypeText,$SAceFlagsText,$SAceMask,$SAceObjectType,$SAceInheritedObjectType,$SAceSIDString,$SAceObjectFlagsText
 Global $DAclRevision,$DAceCount,$DAceTypeText,$DAceFlagsText,$DAceMask,$DAceObjectType,$DAceInheritedObjectType,$DAceSIDString,$DAceObjectFlagsText
-Global $OpenAttributesArray[1][13],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray[1][10],$lsn_openattributestable=0,$FileOutputTesterArray[21],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][13],$SlackAttributeNamesDumpArray[1][4]
+Global $OpenAttributesArray[1][14],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray[1][10],$lsn_openattributestable=0,$FileOutputTesterArray[21],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][14],$SlackAttributeNamesDumpArray[1][4]
 Global $LogFileOpenAttributeTableCsv,$LogFileOpenAttributeTableCsvFile,$LogFileDirtyPageTableCsv,$LogFileDirtyPageTableCsvFile,$LogFileBitsInNonresidentBitMapCsv,$LogFileBitsInNonresidentBitMapCsvFile,$LogFileTransactionTableCsv,$LogFileTransactionTableCsvFile
 Global $LogFileReparseRCsv,$LogFileQuotaQCsv,$LogFileQuotaOCsv,$LogFileObjIdOCsv,$LogFileReparseRCsvFile,$LogFileQuotaQCsvFile,$LogFileQuotaOCsvFile,$LogFileObjIdOCsvFile,$LogFileRCRDCsv,$LogFileRCRDCsvFile
 Global $client_index,$record_type,$transaction_id,$lf_flags,$target_attribute,$lcns_to_follow,$record_offset_in_mft,$attribute_offset,$MftClusterIndex,$target_vcn,$target_lcn,$InOpenAttributeTable=-1,$LsnValidationLevel
@@ -77,7 +77,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.9", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.10", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -1614,7 +1614,7 @@ EndIf
 ;Else
 ;	$VerboseOn=0
 ;EndIf
-;If $this_lsn=14685047 or $this_lsn=14685349 or $this_lsn=14685430 Then
+;If $this_lsn=5754764539 Or $this_lsn=14691010 or $this_lsn=14691519 Then
 ;	$VerboseOn=1
 ;Else
 ;	$VerboseOn=0
@@ -1681,10 +1681,10 @@ If $redo_length > 0 Then
 		Case $redo_operation_hex="0300" ;DeallocateFileRecordSegment
 			_RemoveAllOffsetOfAttribute($PredictedRefNumber)
 		Case $redo_operation_hex="0400" ;WriteEndOfFileRecordSegment
-;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
-;			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
-;			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
-;			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+			$TextInformation &= ";Search debug.log for " & $this_lsn
 		Case $redo_operation_hex="0500" ; CreateAttribute
 			$TestAttributeType = _Decode_AttributeType($redo_chunk)
 			If $TestAttributeType <> '' Then _UpdateSingleOffsetOfAttribute($PredictedRefNumber, $record_offset_in_mft, $RedoChunkSize, $TestAttributeType)
@@ -1806,6 +1806,20 @@ If $redo_length > 0 Then
 								_DumpOutput("_UsnDecodeRecord2() failed and probably not Filling of zeros to page boundary for $this_lsn: " & $this_lsn & @CRLF)
 								_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 							EndIf
+						Case $AttributeString = "$LOGGED_UTILITY_STREAM:$TXF_DATA" ;may only be resident..
+							_DumpOutput("Verbose: Not yet implemented for $LOGGED_UTILITY_STREAM:$TXF_DATA." & @CRLF)
+							_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+							_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+							_DumpOutput(_HexEncode("0x"&$redo_chunk) & @crlf)
+							$TextInformation &= ";Search debug.log for " & $this_lsn
+;							MsgBox(0,"Error","This indicates an unexpected situation at LSN: " & $this_lsn)
+						Case $AttributeString = "$LOGGED_UTILITY_STREAM:$EFS"
+							_DumpOutput("Verbose: Not yet implemented for $LOGGED_UTILITY_STREAM:$EFS." & @CRLF)
+							_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+							_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+							_DumpOutput(_HexEncode("0x"&$redo_chunk) & @crlf)
+							$TextInformation &= ";Search debug.log for " & $this_lsn
+;							MsgBox(0,"Error","This indicates an unexpected situation at LSN: " & $this_lsn)
 					EndSelect
 				Else
 					$UsnOk=0
@@ -1991,11 +2005,13 @@ If $redo_length > 0 Then
 			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case $redo_operation_hex="1c00" ; OpenNonresidentAttribute
 			If Not $FromRcrdSlack Then
-;				If $undo_length > 0 And $undo_operation_hex="0000" Then
-;					$AttrNameTmp = _Decode_AttributeName(StringMid($InputData,97+($undo_offset*2),$undo_length*2))
-;					_DumpOutput("$AttrNameTmp: " & $AttrNameTmp & @CRLF)
-;				EndIf
 				$FoundInTableDummy = _Decode_OpenNonresidentAttribute($redo_chunk)
+				If $undo_length = 0 Then
+					If $FoundInTableDummy > 0 Then
+						$OpenAttributesArray[$FoundInTableDummy][12] = ""
+						FileWriteLine($LogFileOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$OpenAttributesArray[$FoundInTableDummy][0]&$de&$OpenAttributesArray[$FoundInTableDummy][12]&$de&$OpenAttributesArray[$FoundInTableDummy][1]&$de&$OpenAttributesArray[$FoundInTableDummy][2]&$de&$OpenAttributesArray[$FoundInTableDummy][3]&$de&$OpenAttributesArray[$FoundInTableDummy][4]&$de&$OpenAttributesArray[$FoundInTableDummy][5]&$de&_ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTableDummy][5],3,4))&$de&$OpenAttributesArray[$FoundInTableDummy][6]&$de&$OpenAttributesArray[$FoundInTableDummy][7]&$de&$OpenAttributesArray[$FoundInTableDummy][8]&$de&$OpenAttributesArray[$FoundInTableDummy][9]&$de&$OpenAttributesArray[$FoundInTableDummy][10]&$de&$OpenAttributesArray[$FoundInTableDummy][11]&$de&$OpenAttributesArray[$FoundInTableDummy][13]&@crlf)
+					EndIf
+				EndIf
 			EndIf
 ;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case $redo_operation_hex="1D00" ;OpenAttributeTableDump
@@ -2091,7 +2107,7 @@ If $undo_length > 0 Then ; Not needed I guess
 					If $FoundInTableDummy > 0 Then
 	;					MsgBox(0,"Info","Writing entry")
 						$OpenAttributesArray[$FoundInTableDummy][12] = $AttrNameTmp
-						FileWriteLine($LogFileOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$OpenAttributesArray[$FoundInTableDummy][0]&$de&$OpenAttributesArray[$FoundInTableDummy][12]&$de&$OpenAttributesArray[$FoundInTableDummy][1]&$de&$OpenAttributesArray[$FoundInTableDummy][2]&$de&$OpenAttributesArray[$FoundInTableDummy][3]&$de&$OpenAttributesArray[$FoundInTableDummy][4]&$de&$OpenAttributesArray[$FoundInTableDummy][5]&$de&_ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTableDummy][5],3,4))&$de&$OpenAttributesArray[$FoundInTableDummy][6]&$de&$OpenAttributesArray[$FoundInTableDummy][7]&$de&$OpenAttributesArray[$FoundInTableDummy][8]&$de&$OpenAttributesArray[$FoundInTableDummy][9]&$de&$OpenAttributesArray[$FoundInTableDummy][10]&$de&$OpenAttributesArray[$FoundInTableDummy][11]&@crlf)
+						FileWriteLine($LogFileOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$OpenAttributesArray[$FoundInTableDummy][0]&$de&$OpenAttributesArray[$FoundInTableDummy][12]&$de&$OpenAttributesArray[$FoundInTableDummy][1]&$de&$OpenAttributesArray[$FoundInTableDummy][2]&$de&$OpenAttributesArray[$FoundInTableDummy][3]&$de&$OpenAttributesArray[$FoundInTableDummy][4]&$de&$OpenAttributesArray[$FoundInTableDummy][5]&$de&_ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTableDummy][5],3,4))&$de&$OpenAttributesArray[$FoundInTableDummy][6]&$de&$OpenAttributesArray[$FoundInTableDummy][7]&$de&$OpenAttributesArray[$FoundInTableDummy][8]&$de&$OpenAttributesArray[$FoundInTableDummy][9]&$de&$OpenAttributesArray[$FoundInTableDummy][10]&$de&$OpenAttributesArray[$FoundInTableDummy][11]&$de&$OpenAttributesArray[$FoundInTableDummy][13]&@crlf)
 	;					FileWriteLine($LogFileOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$OpenAttributesArray[$FoundInTableDummy][0]&$de&$OpenAttributesArray[$FoundInTableDummy][12]&$de&$OpenAttributesArray[$FoundInTableDummy][1]&$de&$OpenAttributesArray[$FoundInTableDummy][2]&$de&$OpenAttributesArray[$FoundInTableDummy][3]&$de&$OpenAttributesArray[$FoundInTableDummy][4]&$de&$OpenAttributesArray[$FoundInTableDummy][5]&$de&_ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTableDummy][5],3,4))&$de&$OpenAttributesArray[$FoundInTableDummy][6]&$de&$OpenAttributesArray[$FoundInTableDummy][7]&$de&$OpenAttributesArray[$FoundInTableDummy][8]&$de&$OpenAttributesArray[$FoundInTableDummy][9]&$de&$OpenAttributesArray[$FoundInTableDummy][10]&$de&"0xDEADBEEF"&@crlf)
 					EndIf
 				EndIf
@@ -4337,6 +4353,15 @@ Func _Decode_UpdateResidentValue($record,$IsRedo)
 				_ExtractResidentUpdates($record,$IsRedo)
 			Case $client_previous_lsn=0 And $undo_length=0
 				$TextInformation &= ";Initializing with zeros"
+			Case $PredictedRefNumber = 31 ;Updates to $Tops:$DATA
+				_DumpOutput("Verbose: Updates to $Tops:$DATA" & @CRLF)
+				_DumpOutput("$this_lsn: " & $this_lsn & @crlf)
+				_DumpOutput(_HexEncode("0x"&$record) & @crlf)
+			Case Else
+				_DumpOutput("Error in _Decode_UpdateResidentValue():" & @CRLF)
+				_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+				_DumpOutput(_HexEncode("0x"&$record) & @crlf)
+;				MsgBox(0,"Error","This indicates an unexpected situation at LSN: " & $this_lsn)
 
 		EndSelect
 	Else
@@ -4463,7 +4488,11 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				$CoreAttrChunk = $CoreAttr[0]
 				$CoreAttrName = $CoreAttr[1]
 				_Get_LoggedUtilityStream($CoreAttrChunk,1,$CoreAttrName)
-				$AttributeString = "$LOGGED_UTILITY_STREAM"
+				If $CoreAttrName <> "" Then
+					$AttributeString = "$LOGGED_UTILITY_STREAM:" & $CoreAttrName
+				Else
+					$AttributeString = "$LOGGED_UTILITY_STREAM"
+				EndIf
 		EndSelect
 	Else
 		Select
@@ -4549,7 +4578,11 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				$CoreAttrChunk = $CoreAttr[0]
 				$CoreAttrName = $CoreAttr[1]
 				_Get_LoggedUtilityStream($CoreAttrChunk,1,$CoreAttrName)
-				$AttributeString = "$LOGGED_UTILITY_STREAM"
+				If $CoreAttrName <> "" Then
+					$AttributeString = "$LOGGED_UTILITY_STREAM:" & $CoreAttrName
+				Else
+					$AttributeString = "$LOGGED_UTILITY_STREAM"
+				EndIf
 		EndSelect
 	EndIf
 	If $CoreAttrName <> "" Then $AttributeString &= ":"&$CoreAttrName
@@ -5902,6 +5935,7 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 					$OpenAttributesArray[$FoundInTable][10] = "0x" & $UnknownPointer
 					$OpenAttributesArray[$FoundInTable][11] = "0x" & $EndSignature
 	;				$OpenAttributesArray[$FoundInTable][12] = "Attribute name in undo chunk"
+					$OpenAttributesArray[$FoundInTable][13] = 1
 					$RetVal = $FoundInTable
 					$TextInformation &= ";Updated OpenAttributesArray"
 				Else
@@ -5928,9 +5962,9 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 				_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
 				#ce
 				$ArrayEnd = UBound($OpenAttributesArray)
-				ReDim $OpenAttributesArray[$ArrayEnd+1][13]
+				ReDim $OpenAttributesArray[$ArrayEnd+1][14]
 				$OpenAttributesArray[$ArrayEnd][0] = $target_attribute
-				$OpenAttributesArray[$ArrayEnd][1] = $AllocatedOrNextFree
+				$OpenAttributesArray[$ArrayEnd][1] = "0x" & $AllocatedOrNextFree
 				$OpenAttributesArray[$ArrayEnd][2] = "0x" & $DirtyPagesSeen
 				$OpenAttributesArray[$ArrayEnd][3] = "0x" & $AttributeNamePresent
 				$OpenAttributesArray[$ArrayEnd][4] = "0x" & $unknown1
@@ -5941,6 +5975,7 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 				$OpenAttributesArray[$ArrayEnd][9] = $LsnOfOpenRecord
 				$OpenAttributesArray[$ArrayEnd][10] = "0x" & $UnknownPointer
 				$OpenAttributesArray[$ArrayEnd][11] = "0x" & $EndSignature
+				$OpenAttributesArray[$ArrayEnd][13] = 1
 				$RetVal = $ArrayEnd
 				$TextInformation &= ";Updated OpenAttributesArray"
 			EndIf
@@ -5993,6 +6028,7 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 					$OpenAttributesArray[$FoundInTable][10] = "0x" & $UnknownPointer
 					$OpenAttributesArray[$FoundInTable][11] = "0x" & $EndSignature
 	;				$OpenAttributesArray[$FoundInTable][12] = "Attribute name in undo chunk"
+					$OpenAttributesArray[$FoundInTable][13] = 0
 					$RetVal = $FoundInTable
 					$TextInformation &= ";Updated OpenAttributesArray"
 				Else
@@ -6019,9 +6055,9 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 				_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
 				#ce
 				$ArrayEnd = UBound($OpenAttributesArray)
-				ReDim $OpenAttributesArray[$ArrayEnd+1][13]
+				ReDim $OpenAttributesArray[$ArrayEnd+1][14]
 				$OpenAttributesArray[$ArrayEnd][0] = $target_attribute
-				$OpenAttributesArray[$ArrayEnd][1] = $AllocatedOrNextFree
+				$OpenAttributesArray[$ArrayEnd][1] = "0x" & $AllocatedOrNextFree
 				$OpenAttributesArray[$ArrayEnd][2] = "0x" & $DirtyPagesSeen
 				$OpenAttributesArray[$ArrayEnd][3] = "0x" & $AttributeNamePresent
 				$OpenAttributesArray[$ArrayEnd][4] = "0x" & $unknown1
@@ -6032,6 +6068,7 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 				$OpenAttributesArray[$ArrayEnd][9] = $LsnOfOpenRecord
 				$OpenAttributesArray[$ArrayEnd][10] = "0x" & $UnknownPointer
 				$OpenAttributesArray[$ArrayEnd][11] = "0x" & $EndSignature
+				$OpenAttributesArray[$ArrayEnd][13] = 0
 				$RetVal = $ArrayEnd
 				$TextInformation &= ";Updated OpenAttributesArray"
 			EndIf
@@ -8457,7 +8494,7 @@ Func _Decode_Reparse_R($InputData,$IsRedo)
 EndFunc
 
 Func _Decode_OpenAttributeTableDumpNt6x($InputData,$IsFirst)
-	Local $StartOffset = 1,$EntryCounter=1
+	Local $StartOffset = 1,$EntryCounter=1, $LocalIsNt6x=0
 	;Header
 	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
 	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
@@ -8505,6 +8542,7 @@ Func _Decode_OpenAttributeTableDumpNt6x($InputData,$IsFirst)
 	$OpenAttributesArray[0][10] = "UnknownPointer"
 	$OpenAttributesArray[0][11] = "EndSignature"
 	$OpenAttributesArray[0][12] = "AttributeName"
+	$OpenAttributesArray[0][13] = "IsNt6.x"
 
 	$OffsetFirstEntry = 48
 
@@ -8524,8 +8562,9 @@ Func _Decode_OpenAttributeTableDumpNt6x($InputData,$IsFirst)
 		_Decode_OpenAttributeTableDumpNt5x($InputData,0)
 		Return
 	EndIf
+	$LocalIsNt6x=1
 
-	ReDim $OpenAttributesArray[1+$NumberOfEntries][13]
+	ReDim $OpenAttributesArray[1+$NumberOfEntries][14]
 	Do
 		$AllocatedOrNextFree = StringMid($InputData, $StartOffset + $OffsetFirstEntry, 8) ;AllocatedOrNextFree
 
@@ -8566,6 +8605,7 @@ Func _Decode_OpenAttributeTableDumpNt6x($InputData,$IsFirst)
 		$OpenAttributesArray[$EntryCounter][9] = $TargetLsn
 		$OpenAttributesArray[$EntryCounter][10] = "0x" & $UnknownPointer
 		$OpenAttributesArray[$EntryCounter][11] = "0x" & $TargetEndSignature
+		$OpenAttributesArray[$EntryCounter][13] = $LocalIsNt6x
 
 		If $VerboseOn Then
 			_DumpOutput(@CRLF)
@@ -8590,7 +8630,7 @@ Func _Decode_OpenAttributeTableDumpNt6x($InputData,$IsFirst)
 ;	Until $StartOffset >= $OffsetLastRealEntry*2
 ;	Until $StartOffset-$OffsetFirstEntry >= $OffsetLastReservedEntry*2
 	Until $StartOffset >= $OffsetLastReservedEntry*2
-	ReDim $OpenAttributesArray[$EntryCounter][13]
+	ReDim $OpenAttributesArray[$EntryCounter][14]
 
 	$lsn_openattributestable = $this_lsn
 	If $VerboseOn Then
@@ -8602,7 +8642,7 @@ Func _Decode_OpenAttributeTableDumpNt6x($InputData,$IsFirst)
 EndFunc
 
 Func _Decode_OpenAttributeTableDumpNt5x($InputData,$IsFirst)
-	Local $StartOffset = 1,$EntryCounter=1
+	Local $StartOffset = 1,$EntryCounter=1, $LocalIsNt6x=0
 	;Header
 	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
 	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
@@ -8650,6 +8690,7 @@ Func _Decode_OpenAttributeTableDumpNt5x($InputData,$IsFirst)
 	$OpenAttributesArray[0][10] = "UnknownPointer"
 	$OpenAttributesArray[0][11] = "EndSignature"
 	$OpenAttributesArray[0][12] = "AttributeName"
+	$OpenAttributesArray[0][13] = "IsNt6.x"
 
 	$OffsetFirstEntry = 48
 
@@ -8669,8 +8710,9 @@ Func _Decode_OpenAttributeTableDumpNt5x($InputData,$IsFirst)
 		_Decode_OpenAttributeTableDumpNt6x($InputData,0)
 		Return
 	EndIf
+	$LocalIsNt6x=0
 
-	ReDim $OpenAttributesArray[1+$NumberOfEntries][13]
+	ReDim $OpenAttributesArray[1+$NumberOfEntries][14]
 	Do
 		$AllocatedOrNextFree = StringMid($InputData, $StartOffset + $OffsetFirstEntry, 8) ;AllocatedOrNextFree
 
@@ -8712,6 +8754,7 @@ Func _Decode_OpenAttributeTableDumpNt5x($InputData,$IsFirst)
 		$OpenAttributesArray[$EntryCounter][9] = $TargetLsn
 		$OpenAttributesArray[$EntryCounter][10] = "0x" & $UnknownPointer
 		$OpenAttributesArray[$EntryCounter][11] = "0x" & $TargetEndSignature
+		$OpenAttributesArray[$EntryCounter][13] = $LocalIsNt6x
 
 		If $VerboseOn Then
 			_DumpOutput(@CRLF)
@@ -8736,7 +8779,7 @@ Func _Decode_OpenAttributeTableDumpNt5x($InputData,$IsFirst)
 ;	Until $StartOffset >= $OffsetLastRealEntry*2
 ;	Until $StartOffset-$OffsetFirstEntry >= $OffsetLastReservedEntry*2
 	Until $StartOffset >= $OffsetLastReservedEntry*2
-	ReDim $OpenAttributesArray[$EntryCounter][13]
+	ReDim $OpenAttributesArray[$EntryCounter][14]
 
 	$lsn_openattributestable = $this_lsn
 	If $VerboseOn Then
@@ -8792,7 +8835,7 @@ Func _Decode_AttributeNamesDump($InputData)
 
 
 	For $i = 1 To UBound($OpenAttributesArray)-1
-		FileWriteLine($LogFileOpenAttributeTableCsv, $RecordOffset&$de&$lsn_openattributestable&$de&$OpenAttributesArray[$i][0]&$de&$OpenAttributesArray[$i][12]&$de&$OpenAttributesArray[$i][1]&$de&$OpenAttributesArray[$i][2]&$de&$OpenAttributesArray[$i][3]&$de&$OpenAttributesArray[$i][4]&$de&$OpenAttributesArray[$i][5]&$de&_ResolveAttributeType(StringMid($OpenAttributesArray[$i][5],3,4))&$de&$OpenAttributesArray[$i][6]&$de&$OpenAttributesArray[$i][7]&$de&$OpenAttributesArray[$i][8]&$de&$OpenAttributesArray[$i][9]&$de&$OpenAttributesArray[$i][10]&$de&$OpenAttributesArray[$i][11]&@crlf)
+		FileWriteLine($LogFileOpenAttributeTableCsv, $RecordOffset&$de&$lsn_openattributestable&$de&$OpenAttributesArray[$i][0]&$de&$OpenAttributesArray[$i][12]&$de&$OpenAttributesArray[$i][1]&$de&$OpenAttributesArray[$i][2]&$de&$OpenAttributesArray[$i][3]&$de&$OpenAttributesArray[$i][4]&$de&$OpenAttributesArray[$i][5]&$de&_ResolveAttributeType(StringMid($OpenAttributesArray[$i][5],3,4))&$de&$OpenAttributesArray[$i][6]&$de&$OpenAttributesArray[$i][7]&$de&$OpenAttributesArray[$i][8]&$de&$OpenAttributesArray[$i][9]&$de&$OpenAttributesArray[$i][10]&$de&$OpenAttributesArray[$i][11]&$de&$OpenAttributesArray[$i][13]&@crlf)
 	Next
 	If $VerboseOn Then
 		_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
@@ -8888,7 +8931,7 @@ Func _Decode_DirtyPageTableDump($InputData)
 EndFunc
 
 Func _WriteCSVHeaderOpenAttributeTable()
-	$OpenAttributeTable_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"TableOffset"&$de&"AttributeName"&$de&"AllocatedOrNextFree"&$de&"DirtyPagesSeen"&$de&"AttributeNamePresent"&$de&"unknown1"&$de&"AttributeCode"&$de&"AttributeType"&$de&"unknown2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"Lsn"&$de&"UnknownPointer"&$de&"EndSignature"
+	$OpenAttributeTable_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"TableOffset"&$de&"AttributeName"&$de&"AllocatedOrNextFree"&$de&"DirtyPagesSeen"&$de&"AttributeNamePresent"&$de&"unknown1"&$de&"AttributeCode"&$de&"AttributeType"&$de&"unknown2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"Lsn"&$de&"UnknownPointer"&$de&"EndSignature"&$de&"IsNt6.x"
 	FileWriteLine($LogFileOpenAttributeTableCsv, $OpenAttributeTable_Csv_Header & @CRLF)
 EndFunc
 
@@ -9093,12 +9136,12 @@ Func _WriteCSVHeaderTransactionHeader()
 EndFunc
 
 Func _WriteCSVHeaderSlackOpenAttributeTable()
-	$SlackOpenAttributeTable_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"TableOffset"&$de&"AttributeName"&$de&"AllocatedOrNextFree"&$de&"DirtyPagesSeen"&$de&"AttributeNamePresent"&$de&"unknown1"&$de&"AttributeCode"&$de&"AttributeType"&$de&"unknown2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"Lsn"&$de&"UnknownPointer"&$de&"EndSignature"
+	$SlackOpenAttributeTable_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"TableOffset"&$de&"AttributeName"&$de&"AllocatedOrNextFree"&$de&"DirtyPagesSeen"&$de&"AttributeNamePresent"&$de&"unknown1"&$de&"AttributeCode"&$de&"AttributeType"&$de&"unknown2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"Lsn"&$de&"UnknownPointer"&$de&"EndSignature"&$de&"IsNt6.x"
 	FileWriteLine($LogFileSlackOpenAttributeTableCsv, $SlackOpenAttributeTable_Csv_Header & @CRLF)
 EndFunc
 
 Func _Decode_SlackOpenAttributeTableDumpNt6x($InputData,$IsFirst)
-	Local $StartOffset = 1,$EntryCounter=1, $InputDataSize = StringLen($InputData)
+	Local $StartOffset = 1,$EntryCounter=1, $InputDataSize = StringLen($InputData), $LocalIsNt6x=0
 	;Header
 	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
 	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
@@ -9146,6 +9189,7 @@ Func _Decode_SlackOpenAttributeTableDumpNt6x($InputData,$IsFirst)
 	$SlackOpenAttributesArray[0][10] = "UnknownPointer"
 	$SlackOpenAttributesArray[0][11] = "EndSignature"
 	$SlackOpenAttributesArray[0][12] = "AttributeName"
+	$SlackOpenAttributesArray[0][13] = "IsNt6.x"
 
 	$OffsetFirstEntry = 48
 
@@ -9165,8 +9209,9 @@ Func _Decode_SlackOpenAttributeTableDumpNt6x($InputData,$IsFirst)
 		_Decode_SlackOpenAttributeTableDumpNt5x($InputData,0)
 		Return
 	EndIf
+	$LocalIsNt6x=1
 
-	ReDim $SlackOpenAttributesArray[1+$NumberOfEntries][13]
+	ReDim $SlackOpenAttributesArray[1+$NumberOfEntries][14]
 	Do
 		If $StartOffset >= $InputDataSize Then ExitLoop
 		$AllocatedOrNextFree = StringMid($InputData, $StartOffset + $OffsetFirstEntry, 8) ;AllocatedOrNextFree
@@ -9208,6 +9253,7 @@ Func _Decode_SlackOpenAttributeTableDumpNt6x($InputData,$IsFirst)
 		$SlackOpenAttributesArray[$EntryCounter][9] = $TargetLsn
 		$SlackOpenAttributesArray[$EntryCounter][10] = "0x" & $UnknownPointer
 		$SlackOpenAttributesArray[$EntryCounter][11] = "0x" & $TargetEndSignature
+		$SlackOpenAttributesArray[$EntryCounter][13] = $LocalIsNt6x
 
 		$StartOffset += $TableEntrySize*2
 ;		If $StartOffset >= $InputDataSize Then ExitLoop
@@ -9216,10 +9262,10 @@ Func _Decode_SlackOpenAttributeTableDumpNt6x($InputData,$IsFirst)
 ;	Until $StartOffset >= $OffsetLastRealEntry*2
 ;	Until $StartOffset-$OffsetFirstEntry >= $OffsetLastReservedEntry*2
 	Until $StartOffset >= $OffsetLastReservedEntry*2
-	ReDim $SlackOpenAttributesArray[$EntryCounter][13]
+	ReDim $SlackOpenAttributesArray[$EntryCounter][14]
 
 	For $i = 1 To UBound($SlackOpenAttributesArray)-1
-		FileWriteLine($LogFileSlackOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$SlackOpenAttributesArray[$i][0]&$de&$SlackOpenAttributesArray[$i][12]&$de&$SlackOpenAttributesArray[$i][1]&$de&$SlackOpenAttributesArray[$i][2]&$de&$SlackOpenAttributesArray[$i][3]&$de&$SlackOpenAttributesArray[$i][4]&$de&$SlackOpenAttributesArray[$i][5]&$de&_ResolveAttributeType(StringMid($SlackOpenAttributesArray[$i][5],3,4))&$de&$SlackOpenAttributesArray[$i][6]&$de&$SlackOpenAttributesArray[$i][7]&$de&$SlackOpenAttributesArray[$i][8]&$de&$SlackOpenAttributesArray[$i][9]&$de&$SlackOpenAttributesArray[$i][10]&$de&$SlackOpenAttributesArray[$i][11]&@crlf)
+		FileWriteLine($LogFileSlackOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$SlackOpenAttributesArray[$i][0]&$de&$SlackOpenAttributesArray[$i][12]&$de&$SlackOpenAttributesArray[$i][1]&$de&$SlackOpenAttributesArray[$i][2]&$de&$SlackOpenAttributesArray[$i][3]&$de&$SlackOpenAttributesArray[$i][4]&$de&$SlackOpenAttributesArray[$i][5]&$de&_ResolveAttributeType(StringMid($SlackOpenAttributesArray[$i][5],3,4))&$de&$SlackOpenAttributesArray[$i][6]&$de&$SlackOpenAttributesArray[$i][7]&$de&$SlackOpenAttributesArray[$i][8]&$de&$SlackOpenAttributesArray[$i][9]&$de&$SlackOpenAttributesArray[$i][10]&$de&$SlackOpenAttributesArray[$i][11]&$de&$SlackOpenAttributesArray[$i][13]&@crlf)
 	Next
 
 ;	$lsn_openattributestable = $this_lsn
@@ -9232,7 +9278,7 @@ Func _Decode_SlackOpenAttributeTableDumpNt6x($InputData,$IsFirst)
 EndFunc
 
 Func _Decode_SlackOpenAttributeTableDumpNt5x($InputData,$IsFirst)
-	Local $StartOffset = 1,$EntryCounter=1, $InputDataSize = StringLen($InputData)
+	Local $StartOffset = 1,$EntryCounter=1, $InputDataSize = StringLen($InputData), $LocalIsNt6x=0
 	;Header
 	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
 	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
@@ -9280,6 +9326,7 @@ Func _Decode_SlackOpenAttributeTableDumpNt5x($InputData,$IsFirst)
 	$SlackOpenAttributesArray[0][10] = "UnknownPointer"
 	$SlackOpenAttributesArray[0][11] = "EndSignature"
 	$SlackOpenAttributesArray[0][12] = "AttributeName"
+	$SlackOpenAttributesArray[0][13] = "IsNt6.x"
 
 	$OffsetFirstEntry = 48
 
@@ -9299,8 +9346,9 @@ Func _Decode_SlackOpenAttributeTableDumpNt5x($InputData,$IsFirst)
 		_Decode_SlackOpenAttributeTableDumpNt6x($InputData,0)
 		Return
 	EndIf
+	$LocalIsNt6x=0
 
-	ReDim $SlackOpenAttributesArray[1+$NumberOfEntries][13]
+	ReDim $SlackOpenAttributesArray[1+$NumberOfEntries][14]
 	Do
 		If $StartOffset >= $InputDataSize Then ExitLoop
 		$AllocatedOrNextFree = StringMid($InputData, $StartOffset + $OffsetFirstEntry, 8) ;AllocatedOrNextFree
@@ -9343,6 +9391,7 @@ Func _Decode_SlackOpenAttributeTableDumpNt5x($InputData,$IsFirst)
 		$SlackOpenAttributesArray[$EntryCounter][9] = $TargetLsn
 		$SlackOpenAttributesArray[$EntryCounter][10] = "0x" & $UnknownPointer
 		$SlackOpenAttributesArray[$EntryCounter][11] = "0x" & $TargetEndSignature
+		$SlackOpenAttributesArray[$EntryCounter][13] = $LocalIsNt6x
 
 		$StartOffset += $TableEntrySize*2
 ;		If $StartOffset >= $InputDataSize Then ExitLoop
@@ -9351,10 +9400,10 @@ Func _Decode_SlackOpenAttributeTableDumpNt5x($InputData,$IsFirst)
 ;	Until $StartOffset >= $OffsetLastRealEntry*2
 ;	Until $StartOffset-$OffsetFirstEntry >= $OffsetLastReservedEntry*2
 	Until $StartOffset >= $OffsetLastReservedEntry*2
-	ReDim $SlackOpenAttributesArray[$EntryCounter][13]
+	ReDim $SlackOpenAttributesArray[$EntryCounter][14]
 
 	For $i = 1 To UBound($SlackOpenAttributesArray)-1
-		FileWriteLine($LogFileSlackOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$SlackOpenAttributesArray[$i][0]&$de&$SlackOpenAttributesArray[$i][12]&$de&$SlackOpenAttributesArray[$i][1]&$de&$SlackOpenAttributesArray[$i][2]&$de&$SlackOpenAttributesArray[$i][3]&$de&$SlackOpenAttributesArray[$i][4]&$de&$SlackOpenAttributesArray[$i][5]&$de&_ResolveAttributeType(StringMid($SlackOpenAttributesArray[$i][5],3,4))&$de&$SlackOpenAttributesArray[$i][6]&$de&$SlackOpenAttributesArray[$i][7]&$de&$SlackOpenAttributesArray[$i][8]&$de&$SlackOpenAttributesArray[$i][9]&$de&$SlackOpenAttributesArray[$i][10]&$de&$SlackOpenAttributesArray[$i][11]&@crlf)
+		FileWriteLine($LogFileSlackOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$SlackOpenAttributesArray[$i][0]&$de&$SlackOpenAttributesArray[$i][12]&$de&$SlackOpenAttributesArray[$i][1]&$de&$SlackOpenAttributesArray[$i][2]&$de&$SlackOpenAttributesArray[$i][3]&$de&$SlackOpenAttributesArray[$i][4]&$de&$SlackOpenAttributesArray[$i][5]&$de&_ResolveAttributeType(StringMid($SlackOpenAttributesArray[$i][5],3,4))&$de&$SlackOpenAttributesArray[$i][6]&$de&$SlackOpenAttributesArray[$i][7]&$de&$SlackOpenAttributesArray[$i][8]&$de&$SlackOpenAttributesArray[$i][9]&$de&$SlackOpenAttributesArray[$i][10]&$de&$SlackOpenAttributesArray[$i][11]&$de&$SlackOpenAttributesArray[$i][13]&@crlf)
 	Next
 
 ;	$lsn_openattributestable = $this_lsn
