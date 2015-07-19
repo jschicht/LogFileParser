@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.11
+Added 4 remaining structure members of USN_RECORD_V2/USN_RECORD_V3 to the usn record output (LogFile_lfUsnJrnl.csv); MajorVersion, MinorVersion, SourceInfo and SecurityId.
+
 v2.0.0.10
 Added 1 column for IsNt6.x variable in the LogFile_OpenAttributeTable.csv and LogFile_SlackOpenAttributeTable.csv.
 Fixed a bug that caused single entry updates to OpenAttributeTable through OpenNonresidentAttribute to not work with unnamed attributes (like $MFT:$DATA).

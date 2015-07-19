@@ -1,7 +1,8 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
+#AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.10
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.11
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -77,7 +78,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.10", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.11", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -5857,7 +5858,7 @@ Func _WriteCSVHeader()
 	$LogFile_DataRunsResolved_Csv_Header = "lf_MFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_FileName"&$de&"lf_LSN"&$de&"lf_OffsetInMft"&$de&"lf_DataName"&$de&"lf_Flags"&$de&"lf_NonResident"&$de&"lf_FileSize"&$de&"lf_InitializedStreamSize"&$de&"lf_DataRuns"
 	FileWriteLine($LogFileDataRunsModCsv, $LogFile_DataRunsResolved_Csv_Header & @CRLF)
 ;	$LogFile_UsnJrnl_Csv_Header = "MFTReference"&$de&"MFTParentReference"&$de&"USN"&$de&"Timestamp"&$de&"Reason"&$de&"SourceInfo"&$de&"FileAttributes"&$de&"FileName"&$de&"FileNameModified"
-	$LogFile_UsnJrnl_Csv_Header = "FileName"&$de&"USN"&$de&"Timestamp"&$de&"Reason"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"MFTParentReference"&$de&"ParentReferenceSeqNo"&$de&"FileAttributes"
+	$LogFile_UsnJrnl_Csv_Header = "FileName"&$de&"USN"&$de&"Timestamp"&$de&"Reason"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"MFTParentReference"&$de&"ParentReferenceSeqNo"&$de&"FileAttributes"&$de&"MajorVersion"&$de&"MinorVersion"&$de&"SourceInfo"&$de&"SecurityId"
 	FileWriteLine($LogFileUsnJrnlCsv, $LogFile_UsnJrnl_Csv_Header & @CRLF)
 EndFunc
 
@@ -6694,10 +6695,12 @@ EndFunc
 Func _UsnDecodeRecord2($Record)
 	Local $UsnJrnlRecordLength,$UsnJrnlMajorVersion,$UsnJrnlMFTReferenceSeqNo,$UsnJrnlParentReferenceSeqNo
 	Local $UsnJrnlSourceInfo,$UsnJrnlSecurityId,$UsnJrnlFileAttributes,$UsnJrnlFileNameLength,$UsnJrnlFileNameOffset,$DecodeOk=False
-	$UsnJrnlRecordLength = StringMid($Record,1,8)
-	$UsnJrnlRecordLength = Dec(_SwapEndian($UsnJrnlRecordLength),2)
-;	$UsnJrnlMajorVersion = StringMid($Record,9,4)
-;	$UsnJrnlMinorVersion = StringMid($Record,13,4)
+;	$UsnJrnlRecordLength = StringMid($Record,1,8)
+;	$UsnJrnlRecordLength = Dec(_SwapEndian($UsnJrnlRecordLength),2)
+	$UsnJrnlMajorVersion = StringMid($Record,9,4)
+	$UsnJrnlMajorVersion = Dec(_SwapEndian($UsnJrnlMajorVersion),2)
+	$UsnJrnlMinorVersion = StringMid($Record,13,4)
+	$UsnJrnlMinorVersion = Dec(_SwapEndian($UsnJrnlMinorVersion),2)
 	$UsnJrnlFileReferenceNumber = StringMid($Record,17,12)
 	$UsnJrnlFileReferenceNumber = Dec(_SwapEndian($UsnJrnlFileReferenceNumber),2)
 	$UsnJrnlMFTReferenceSeqNo = StringMid($Record,29,4)
@@ -6712,16 +6715,17 @@ Func _UsnDecodeRecord2($Record)
 	$UsnJrnlTimestamp = _DecodeTimestamp($UsnJrnlTimestamp)
 	$UsnJrnlReason = StringMid($Record,81,8)
 	$UsnJrnlReason = _DecodeReasonCodes("0x"&_SwapEndian($UsnJrnlReason))
-;	$UsnJrnlSourceInfo = StringMid($Record,89,8)
+	$UsnJrnlSourceInfo = StringMid($Record,89,8)
 ;	$UsnJrnlSourceInfo = _DecodeSourceInfoFlag("0x"&_SwapEndian($UsnJrnlSourceInfo))
-;	$UsnJrnlSourceInfo = "0x"&_SwapEndian($UsnJrnlSourceInfo)
-;	$UsnJrnlSecurityId = StringMid($Record,97,8)
+	$UsnJrnlSourceInfo = "0x"&_SwapEndian($UsnJrnlSourceInfo)
+	$UsnJrnlSecurityId = StringMid($Record,97,8)
+	$UsnJrnlSecurityId = Dec(_SwapEndian($UsnJrnlSecurityId),2)
 	$UsnJrnlFileAttributes = StringMid($Record,105,8)
 	$UsnJrnlFileAttributes = _File_Attributes("0x"&_SwapEndian($UsnJrnlFileAttributes))
 	$UsnJrnlFileNameLength = StringMid($Record,113,4)
 	$UsnJrnlFileNameLength = Dec(_SwapEndian($UsnJrnlFileNameLength),2)
-	$UsnJrnlFileNameOffset = StringMid($Record,117,4)
-	$UsnJrnlFileNameOffset = Dec(_SwapEndian($UsnJrnlFileNameOffset),2)
+;	$UsnJrnlFileNameOffset = StringMid($Record,117,4)
+;	$UsnJrnlFileNameOffset = Dec(_SwapEndian($UsnJrnlFileNameOffset),2)
 	$UsnJrnlFileName = StringMid($Record,121,$UsnJrnlFileNameLength*2)
 	$UsnJrnlFileName = BinaryToString("0x"&$UsnJrnlFileName,2)
 	If $VerboseOn Then
@@ -6741,7 +6745,7 @@ Func _UsnDecodeRecord2($Record)
 ;	If Int($UsnJrnlFileReferenceNumber) > 0 And Int($UsnJrnlMFTReferenceSeqNo) > 0 And Int($UsnJrnlParentFileReferenceNumber) > 4 And $UsnJrnlFileNameLength > 0  And $UsnJrnlTimestamp<>"-" And StringInStr($UsnJrnlTimestamp,"1601")=0 Then
 	If Int($UsnJrnlFileReferenceNumber) > 0 And Int($UsnJrnlMFTReferenceSeqNo) > 0 And Int($UsnJrnlParentFileReferenceNumber) > 4 And $UsnJrnlFileNameLength > 0  And $UsnJrnlTimestamp<>"-" Then
 		$DecodeOk=True
-		FileWriteLine($LogFileUsnJrnlCsv, $UsnJrnlFileName&$de&$UsnJrnlUsn&$de&$UsnJrnlTimestamp&$de&$UsnJrnlReason&$de&$UsnJrnlFileReferenceNumber&$de&$UsnJrnlMFTReferenceSeqNo&$de&$UsnJrnlParentFileReferenceNumber&$de&$UsnJrnlParentReferenceSeqNo&$de&$UsnJrnlFileAttributes&@crlf)
+		FileWriteLine($LogFileUsnJrnlCsv, $UsnJrnlFileName&$de&$UsnJrnlUsn&$de&$UsnJrnlTimestamp&$de&$UsnJrnlReason&$de&$UsnJrnlFileReferenceNumber&$de&$UsnJrnlMFTReferenceSeqNo&$de&$UsnJrnlParentFileReferenceNumber&$de&$UsnJrnlParentReferenceSeqNo&$de&$UsnJrnlFileAttributes&$de&$UsnJrnlMajorVersion&$de&$UsnJrnlMinorVersion&$de&$UsnJrnlSourceInfo&$de&$UsnJrnlSecurityId&@crlf)
 		$RealMftRef = $PredictedRefNumber
 		$UsnJrnlRef = $PredictedRefNumber
 		$PredictedRefNumber = $UsnJrnlFileReferenceNumber
