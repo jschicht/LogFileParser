@@ -207,9 +207,6 @@ Changes to the data of resident files are not stored within $LogFile, only infor
 Note
 The $UsnJrnl contains information in a more human friendly way. For instance each record contains fileref, filename, timestamp and explanation of what occurred. It also contains far more historical information than $LogFile, though without a lot of details. If $UsnJrnl is active, then all transactions written to it during the recycle life of the $LogFile are also present within $LogFile. This means that there is no reason to decode the $UsnJrnl in order to understand $LogFile any better.
 
-Todo
-Implement more analysis of data present in ntfs.db. Currently it will require a certain level of NTFS knowledge in order to understand the output.
-
 Slack space
 In this context slack space means the space within a RCRD record that is the leftover in the record beyond the last transaction. I don't think this has been described before, so let me explain. Volume slack is the unused space between the end of file system and end of the partition where the file system resides. MFT record slack is kind of the same, but refers to the space found after the record end signature (0xFFFFFFFF) up to the physical record end (0x400 or 0x1000). And slack space within the $LogFile is thus the space found beyond the last transaction and up to the RCRD record end (usually 0x1000). These transactions from slack are actually there from before the $LogFile was recycled (overwriten). There is also an algorithm identifying valid transactions from slack space. In addition there may also exist several layers of such slack space. 
 Example:
@@ -227,6 +224,12 @@ From version 2.0.0.6 there was implemented a new feature to dump all identified 
 $TXF_DATA
 With Transactional NTFS (TxF), there will be occurences of the named stream $TXF_DATA in the attribute $LOGGED_UTILITY_STREAM. It is always resident, and there can be several per file. The usage is not widespread, and Microsoft actually encourage alternative methods. [quote]Microsoft strongly recommends developers utilize alternative means to achieve your application’s needs.[/quote]. It seems only few software update mechanisms uses it. Every file/folder created with it, get a unique fileref (not to be confused with MFT record numbers). This unique fileref is what the file with be named when it is deleted later on (and moved into the \$Extend\$RmMetadata\$Txf folder). The $Tops file's standard unamed $DATA attribute contains information about where in the $TxfLogContainer00000000000000000001 the next transaction would go. The $Tops named $DATA stream $T contains actual data (from transactional file operations) that is recycled. Within $TXF_DATA there is also a field called LsnUserData that is an offset into the $TxfLogContainer00000000000000000001 where a lot more transaction details are found. LsnNtfsMetadata also contains an offset into the same $TxfLogContainer00000000000000000001 file. Note that these offsets may be changed at a later stage, and is then referred to in an UpdateResidentValue operation in the $LogFile. The MftRef_RM_Root field is the file record number of the root of the resource manager responsible for the transaction associated with this file (default is 5 which is root directory). For updates to $TXF_DATA through UpdateResidentValue, the text "Partial update" is appended in the TextInformation field. For this reason, there may also exist values like 0x0000000000007E-- in LsnUserData. This is because an UpdateResidentValue of size 31 bytes means, the first 3 members of the complete structure is missing, and also 1 byte from LsnUserData is missing. The missing byte is the "low byte", thus 2 characters/nibbles of "-" each, as replacement to indicate the missing unknown byte (actually just the existing byte). If UpdateResidentValue was at 32 bytes, then no replacement characters/nibbles would be needed as the full LsnUserData was provided.
 
+debug.log
+In this log there is written error messages and verbose information. If strange values or comments are found in output, search debug.log for the lsn. Usually the whole transaction is dumped, which might help understand.
+
+Todo
+Implement more analysis of data present in ntfs.db. Currently it will require a certain level of NTFS knowledge in order to understand the output.
+Dump $EA content.
 
 References:
 Windows Internals 6th Edition

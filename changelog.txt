@@ -1,5 +1,14 @@
 LogFileParser Changelog
 
+v2.0.0.12
+Improved identification of filenames associated with UpdateNonResidentValue.
+Added NonResidentFlag to TextInformation field (used with CreateAttribute).
+Fixed bug that caused the attributes $EA_INFORMATION and $EA to not be decoded properly.
+Removed unused code.
+Deactivated annoying messagebox when target_attribute 0x0018 was not found.
+Fixed bug that caused named data streams to have the stream name appended twice certain times with CreateAttribute.
+Fixed bug that caused certain $SII and $SDH indx's to be missed with UpdateNonResidentValue.
+
 v2.0.0.11
 Added 4 remaining structure members of USN_RECORD_V2/USN_RECORD_V3 to the usn record output (LogFile_lfUsnJrnl.csv); MajorVersion, MinorVersion, SourceInfo and SecurityId.
 
