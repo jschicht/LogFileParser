@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.13
+Added optional extraction of all resident $EA content.
+
 v2.0.0.12
 Improved identification of filenames associated with UpdateNonResidentValue.
 Added NonResidentFlag to TextInformation field (used with CreateAttribute).

@@ -2,7 +2,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.12
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.13
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -78,7 +78,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.12", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.13", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -1614,11 +1614,11 @@ EndIf
 ;Else
 ;	$VerboseOn=0
 ;EndIf
-If $this_lsn=15732863 Or $this_lsn=15733394 Then
-	$VerboseOn=1
-Else
-	$VerboseOn=0
-EndIf
+;If $this_lsn=15732863 Or $this_lsn=15733394 Then
+;	$VerboseOn=1
+;Else
+;	$VerboseOn=0
+;EndIf
 
 If $VerboseOn Then
 ;If Dec($client_undo_next_lsn) <> $client_previous_lsn Then
@@ -4252,6 +4252,10 @@ Func _Get_Ea($Entry)
 	_DumpOutput(_HexEncode("0x"&$EaValue) & @crlf)
 	$TextInformation &= ";EaName("&$EaCounter&")="&$EaName
 
+	If $DoExtractResidentUpdates Then
+		_ExtractResidentUpdatesEa($EaValue,$EaName)
+	EndIf
+
 	If $OffsetToNextEa*2 >= $StringLengthInput Then
 		Return
 	EndIf
@@ -4282,6 +4286,9 @@ Func _Get_Ea($Entry)
 		_DumpOutput("EaName("&$EaCounter&"): " & $EaName & @crlf)
 		_DumpOutput(_HexEncode("0x"&$EaValue) & @crlf)
 		$TextInformation &= ";EaName("&$EaCounter&")="&$EaName
+		If $DoExtractResidentUpdates Then
+			_ExtractResidentUpdatesEa($EaValue,$EaName)
+		EndIf
 	Until $LocalAttributeOffset >= $StringLengthInput
 	$TextInformation &= ";Search debug.log for " & $this_lsn
 EndFunc
@@ -10575,4 +10582,16 @@ EndFunc
 Func _WriteCSVHeaderTxfData()
 	$TxfData_Csv_Header = "Offset"&$de&"MftRef"&$de&"lf_LSN"&$de&"MftRef_RM_Root"&$de&"MftRefSeqNo_RM_Root"&$de&"UsnIndex"&$de&"TxfFileId"&$de&"LsnUserData"&$de&"LsnNtfsMetadata"&$de&"LsnDirectoryIndex"&$de&"UnknownFlag"
 	FileWriteLine($LogFileTxfDataCsv, $TxfData_Csv_Header & @CRLF)
+EndFunc
+
+Func _ExtractResidentUpdatesEa($InputData,$EaName)
+	$OutResident = $ParserOutDir&"\ResidentExtract\MFT("&$PredictedRefNumber&")_EaName("&$EaName&")_LSN("&$this_lsn&").bin"
+	$hFileOutResident = FileOpen($OutResident,18)
+	If $VerboseOn Then
+		_DumpOutput("_ExtractResidentUpdates(): " & @CRLF)
+		_DumpOutput("$OutResident: " & $OutResident & @CRLF)
+		_DumpOutput("$hFileOutResident: " & $hFileOutResident & @CRLF)
+	EndIf
+	FileWrite($hFileOutResident,"0x"&$InputData)
+	FileClose($hFileOutResident)
 EndFunc
