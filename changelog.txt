@@ -1,5 +1,10 @@
 LogFileParser Changelog
 
+v2.0.0.14
+Added optional extraction of all nonresident $EA content.
+Fixed bug that caused program crash with some rare fresh formatted volumes.
+Implemented the already existing slack space version functions of OpenAttributeTable.
+
 v2.0.0.13
 Added optional extraction of all resident $EA content.
 

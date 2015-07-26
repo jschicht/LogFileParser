@@ -2,7 +2,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.13
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.14
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -48,6 +48,7 @@ Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $Da
 Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
 Global $TargetImageFile, $Entries, $IsImage=False, $IsPhysicalDrive=False, $ComboPhysicalDrives, $Combo, $MFT_Record_Size
+Global $EaNonResidentArray[1][9]
 
 Global Const $GUI_EVENT_CLOSE = -3
 Global Const $GUI_CHECKED = 1
@@ -78,7 +79,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.13", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.14", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -147,9 +148,9 @@ GUICtrlSetState($InputErrorLevelTranslated, $GUI_DISABLE)
 
 $CheckNt5x = GUICtrlCreateCheckbox("Source is from Nt5x (XP,2003)", 20, 205, 160, 20)
 GUICtrlSetState($CheckNt5x, $GUI_UNCHECKED)
-$CheckExtractResident = GUICtrlCreateCheckbox("Extract resident updates of min size:",190, 205, 190, 20)
+$CheckExtractResident = GUICtrlCreateCheckbox("Extract non + resident updates of min size:",190, 205, 215, 20)
 GUICtrlSetState($CheckExtractResident, $GUI_UNCHECKED)
-$MinSizeResidentExtraction = GUICtrlCreateInput("2",380,205,30,20)
+$MinSizeResidentExtraction = GUICtrlCreateInput("2",410,205,30,20)
 
 $ButtonStart = GUICtrlCreateButton("Start", 450, 195, 80, 30)
 
@@ -195,6 +196,8 @@ While 1
 WEnd
 
 Func _Main()
+Local $last_lsn,$page_flags,$page_count,$page_position,$next_record_offset,$page_unknown,$last_end_lsn
+Local $next_last_lsn,$next_page_flags,$next_page_count,$next_page_position,$next_next_record_offset,$next_page_unknown,$next_last_end_lsn
 Global $DataRunArr[2][18], $NewDataRunArr[1][18]
 Global $GlobalCounter = 1,$AttrArray[$GlobalCounter][2], $DoReconstructDataRuns=False, $DoRebuildBrokenHeader=False
 GUICtrlSetData($ProgressLogFile, 0)
@@ -279,6 +282,7 @@ EndIf
 _PrepareOutput()
 If $DoExtractResidentUpdates Then
 	DirCreate($ParserOutDir&"\ResidentExtract")
+	DirCreate($ParserOutDir&"\NonResidentExtract")
 EndIf
 ;Put output filenames into an array
 $FileOutputTesterArray[0] = $LogFileCsvFile
@@ -332,6 +336,16 @@ _WriteCSVHeaderTxfData()
 $FileNamesArray[0][0] = "Ref"
 $FileNamesArray[0][1] = "FileName"
 $FileNamesArray[0][2] = "LSN"
+
+$EaNonResidentArray[0][0] = "MFTRef"
+$EaNonResidentArray[0][1] = "EntrySize"
+$EaNonResidentArray[0][2] = "EntryName"
+$EaNonResidentArray[0][3] = "Written"
+$EaNonResidentArray[0][4] = "LSN"
+$EaNonResidentArray[0][5] = "target_attribute"
+$EaNonResidentArray[0][6] = "MftClusterIndex"
+$EaNonResidentArray[0][7] = "target_vcn"
+$EaNonResidentArray[0][8] = "OutputFileName"
 
 _DebugOut("Using $LogFile: " & $InputLogFile)
 If GUICtrlRead($CheckUnicode) = 1 Then
@@ -390,6 +404,7 @@ $DataUnprocessed = ""
 $PreviousRcrdLsn = 0
 $PreviousRcrdPosition = 0
 $NextRecordChunk=""
+;ConsoleWrite("$MaxRecords: " & $MaxRecords & @CRLF)
 
 For $i = 0 To $MaxRecords-1
 	$CurrentRecord=$i
@@ -417,6 +432,7 @@ For $i = 0 To $MaxRecords-1
 		$page_unknown = "0x" & _SwapEndian(StringMid($RCRDRecord,55,12))
 		$last_end_lsn = StringMid($RCRDRecord,67,16)
 		$last_end_lsn = Dec(_SwapEndian($last_end_lsn),2)
+;		ConsoleWrite("$i: " & $i & @CRLF)
 
 		;Start - Get values from next record
 		If $i < $MaxRecords-1 Then
@@ -1394,7 +1410,7 @@ EndFunc
 Func _DecodeLSNRecord($InputData,$last_lsn_tmp)
 ;Local $target_lcn, $client_undo_next_lsn, $client_data_length, $client_index, $record_type, $flags, $redo_offset, $undo_offset, $target_attribute, $lcns_to_follow, $redo_operation_hex, $undo_operation_hex,$MftClusterIndex, $target_vcn
 Local $client_undo_next_lsn, $client_data_length, $redo_offset, $undo_offset, $redo_operation_hex, $undo_operation_hex
-Local $DecodeOk=False,$UsnOk=False,$TestAttributeType,$ResolvedAttributeOffset,$FoundInTable=0,$FoundInTableDummy=0,$AttrNameTmp,$last_lsn_tmp_refup,$last_lsn_tmp_refdown
+Local $DecodeOk=False,$UsnOk=False,$TestAttributeType,$ResolvedAttributeOffset,$FoundInTable=0,$FoundInTableDummy=0,$AttrNameTmp,$last_lsn_tmp_refup,$last_lsn_tmp_refdown,$FoundInTableSlack=0
 Global $AttributeString
 
 ;_ClearVar()
@@ -1518,7 +1534,25 @@ If Not $FromRcrdSlack Then
 			EndIf
 		EndIf
 	EndIf
+Else
+;	If $this_lsn > $lsn_openattributestable Then
+		If Not ($target_attribute = 0x0000 Or $target_attribute = 0x0017 Or $target_attribute = 0x0018) Then
+			If Ubound($SlackOpenAttributesArray) > 1 Then
+				$FoundInTableSlack = _ArraySearch($SlackOpenAttributesArray,$target_attribute,0,0,0,2,1,0)
+				If Not $FoundInTableSlack > 0 Then
+					$InOpenAttributeTable=0
+					_DumpOutput("Could not find $target_attribute in $SlackOpenAttributesArray: " & $target_attribute & " for $this_lsn: " & $this_lsn & @CRLF)
+					_ArrayDisplay($SlackOpenAttributesArray,"$SlackOpenAttributesArray")
+				Else
+					$InOpenAttributeTable=0 ;$lsn_openattributestable
+				EndIf
+			Else
+				$InOpenAttributeTable=0
+			EndIf
+		EndIf
+;	EndIf
 EndIf
+
 ;If $this_lsn=102077767547 or $this_lsn=102093572805 Then
 ;	ConsoleWrite("$target_attribute was not found in array: " & $target_attribute & @CRLF)
 ;	_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
@@ -1576,6 +1610,7 @@ If Not $FromRcrdSlack Then
 			EndIf
 	;		$PredictedRefNumber = $OpenAttributesArray[$FoundInTable][7]
 			$RealMftRef = $OpenAttributesArray[$FoundInTable][7]
+			If $redo_operation_hex = "0800" Then $PredictedRefNumber = $RealMftRef
 			If $PredictedRefNumber = -1 Then $PredictedRefNumber = $RealMftRef
 		Else
 			$InOpenAttributeTable = "-" & $InOpenAttributeTable ;Will indicate an offset match in OpenAttributeTable that contains invalid data.
@@ -1596,6 +1631,23 @@ If Not $FromRcrdSlack Then
 			EndIf
 		EndIf
 	EndIf
+Else
+	If $FoundInTableSlack > 0 Then
+	;	ConsoleWrite("ubound($OpenAttributesArray): " & ubound($OpenAttributesArray) & @CRLF)
+		$AttributeStringTmp = _ResolveAttributeType(StringMid($SlackOpenAttributesArray[$FoundInTableSlack][5],3,4))
+		If $AttributeStringTmp <> "UNKNOWN" And $SlackOpenAttributesArray[$FoundInTableSlack][9] <> 0 Then ;Why do these sometimes point to offsets in OpenAttributeTable containing invalid data?
+			$AttributeString = $AttributeStringTmp
+			If $SlackOpenAttributesArray[$FoundInTableSlack][12] <> "" Then
+				$AttributeString &= ":"&$SlackOpenAttributesArray[$FoundInTableSlack][12]
+			EndIf
+	;		$PredictedRefNumber = $OpenAttributesArray[$FoundInTable][7]
+;			$RealMftRef = $SlackOpenAttributesArray[$FoundInTableSlack][7]
+;			If $redo_operation_hex = "0800" Then $PredictedRefNumber = $RealMftRef
+;			If $PredictedRefNumber = -1 Then $PredictedRefNumber = $RealMftRef
+		Else
+;			$InOpenAttributeTable = "-" & $InOpenAttributeTable ;Will indicate an offset match in OpenAttributeTable that contains invalid data.
+		EndIf
+	EndIf
 EndIf
 ;if $redo_operation_hex="1b00" Then
 ;	MsgBox(0,"lsn: " & $this_lsn,"Ref: " & ((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size))
@@ -1614,7 +1666,7 @@ EndIf
 ;Else
 ;	$VerboseOn=0
 ;EndIf
-;If $this_lsn=15732863 Or $this_lsn=15733394 Then
+;If $this_lsn=1110375 Then
 ;	$VerboseOn=1
 ;Else
 ;	$VerboseOn=0
@@ -1790,7 +1842,7 @@ If $redo_length > 0 Then
 				EndIf
 
 			Else
-				If $FoundInTable > 0 Then
+				If $FoundInTable > 0 Or $FoundInTableSlack > 0 Then
 					Select
 						Case $AttributeString = "$ATTRIBUTE_LIST"
 							_DecodeAttrList($redo_chunk,1)
@@ -1807,9 +1859,13 @@ If $redo_length > 0 Then
 							_DecodeIndxEntriesSDH($Indx,1)
 							$TextInformation &= ";See LogFile_SecureSDH.csv"
 						Case $AttributeString = "$EA"
-							_DumpOutput("Verbose: Nonresident $EA caught at lsn " & $this_lsn & @CRLF)
-							_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
-;							_Get_Ea($redo_chunk)
+;							_DumpOutput("Verbose: Nonresident $EA caught at lsn " & $this_lsn & @CRLF)
+;							_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+							$Test = _Get_Ea_NonResident($redo_chunk)
+							If @error Then
+								_DumpOutput("Error: _Get_Ea_NonResident returned: " & $Test & @CRLF)
+							EndIf
+;							_ArrayDisplay($EaNonResidentArray,"$EaNonResidentArray")
 						Case ($PredictedRefNumber = 24 Or $RealMftRef = 24) And ($AttributeString = "$INDEX_ALLOCATION:$O" Or $AttributeString = "$INDEX_ROOT:$O" Or $AttributeString = "UNKNOWN:$O")
 							_Decode_Quota_O($redo_chunk,1)
 							$TextInformation &= ";See LogFile_QuotaO.csv"
@@ -2061,7 +2117,6 @@ If $redo_length > 0 Then
 				Else
 					_Decode_SlackOpenAttributeTableDumpNt6x($redo_chunk,1)
 				EndIf
-;				_Decode_SlackOpenAttributeTableDump($redo_chunk)
 				$TextInformation &= ";See LogFile_SlackOpenAttributeTable.csv"
 			EndIf
 		Case $redo_operation_hex="1E00" ;AttributeNamesDump
@@ -2905,7 +2960,7 @@ Func _ParserCodeOldVersion($MFTEntry)
 				$AttributeKnown = 0
 ;				ConsoleWrite("No more attributes in this record." & @CRLF)
 
-			Case $AttributeType <> $LOGGED_UTILITY_STREAM And $AttributeType <> $EA And $AttributeType <> $EA_INFORMATION And $AttributeType <> $REPARSE_POINT And $AttributeType <> $BITMAP And $AttributeType <> $INDEX_ALLOCATION And $AttributeType <> $INDEX_ROOT And $AttributeType <> $DATA And $AttributeType <> $VOLUME_INFORMATION And $AttributeType <> $VOLUME_NAME And $AttributeType <> $SECURITY_DESCRIPTOR And $AttributeType <> $OBJECT_ID And $AttributeType <> $FILE_NAME And $AttributeType <> $ATTRIBUTE_LIST And $AttributeType <> $STANDARD_INFORMATION And $AttributeType <> $PROPERTY_SET And $AttributeType <> $ATTRIBUTE_END_MARKER
+			Case Else
 				$AttributeKnown = 0
 ;				ConsoleWrite("Unknown attribute found in this record." & @CRLF)
 
@@ -8993,7 +9048,7 @@ Func _GetFileNameFromArray($InputRef,$InputLsn)
 		_DumpOutput("$InputLsn: " & $InputLsn & @CRLF)
 		_DumpOutput("$FoundInTable: " & $FoundInTable & @CRLF)
 		_DumpOutput("@error: " & @error & @CRLF)
-;		_ArrayDisplay($FileNamesArray,"$FileNamesArray")
+		_ArrayDisplay($FileNamesArray,"$FileNamesArray")
 	EndIf
 	If $FoundInTable > 0 Then
 		If $InputLsn > $FileNamesArray[$FoundInTable][2] Then
@@ -10594,4 +10649,167 @@ Func _ExtractResidentUpdatesEa($InputData,$EaName)
 	EndIf
 	FileWrite($hFileOutResident,"0x"&$InputData)
 	FileClose($hFileOutResident)
+EndFunc
+#cs
+Global $EaNonResidentArray[1][9]
+$EaNonResidentArray[0][0] = "MFTRef"
+$EaNonResidentArray[0][1] = "EntrySize"
+$EaNonResidentArray[0][2] = "EntryName"
+$EaNonResidentArray[0][3] = "Written"
+$EaNonResidentArray[0][4] = "LSN"
+$EaNonResidentArray[0][5] = "target_attribute"
+$EaNonResidentArray[0][6] = "MftClusterIndex"
+$EaNonResidentArray[0][7] = "target_vcn"
+$EaNonResidentArray[0][8] = "OutputFileName"
+#ce
+Func _Get_Ea_NonResident($Entry)
+	Local $LocalAttributeOffset=1,$OffsetToNextEa=0,$EaName,$EaFlags,$EaNameLength,$EaValueLength,$EaCounter=0,$EaOutputFilename,$BytesProcessed=0,$DoneParsing=0
+	If $VerboseOn Then
+		_DumpOutput("_Get_Ea_NonResident()" & @crlf)
+		_DumpOutput("$this_lsn: " & $this_lsn & @crlf)
+		_DumpOutput("$RealMftRef: " & $RealMftRef & @crlf)
+		_DumpOutput("$target_attribute: " & $target_attribute & @crlf)
+		_DumpOutput("$MftClusterIndex: " & $MftClusterIndex & @crlf)
+		_DumpOutput("$target_vcn: " & $target_vcn & @crlf)
+		_DumpOutput(_HexEncode("0x"&$Entry) & @crlf)
+	EndIf
+	$StringLengthInput = StringLen($Entry)
+	$BinaryLengthInput = $StringLengthInput/2
+	$FoundInTable = _ArraySearch($EaNonResidentArray,$RealMftRef,0,0,0,2,0,0)
+	If $FoundInTable > 0 Then ;We have an existing entry for a pair that is not completed writing to disk
+		If $target_attribute = $EaNonResidentArray[$FoundInTable][5] And $EaNonResidentArray[$FoundInTable][1] <> $EaNonResidentArray[$FoundInTable][3] Then ;Match
+			If $target_vcn - $EaNonResidentArray[$FoundInTable][7] <> 0 And $target_vcn - $EaNonResidentArray[$FoundInTable][7] <> 1 Then
+				_DumpOutput("Error: target_vcn was not as expected." & @crlf)
+			EndIf
+			$EaCounter += 1
+			$EaName = $EaNonResidentArray[$FoundInTable][2]
+			$TextInformation &= ";EaName("&$EaCounter&")="&$EaName
+			$EaOutputFilename = $EaNonResidentArray[$FoundInTable][8]
+			If $EaNonResidentArray[$FoundInTable][1] - $EaNonResidentArray[$FoundInTable][3] >= 4096 Then ;Write chunk (EntrySize - Written >= 4096)
+				$BytesToWrite = $BinaryLengthInput
+				$hFileOutNonResident = FileOpen($EaOutputFilename,17)
+				If Not $hFileOutNonResident Then _DumpOutput("Error: FileOpen failed with @error: " & @error & @crlf)
+				FileSetPos($hFileOutNonResident, 0,  $FILE_END)
+				FileWrite($hFileOutNonResident,"0x"&$Entry)
+				FileClose($hFileOutNonResident)
+				$EaNonResidentArray[$FoundInTable][3] += $BytesToWrite
+				$EaNonResidentArray[$FoundInTable][6] = $MftClusterIndex
+				$EaNonResidentArray[$FoundInTable][7] = $target_vcn
+				If $BinaryLengthInput < 4096 Then ;Something wrong: not enough data
+					_DumpOutput("Error: Chunk contained less data than expected." & @crlf)
+				EndIf
+				Return
+			ElseIf $EaNonResidentArray[$FoundInTable][1] - $EaNonResidentArray[$FoundInTable][3] < 4096 Then ;write chunk + and update array for next pair
+				$BytesToWrite = $EaNonResidentArray[$FoundInTable][1] - $EaNonResidentArray[$FoundInTable][3]
+				$hFileOutNonResident = FileOpen($EaOutputFilename,17)
+				If Not $hFileOutNonResident Then _DumpOutput("Error: FileOpen failed with @error: " & @error & @crlf)
+				FileSetPos($hFileOutNonResident, 0,  $FILE_END)
+				FileWrite($hFileOutNonResident,"0x"&StringMid($Entry,$LocalAttributeOffset,($BytesToWrite*2)-4))
+				FileClose($hFileOutNonResident)
+				$EaNonResidentArray[$FoundInTable][3] += $BytesToWrite
+				If $EaNonResidentArray[$FoundInTable][1] - $EaNonResidentArray[$FoundInTable][3] = $BinaryLengthInput Then ;Finished writing everything.
+					Return
+				EndIf
+				$Entry = StringMid($Entry,$LocalAttributeOffset+($BytesToWrite*2)-2)
+				$StringLengthInput = StringLen($Entry)
+				$BinaryLengthInput = $StringLengthInput/2
+			EndIf
+		Else ;New $EA for same MftRef. Delete existing one?? Slack, lower lsn etc..
+;			_DumpOutput("New $EA for same MftRef." & @crlf)
+		EndIf
+	Else ;New entry, test for valid header
+		If $target_vcn <> 0 And $MftClusterIndex <> 0  Then
+			_DumpOutput("Error: New entry but $target_vcn=" & $target_vcn & " and $MftClusterIndex=" & $MftClusterIndex & @crlf)
+		EndIf
+	EndIf
+
+	Do
+		$LocalAttributeOffset += ($OffsetToNextEa*2)
+		If $LocalAttributeOffset >= $StringLengthInput Then ExitLoop
+		$EaCounter+=1
+		$OffsetToNextEa = StringMid($Entry,$LocalAttributeOffset,8)
+		$OffsetToNextEa = Dec(_SwapEndian($OffsetToNextEa),2)
+		If $OffsetToNextEa > 65535 Then Return SetError(1,0,"$OffsetToNextEa="&$OffsetToNextEa)
+		$EaFlags = Dec(StringMid($Entry,$LocalAttributeOffset+8,2))
+		$EaNameLength = Dec(StringMid($Entry,$LocalAttributeOffset+10,2))
+		$EaValueLength = StringMid($Entry,$LocalAttributeOffset+12,4)
+		$EaValueLength = Dec(_SwapEndian($EaValueLength))
+		If $EaValueLength >= $OffsetToNextEa Then Return SetError(1,0,"($EaValueLength >= $OffsetToNextEa)="&($EaValueLength >= $OffsetToNextEa)&"|"&$EaValueLength&"-"&$OffsetToNextEa)
+		$EaName = StringMid($Entry,$LocalAttributeOffset+16,$EaNameLength*2)
+		$EaName = _HexToString($EaName)
+		If $EaName = "" Then Return SetError(1,0,"$EaName="&$EaName)
+
+		$EaOutputFilename = $ParserOutDir&"\NonResidentExtract\MFT("&$RealMftRef&")_EaName("&$EaName&")_LSN("&$this_lsn&").bin"
+		If $LocalAttributeOffset+16+($EaNameLength*2) >= $StringLengthInput Then
+			If $LocalAttributeOffset+16+($EaNameLength*2) > $StringLengthInput Then
+				_DumpOutput("Error: Pair header is spread across page boundary" & @crlf)
+				Return SetError(1,0,"Error: Pair header is spread across page boundary")
+			EndIf
+			_DumpOutput("Warning: Pair is spread across page boundary" & @crlf)
+			$NewArraySize = Ubound($EaNonResidentArray)+1
+			ReDim $EaNonResidentArray[$NewArraySize][9]
+			$EaNonResidentArray[$NewArraySize-1][0] = $RealMftRef
+			$EaNonResidentArray[$NewArraySize-1][1] = 8+$EaNameLength+1+$EaValueLength
+			$EaNonResidentArray[$NewArraySize-1][2] = $EaName
+			$EaNonResidentArray[$NewArraySize-1][3] += 8+$EaNameLength
+			$EaNonResidentArray[$NewArraySize-1][4] = $this_lsn
+			$EaNonResidentArray[$NewArraySize-1][5] = $target_attribute
+			$EaNonResidentArray[$NewArraySize-1][6] = $MftClusterIndex
+			$EaNonResidentArray[$NewArraySize-1][7] = $target_vcn
+			$EaNonResidentArray[$NewArraySize-1][8] = $EaOutputFilename
+			Return
+		EndIf
+		$EaValue = StringMid($Entry,$LocalAttributeOffset+16+($EaNameLength*2),$EaValueLength*2)
+		$TextInformation &= ";EaName("&$EaCounter&")="&$EaName
+
+		If $VerboseOn Then
+			_DumpOutput("_Get_Ea_NonResident():" & @CRLF)
+			_DumpOutput("$OffsetToNextEa = " & $OffsetToNextEa & @crlf)
+			_DumpOutput("$EaFlags = " & $EaFlags & @crlf)
+			_DumpOutput("$EaNameLength = " & $EaNameLength & @crlf)
+			_DumpOutput("$EaValueLength = " & $EaValueLength & @crlf)
+			_DumpOutput("$EaName = " & $EaName & @crlf)
+			_DumpOutput("$EaValue:" & @crlf)
+			_DumpOutput(_HexEncode("0x"&$EaValue) & @crlf)
+		EndIf
+
+		$NewArraySize = Ubound($EaNonResidentArray)+1
+		ReDim $EaNonResidentArray[$NewArraySize][9]
+		$EaNonResidentArray[$NewArraySize-1][0] = $RealMftRef
+		$EaNonResidentArray[$NewArraySize-1][1] = 8+$EaNameLength+1+$EaValueLength
+		$EaNonResidentArray[$NewArraySize-1][2] = $EaName
+		If (($LocalAttributeOffset-1+16+($EaNameLength*2)+2)/2)+$EaValueLength <= $BinaryLengthInput Then
+			$EaNonResidentArray[$NewArraySize-1][3] += 8+$EaNameLength+1+$EaValueLength
+		Else
+			$EaNonResidentArray[$NewArraySize-1][3] += ($StringLengthInput-$LocalAttributeOffset-1)/2
+			$DoneParsing=1
+		EndIf
+		$EaNonResidentArray[$NewArraySize-1][4] = $this_lsn
+		$EaNonResidentArray[$NewArraySize-1][5] = $target_attribute
+		$EaNonResidentArray[$NewArraySize-1][6] = $MftClusterIndex
+		$EaNonResidentArray[$NewArraySize-1][7] = $target_vcn
+		$EaNonResidentArray[$NewArraySize-1][8] = $EaOutputFilename
+
+		$hFileOutNonResident = FileOpen($EaOutputFilename,17)
+		If Not $hFileOutNonResident Then
+			_DumpOutput("Error: FileOpen failed with @error: " & @error & @crlf)
+			$EaNonResidentArray[$NewArraySize-1][3] = 0
+		EndIf
+		FileSetPos($hFileOutNonResident, 0,  $FILE_END)
+		FileWrite($hFileOutNonResident,"0x"&StringMid($EaValue,3,($EaValueLength*2)-2))
+		FileClose($hFileOutNonResident)
+
+		If $DoneParsing Then ExitLoop
+
+		If $OffsetToNextEa*2 >= $StringLengthInput Then ;Nothing more
+			Return
+		EndIf
+
+;		If ($OffsetToNextEa*2) + 18 >= $StringLengthInput Then ;Header is spread across page boundary
+;			_DumpOutput("Error: Header is spread across page boundary" & @crlf)
+;			_DumpOutput(_HexEncode("0x"&$Entry) & @crlf)
+;			Return
+;		EndIf
+	Until $LocalAttributeOffset >= $StringLengthInput
+	$TextInformation &= ";Search debug.log for " & $this_lsn
 EndFunc
