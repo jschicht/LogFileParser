@@ -2,7 +2,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.14
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.15
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -79,7 +79,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.14", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.15", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -699,11 +699,11 @@ If $TargetMftCsvFile Then
 	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE Mft (" _
 		& "RecordOffset TEXT,Signature TEXT,IntegrityCheck TEXT,Style TEXT,HEADER_MFTREcordNumber INTEGER,HEADER_SequenceNo INTEGER,Header_HardLinkCount INTEGER,FN_ParentReferenceNo INTEGER,FN_ParentSequenceNo INTEGER,FN_FileName TEXT,FilePath TEXT,HEADER_Flags TEXT," _
 		& "RecordActive TEXT,FileSizeBytes INTEGER,SI_FilePermission TEXT,FN_Flags TEXT,FN_NameType TEXT,ADS TEXT,SI_CTime TEXT,SI_ATime TEXT,SI_MTime TEXT,SI_RTime TEXT,MSecTest TEXT,FN_CTime TEXT,FN_ATime TEXT,FN_MTime TEXT,FN_RTime TEXT,CTimeTest TEXT," _
-		& "FN_AllocSize INTEGER,FN_RealSize INTEGER,SI_USN INTEGER,DATA_Name TEXT,DATA_Flags TEXT,DATA_LengthOfAttribute TEXT,DATA_IndexedFlag TEXT,DATA_VCNs INTEGER,DATA_NonResidentFlag INTEGER,DATA_CompressionUnitSize INTEGER,HEADER_LSN INTEGER,HEADER_RecordRealSize INTEGER," _
+		& "FN_AllocSize INTEGER,FN_RealSize INTEGER,FN_EaSize INTEGER,SI_USN INTEGER,DATA_Name TEXT,DATA_Flags TEXT,DATA_LengthOfAttribute TEXT,DATA_IndexedFlag TEXT,DATA_VCNs INTEGER,DATA_NonResidentFlag INTEGER,DATA_CompressionUnitSize INTEGER,HEADER_LSN INTEGER,HEADER_RecordRealSize INTEGER," _
 		& "HEADER_RecordAllocSize INTEGER,HEADER_BaseRecord INTEGER,HEADER_BaseRecSeqNo INTEGER,HEADER_NextAttribID TEXT,DATA_AllocatedSize INTEGER,DATA_RealSize INTEGER,DATA_InitializedStreamSize INTEGER,SI_HEADER_Flags TEXT,SI_MaxVersions INTEGER,SI_VersionNumber INTEGER," _
-		& "SI_ClassID INTEGER,SI_OwnerID INTEGER,SI_SecurityID INTEGER,FN_CTime_2 TEXT,FN_ATime_2 TEXT,FN_MTime_2 TEXT,FN_RTime_2 TEXT,FN_AllocSize_2 INTEGER,FN_RealSize_2 INTEGER,FN_Flags_2 TEXT,FN_NameLength_2 INTEGER,FN_NameType_2 TEXT,FN_FileName_2 TEXT," _
+		& "SI_ClassID INTEGER,SI_OwnerID INTEGER,SI_SecurityID INTEGER,SI_Quota INTEGER,FN_CTime_2 TEXT,FN_ATime_2 TEXT,FN_MTime_2 TEXT,FN_RTime_2 TEXT,FN_AllocSize_2 INTEGER,FN_RealSize_2 INTEGER,FN_EaSize_2 INTEGER,FN_Flags_2 TEXT,FN_NameLength_2 INTEGER,FN_NameType_2 TEXT,FN_FileName_2 TEXT," _
 		& "GUID_ObjectID TEXT,GUID_BirthVolumeID TEXT,GUID_BirthObjectID TEXT,GUID_BirthDomainID TEXT,VOLUME_NAME_NAME TEXT,VOL_INFO_NTFS_VERSION TEXT,VOL_INFO_FLAGS TEXT,FN_CTime_3 TEXT,FN_ATime_3 TEXT,FN_MTime_3 TEXT,FN_RTime_3 TEXT,FN_AllocSize_3 INTEGER," _
-		& "FN_RealSize_3 INTEGER,FN_Flags_3 TEXT,FN_NameLength_3 INTEGER,FN_NameType_3 TEXT,FN_FileName_3 TEXT,DATA_Name_2 TEXT,DATA_NonResidentFlag_2 INTEGER,DATA_Flags_2 TEXT,DATA_LengthOfAttribute_2 INTEGER,DATA_IndexedFlag_2 INTEGER,DATA_StartVCN_2 INTEGER," _
+		& "FN_RealSize_3 INTEGER,FN_EaSize_3 INTEGER,FN_Flags_3 TEXT,FN_NameLength_3 INTEGER,FN_NameType_3 TEXT,FN_FileName_3 TEXT,DATA_Name_2 TEXT,DATA_NonResidentFlag_2 INTEGER,DATA_Flags_2 TEXT,DATA_LengthOfAttribute_2 INTEGER,DATA_IndexedFlag_2 INTEGER,DATA_StartVCN_2 INTEGER," _
 		& "DATA_LastVCN_2 INTEGER,DATA_VCNs_2 INTEGER,DATA_CompressionUnitSize_2 INTEGER,DATA_AllocatedSize_2 INTEGER,DATA_RealSize_2 INTEGER,DATA_InitializedStreamSize_2 INTEGER,DATA_Name_3 TEXT,DATA_NonResidentFlag_3 INTEGER,DATA_Flags_3 TEXT,DATA_LengthOfAttribute_3 INTEGER," _
 		& "DATA_IndexedFlag_3 INTEGER,DATA_StartVCN_3 INTEGER,DATA_LastVCN_3 INTEGER,DATA_VCNs_3 INTEGER,DATA_CompressionUnitSize_3 INTEGER,DATA_AllocatedSize_3 INTEGER,DATA_RealSize_3 INTEGER,DATA_InitializedStreamSize_3 INTEGER,STANDARD_INFORMATION_ON INTEGER," _
 		& "ATTRIBUTE_LIST_ON INTEGER,FILE_NAME_ON INTEGER,OBJECT_ID_ON INTEGER,SECURITY_DESCRIPTOR_ON INTEGER,VOLUME_NAME_ON INTEGER,VOLUME_INFORMATION_ON INTEGER,DATA_ON INTEGER,INDEX_ROOT_ON INTEGER,INDEX_ALLOCATION_ON INTEGER,BITMAP_ON INTEGER,REPARSE_POINT_ON INTEGER," _

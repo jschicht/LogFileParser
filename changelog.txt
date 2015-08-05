@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.15
+Update schema for imported Mft2Csv output to support changes in Mft2Csv v2.0.0.26.
+
 v2.0.0.14
 Added optional extraction of all nonresident $EA content.
 Fixed bug that caused program crash with some rare fresh formatted volumes.
