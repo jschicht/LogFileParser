@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.16
+Fixed incorrect decode of GUID's, relevant for $OBJECT_ID attribute, $ObjId:$O index and security descriptors.
+
 v2.0.0.15
 Update schema for imported Mft2Csv output to support changes in Mft2Csv v2.0.0.26.
 
