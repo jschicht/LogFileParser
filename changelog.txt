@@ -1,5 +1,14 @@
 LogFileParser Changelog
 
+v2.0.0.17
+Fixed bug where global array for open attribute table was not cleared properly before re-use.
+Added a upper limit at 1800 for how many times the _TestSlackSpace() function can be called recursively, to prevent program crash at hardcoded AutoIt limit.
+Added missing flag for FILE_ATTRIBUTE_EA.
+Added missing flags for IO_REPARSE_TAG_FILE_PLACEHOLDER and IO_REPARSE_TAG_WOF.
+Fixed missing GUID decode in $REPARSE_POINT attribute for use with non-Microsoft tags.
+Added missing field for reparse point tag in $I30 index.
+Changed output name of csv for LogFile_INDX.csv to LogFile_INDX_I30.csv and LogFile_UndoWipe_INDX.csv to LogFile_UndoWipe_INDX_I30.csv.
+
 v2.0.0.16
 Fixed incorrect decode of GUID's, relevant for $OBJECT_ID attribute, $ObjId:$O index and security descriptors.
 
