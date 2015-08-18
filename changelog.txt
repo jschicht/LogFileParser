@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.18
+A couple of bug fixes related to nt5.x sources and it's handling of target_attribute.
+
 v2.0.0.17
 Fixed bug where global array for open attribute table was not cleared properly before re-use.
 Added a upper limit at 1800 for how many times the _TestSlackSpace() function can be called recursively, to prevent program crash at hardcoded AutoIt limit.

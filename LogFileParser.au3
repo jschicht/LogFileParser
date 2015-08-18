@@ -2,7 +2,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.17
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.18
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -79,7 +79,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.17", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.18", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -1609,25 +1609,31 @@ If Not $FromRcrdSlack Then
 	;	ConsoleWrite("ubound($OpenAttributesArray): " & ubound($OpenAttributesArray) & @CRLF)
 		$AttributeStringTmp = _ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTable][5],3,4))
 		If $AttributeStringTmp <> "UNKNOWN" And $OpenAttributesArray[$FoundInTable][9] <> 0 Then ;Why do these sometimes point to offsets in OpenAttributeTable containing invalid data?
-			$AttributeString = $AttributeStringTmp
-			If $OpenAttributesArray[$FoundInTable][12] <> "" Then
-				$AttributeString &= ":"&$OpenAttributesArray[$FoundInTable][12]
+			If $IsNt5x=0 Or $OpenAttributesArray[$FoundInTable][7]>0 Then ;target_attribute is handled differently on nt5.x than nt6.x
+				$AttributeString = $AttributeStringTmp
+				If $OpenAttributesArray[$FoundInTable][12] <> "" Then
+					$AttributeString &= ":"&$OpenAttributesArray[$FoundInTable][12]
+				EndIf
+		;		$PredictedRefNumber = $OpenAttributesArray[$FoundInTable][7]
+				$RealMftRef = $OpenAttributesArray[$FoundInTable][7]
+				If $redo_operation_hex = "0800" Then $PredictedRefNumber = $RealMftRef
+				If $PredictedRefNumber = -1 Then $PredictedRefNumber = $RealMftRef
 			EndIf
-	;		$PredictedRefNumber = $OpenAttributesArray[$FoundInTable][7]
-			$RealMftRef = $OpenAttributesArray[$FoundInTable][7]
-			If $redo_operation_hex = "0800" Then $PredictedRefNumber = $RealMftRef
-			If $PredictedRefNumber = -1 Then $PredictedRefNumber = $RealMftRef
 		Else
 			$InOpenAttributeTable = "-" & $InOpenAttributeTable ;Will indicate an offset match in OpenAttributeTable that contains invalid data.
 		EndIf
 	EndIf
 	If $PredictedRefNumber = 0 Then
-		If $target_attribute = 0x0018 And Ubound($OpenAttributesArray) > 1 Then
+;		If $target_attribute = 0x0018 And Ubound($OpenAttributesArray) > 1 Then
+		If Ubound($OpenAttributesArray) > 1 Then
 			$FoundInTable = _ArraySearch($OpenAttributesArray,$target_attribute,0,0,0,2,1,0)
 	;		ConsoleWrite("$FoundInTable: " & $FoundInTable & @CRLF)
 			If $FoundInTable > 0 Then
-				$AttributeString = _ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTable][5],3,4))
-				If $OpenAttributesArray[$FoundInTable][12] <> "" Then
+				$AttributeStringTmp = _ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTable][5],3,4))
+				If $AttributeStringTmp <> "UNKNOWN" And $AttributeStringTmp <> "$DATA" Then
+					$AttributeString = $AttributeStringTmp
+				EndIf
+				If $OpenAttributesArray[$FoundInTable][12] <> "" And $AttributeString <> "" Then
 					$AttributeString &= ":"&$OpenAttributesArray[$FoundInTable][12]
 				EndIf
 			Else
@@ -1671,7 +1677,7 @@ EndIf
 ;Else
 ;	$VerboseOn=0
 ;EndIf
-;If $this_lsn=278686750104 Then
+;If $this_lsn=278686421041 Or $this_lsn=278686421187 Then
 ;	$VerboseOn=1
 ;Else
 ;	$VerboseOn=0
@@ -2448,25 +2454,32 @@ If Not $FromRcrdSlack Then
 	;	ConsoleWrite("ubound($OpenAttributesArray): " & ubound($OpenAttributesArray) & @CRLF)
 		$AttributeStringTmp = _ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTable][5],3,4))
 		If $AttributeStringTmp <> "UNKNOWN" And $OpenAttributesArray[$FoundInTable][9] <> 0 Then ;Why do these sometimes point to offsets in OpenAttributeTable containing invalid data?
-			$AttributeString = $AttributeStringTmp
-			If $OpenAttributesArray[$FoundInTable][12] <> "" Then
-				$AttributeString &= ":"&$OpenAttributesArray[$FoundInTable][12]
+			If $IsNt5x=0 Or $OpenAttributesArray[$FoundInTable][7]>0 Then ;target_attribute is handled differently on nt5.x than nt6.x
+				$AttributeString = $AttributeStringTmp
+				If $OpenAttributesArray[$FoundInTable][12] <> "" Then
+					$AttributeString &= ":"&$OpenAttributesArray[$FoundInTable][12]
+				EndIf
+
+	;			$PredictedRefNumber = $OpenAttributesArray[$FoundInTable][7]
+				$RealMftRef = $OpenAttributesArray[$FoundInTable][7]
+				$PredictedRefNumber = $RealMftRef
+				If $PredictedRefNumber = -1 Then $PredictedRefNumber = $RealMftRef
 			EndIf
-;			$PredictedRefNumber = $OpenAttributesArray[$FoundInTable][7]
-			$RealMftRef = $OpenAttributesArray[$FoundInTable][7]
-			$PredictedRefNumber = $RealMftRef
-			If $PredictedRefNumber = -1 Then $PredictedRefNumber = $RealMftRef
 		Else
 			$InOpenAttributeTable = "-" & $InOpenAttributeTable ;Will indicate an offset match in OpenAttributeTable that contains invalid data.
 		EndIf
 	EndIf
 	If $PredictedRefNumber = 0 Then
-		If $target_attribute = 0x0018 And Ubound($OpenAttributesArray) > 1 Then
+;		If $target_attribute = 0x0018 And Ubound($OpenAttributesArray) > 1 Then
+		If Ubound($OpenAttributesArray) > 1 Then
 			$FoundInTable = _ArraySearch($OpenAttributesArray,$target_attribute,0,0,0,2,1,0)
 	;		ConsoleWrite("$FoundInTable: " & $FoundInTable & @CRLF)
 			If $FoundInTable > 0 Then
-				$AttributeString = _ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTable][5],3,4))
-				If $OpenAttributesArray[$FoundInTable][12] <> "" Then
+				$AttributeStringTmp = _ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTable][5],3,4))
+				If $AttributeStringTmp <> "$DATA" And $AttributeStringTmp <> "UNKNOWN" Then
+					$AttributeString = $AttributeStringTmp
+				EndIf
+				If $OpenAttributesArray[$FoundInTable][12] <> "" And $AttributeString <> "" Then
 					$AttributeString &= ":"&$OpenAttributesArray[$FoundInTable][12]
 				EndIf
 			Else
@@ -2487,11 +2500,14 @@ If $FN_Name="" Then _SetNameOnSystemFiles()
 
 _WriteLogFileCsv()
 If $DoSplitCsv Then _WriteCSVExtra()
-_ClearVar()
+
 If $VerboseOn Then
-;	_DumpOutput("$FN_Name: " & $FN_Name & @CRLF)
-	MsgBox(0,"VerboseOn","Check output")
+	_DumpOutput("End of function, check the output." & @CRLF)
+	MsgBox(0,"VerboseOn","Check output of lsn: " & $this_lsn)
+	_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
 EndIf
+
+_ClearVar()
 EndFunc
 
 Func _DecodeRSTR($RSTRRecord)
