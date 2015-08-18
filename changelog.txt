@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.19
+Improved filename identification with dataruns resolver feature.
+
 v2.0.0.18
 A couple of bug fixes related to nt5.x sources and it's handling of target_attribute.
 

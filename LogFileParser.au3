@@ -2,7 +2,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.18
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.19
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -79,7 +79,7 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.18", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.19", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -5956,6 +5956,9 @@ Func _WriteLogFileCsv()
 EndFunc
 
 Func _WriteLogFileDataRunsCsv()
+	If $PredictedRefNumber > 0 And $FN_Name="" Then
+		$FN_Name = _GetFileNameFromArray($PredictedRefNumber,$this_lsn)
+	EndIf
 	FileWriteLine($LogFileDataRunsCsv, $RecordOffset & $de & $PredictedRefNumber & $de & $HDR_BaseRecord & $de & $FN_Name & $de & $this_lsn & $de & $redo_operation & $de & $undo_operation & $de & $record_offset_in_mft & $de & $attribute_offset & $de & $SI_USN & $de & $DT_Name & $de & $DT_Flags & $de & $DT_NonResidentFlag & $de & $DT_ComprUnitSize & $de & $DT_RealSize & $de & $DT_InitStreamSize & $de & $DT_OffsetToDataRuns & $de & $DT_DataRuns & @crlf)
 EndFunc
 
