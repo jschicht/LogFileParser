@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.20
+Fixed bug that caused sqlite3.exe to sometimes not being able to create table's or import csv's.
+
 v2.0.0.19
 Improved filename identification with dataruns resolver feature.
 

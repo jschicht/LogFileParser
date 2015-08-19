@@ -2,7 +2,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.19
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.20
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -49,6 +49,7 @@ Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
 Global $TargetImageFile, $Entries, $IsImage=False, $IsPhysicalDrive=False, $ComboPhysicalDrives, $Combo, $MFT_Record_Size
 Global $EaNonResidentArray[1][9]
+Global $SQLite3Exe = @ScriptDir & "\sqlite3.exe"
 
 Global Const $GUI_EVENT_CLOSE = -3
 Global Const $GUI_CHECKED = 1
@@ -79,7 +80,12 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.19", 540, 520, -1, -1)
+If Not FileExists($SQLite3Exe) Then
+	MsgBox(0,"Error","sqlite3.exe not found in current directory")
+	Exit
+EndIf
+
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.20", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -203,6 +209,7 @@ Global $GlobalCounter = 1,$AttrArray[$GlobalCounter][2], $DoReconstructDataRuns=
 GUICtrlSetData($ProgressLogFile, 0)
 GUICtrlSetData($ProgressUsnJrnl, 0)
 GUICtrlSetData($ProgressReconstruct, 0)
+
 
 If GUICtrlRead($CheckCsvSplit) = 1 Then
 	$DoSplitCsv = True
@@ -586,10 +593,10 @@ EndIf
 
 ;set encoding
 If GUICtrlRead($CheckUnicode) = 1 Then
-	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "PRAGMA encoding = 'UTF-16le';CREATE TABLE bogus(one INTEGER,two TEXT);", $sOutputFile)
-	If $SQLiteExe <> 0 Then
+	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "PRAGMA encoding = 'UTF-16le';CREATE TABLE bogus(one INTEGER,two TEXT);", $sOutputFile, $SQLite3Exe)
+	If $SQLiteExecution <> 0 Then
 		MsgBox(0,"Error","Could not PRAGMA encoding = UTF-16le: " & $NtfsDbFile & " : " & @error)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+		_DumpOutput("Error Could not PRAGMA encoding = UTF-16le, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 		Exit
 	EndIf
 	_SQLite_Startup($Sqlite3DllString)
@@ -616,36 +623,36 @@ _DisplayInfo("Importing csv's to db and updating tables." & @CRLF)
 _DumpOutput("Importing csv's to db and updating tables." & @CRLF)
 $begin = TimerInit()
 If $DoReconstructDataRuns Then
-	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE DataRuns (lf_Offset TEXT,lf_MFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_FileName TEXT,lf_LSN INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_AttributeOffset INTEGER,lf_SI_USN INTEGER,lf_DataName TEXT,lf_Flags TEXT,lf_NonResident TEXT,lf_CompressionUnitSize TEXT,lf_FileSize INTEGER,lf_InitializedStreamSize INTEGER,lf_OffsetToDataRuns INTEGER,lf_DataRuns TEXT);", $sOutputFile)
-	If $SQLiteExe <> 0 Then
+	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE DataRuns (lf_Offset TEXT,lf_MFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_FileName TEXT,lf_LSN INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_AttributeOffset INTEGER,lf_SI_USN INTEGER,lf_DataName TEXT,lf_Flags TEXT,lf_NonResident TEXT,lf_CompressionUnitSize TEXT,lf_FileSize INTEGER,lf_InitializedStreamSize INTEGER,lf_OffsetToDataRuns INTEGER,lf_DataRuns TEXT);", $sOutputFile, $SQLite3Exe)
+	If $SQLiteExecution <> 0 Then
 		MsgBox(0,"Error","Could not create table DataRuns in database: " & $NtfsDbFile & " : " & @error)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+		_DumpOutput("Error Could not create table DataRuns, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 		Exit
 	EndIf
 EndIf
 
-;$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE LogFile (lf_Offset TEXT,lf_MFTReference INTEGER,lf_RealMFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_LSN INTEGER,lf_LSNPrevious INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_FileName TEXT,lf_CurrentAttribute TEXT,lf_TextInformation TEXT,lf_UsnJrlFileName TEXT,lf_UsnJrlMFTReference INTEGER,lf_UsnJrlMFTParentReference INTEGER,lf_UsnJrlTimestamp TEXT,lf_UsnJrlReason TEXT,lf_UsnJrnlUsn INTEGER,lf_SI_CTime TEXT,lf_SI_ATime TEXT,lf_SI_MTime TEXT,lf_SI_RTime TEXT,lf_SI_FilePermission TEXT,lf_SI_MaxVersions INTEGER,lf_SI_VersionNumber INTEGER,lf_SI_ClassID INTEGER,lf_SI_SecurityID INTEGER,lf_SI_QuotaCharged INTEGER,lf_SI_USN INTEGER,lf_SI_PartialValue TEXT,lf_FN_CTime TEXT,lf_FN_ATime TEXT,lf_FN_MTime TEXT,lf_FN_RTime TEXT,lf_FN_AllocSize INTEGER,lf_FN_RealSize INTEGER,lf_FN_Flags TEXT,lf_FN_Namespace TEXT,lf_DT_StartVCN INTEGER,lf_DT_LastVCN INTEGER,lf_DT_ComprUnitSize INTEGER,lf_DT_AllocSize INTEGER,lf_DT_RealSize INTEGER,lf_DT_InitStreamSize INTEGER,lf_DT_DataRuns TEXT,lf_DT_Name TEXT,lf_FileNameModified INTEGER,lf_RedoChunkSize INTEGER,lf_UndoChunkSize INTEGER);", $sOutputFile)
-$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE LogFile (lf_Offset TEXT,lf_MFTReference INTEGER,lf_RealMFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_LSN INTEGER,lf_LSNPrevious INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_FileName TEXT,lf_CurrentAttribute TEXT,lf_TextInformation TEXT,lf_UsnJrlFileName TEXT,lf_UsnJrlMFTReference INTEGER,lf_UsnJrlMFTParentReference INTEGER,lf_UsnJrlTimestamp TEXT,lf_UsnJrlReason TEXT,lf_UsnJrnlUsn INTEGER,lf_SI_CTime TEXT,lf_SI_ATime TEXT,lf_SI_MTime TEXT,lf_SI_RTime TEXT,lf_SI_FilePermission TEXT,lf_SI_MaxVersions INTEGER,lf_SI_VersionNumber INTEGER,lf_SI_ClassID INTEGER,lf_SI_SecurityID INTEGER,lf_SI_QuotaCharged INTEGER,lf_SI_USN INTEGER,lf_SI_PartialValue TEXT,lf_FN_CTime TEXT,lf_FN_ATime TEXT,lf_FN_MTime TEXT,lf_FN_RTime TEXT,lf_FN_AllocSize INTEGER,lf_FN_RealSize INTEGER,lf_FN_Flags TEXT,lf_FN_Namespace TEXT,lf_DT_StartVCN INTEGER,lf_DT_LastVCN INTEGER,lf_DT_ComprUnitSize INTEGER,lf_DT_AllocSize INTEGER,lf_DT_RealSize INTEGER,lf_DT_InitStreamSize INTEGER,lf_DT_DataRuns TEXT,lf_DT_Name TEXT,lf_FileNameModified INTEGER,lf_RedoChunkSize INTEGER,lf_UndoChunkSize INTEGER,lf_record_type INTEGER,lf_transaction_id INTEGER,lf_flags INTEGER,lf_target_attribute INTEGER,lf_lcns_to_follow INTEGER,lf_attribute_offset INTEGER,lf_MftClusterIndex INTEGER,lf_target_vcn INTEGER,lf_target_lcn INTEGER,InOpenAttributeTable INTEGER,FromRcrdSlack INTEGER,IncompleteTransaction INTEGER);", $sOutputFile)
-If $SQLiteExe <> 0 Then
+;$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE LogFile (lf_Offset TEXT,lf_MFTReference INTEGER,lf_RealMFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_LSN INTEGER,lf_LSNPrevious INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_FileName TEXT,lf_CurrentAttribute TEXT,lf_TextInformation TEXT,lf_UsnJrlFileName TEXT,lf_UsnJrlMFTReference INTEGER,lf_UsnJrlMFTParentReference INTEGER,lf_UsnJrlTimestamp TEXT,lf_UsnJrlReason TEXT,lf_UsnJrnlUsn INTEGER,lf_SI_CTime TEXT,lf_SI_ATime TEXT,lf_SI_MTime TEXT,lf_SI_RTime TEXT,lf_SI_FilePermission TEXT,lf_SI_MaxVersions INTEGER,lf_SI_VersionNumber INTEGER,lf_SI_ClassID INTEGER,lf_SI_SecurityID INTEGER,lf_SI_QuotaCharged INTEGER,lf_SI_USN INTEGER,lf_SI_PartialValue TEXT,lf_FN_CTime TEXT,lf_FN_ATime TEXT,lf_FN_MTime TEXT,lf_FN_RTime TEXT,lf_FN_AllocSize INTEGER,lf_FN_RealSize INTEGER,lf_FN_Flags TEXT,lf_FN_Namespace TEXT,lf_DT_StartVCN INTEGER,lf_DT_LastVCN INTEGER,lf_DT_ComprUnitSize INTEGER,lf_DT_AllocSize INTEGER,lf_DT_RealSize INTEGER,lf_DT_InitStreamSize INTEGER,lf_DT_DataRuns TEXT,lf_DT_Name TEXT,lf_FileNameModified INTEGER,lf_RedoChunkSize INTEGER,lf_UndoChunkSize INTEGER);", $sOutputFile)
+$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE LogFile (lf_Offset TEXT,lf_MFTReference INTEGER,lf_RealMFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_LSN INTEGER,lf_LSNPrevious INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_FileName TEXT,lf_CurrentAttribute TEXT,lf_TextInformation TEXT,lf_UsnJrlFileName TEXT,lf_UsnJrlMFTReference INTEGER,lf_UsnJrlMFTParentReference INTEGER,lf_UsnJrlTimestamp TEXT,lf_UsnJrlReason TEXT,lf_UsnJrnlUsn INTEGER,lf_SI_CTime TEXT,lf_SI_ATime TEXT,lf_SI_MTime TEXT,lf_SI_RTime TEXT,lf_SI_FilePermission TEXT,lf_SI_MaxVersions INTEGER,lf_SI_VersionNumber INTEGER,lf_SI_ClassID INTEGER,lf_SI_SecurityID INTEGER,lf_SI_QuotaCharged INTEGER,lf_SI_USN INTEGER,lf_SI_PartialValue TEXT,lf_FN_CTime TEXT,lf_FN_ATime TEXT,lf_FN_MTime TEXT,lf_FN_RTime TEXT,lf_FN_AllocSize INTEGER,lf_FN_RealSize INTEGER,lf_FN_Flags TEXT,lf_FN_Namespace TEXT,lf_DT_StartVCN INTEGER,lf_DT_LastVCN INTEGER,lf_DT_ComprUnitSize INTEGER,lf_DT_AllocSize INTEGER,lf_DT_RealSize INTEGER,lf_DT_InitStreamSize INTEGER,lf_DT_DataRuns TEXT,lf_DT_Name TEXT,lf_FileNameModified INTEGER,lf_RedoChunkSize INTEGER,lf_UndoChunkSize INTEGER,lf_record_type INTEGER,lf_transaction_id INTEGER,lf_flags INTEGER,lf_target_attribute INTEGER,lf_lcns_to_follow INTEGER,lf_attribute_offset INTEGER,lf_MftClusterIndex INTEGER,lf_target_vcn INTEGER,lf_target_lcn INTEGER,InOpenAttributeTable INTEGER,FromRcrdSlack INTEGER,IncompleteTransaction INTEGER);", $sOutputFile, $SQLite3Exe)
+If $SQLiteExecution <> 0 Then
 	MsgBox(0,"Error","Could not create table LogFile in database: " & $NtfsDbFile & " : " & @error)
-	ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+	_DumpOutput("Error Could not create table LogFile, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 	Exit
 EndIf
 
-$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE IndexEntries (lf_Offset TEXT,lf_LSN INTEGER,lf_EntryNumber INTEGER,lf_MFTReference INTEGER,lf_MFTReferenceSeqNo INTEGER,lf_IndexFlags TEXT,lf_MFTParentReference INTEGER,lf_MFTParentReferenceSeqNo INTEGER,lf_CTime TEXT,lf_ATime TEXT,lf_MTime TEXT,lf_RTime TEXT,lf_AllocSize INTEGER,lf_RealSize INTEGER,lf_FileFlags TEXT,lf_ReparseTag TEXT,lf_FileName TEXT,lf_FileNameModified TEXT,lf_NameSpace TEXT,lf_SubNodeVCN TEXT);", $sOutputFile)
-If $SQLiteExe <> 0 Then
+$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE IndexEntries (lf_Offset TEXT,lf_LSN INTEGER,lf_EntryNumber INTEGER,lf_MFTReference INTEGER,lf_MFTReferenceSeqNo INTEGER,lf_IndexFlags TEXT,lf_MFTParentReference INTEGER,lf_MFTParentReferenceSeqNo INTEGER,lf_CTime TEXT,lf_ATime TEXT,lf_MTime TEXT,lf_RTime TEXT,lf_AllocSize INTEGER,lf_RealSize INTEGER,lf_FileFlags TEXT,lf_ReparseTag TEXT,lf_FileName TEXT,lf_FileNameModified TEXT,lf_NameSpace TEXT,lf_SubNodeVCN TEXT);", $sOutputFile, $SQLite3Exe)
+If $SQLiteExecution <> 0 Then
 	MsgBox(0,"Error","Could not create table IndexEntries in database: " & $NtfsDbFile & " : " & @error)
-	ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+	_DumpOutput("Error Could not create table IndexEntries, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 	Exit
 EndIf
 
 ;Import csv for dataruns
 If FileExists($LogFileDataRunsCsvfile) Then
 	if $DoReconstructDataRuns Then
-		$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileDataRunsCsvfile) & "' DataRuns" & @CRLF, $sOutputFile)
-		If $SQLiteExe <> 0 Then
+		$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileDataRunsCsvfile) & "' DataRuns" & @CRLF, $sOutputFile)
+		If $SQLiteExecution <> 0 Then
 			MsgBox(0,"Error","Could not import " & $LogFileDataRunsCsvfile & " into database: " & @error)
-			ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+			_DumpOutput("Error importing csv to DataRuns, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 			Exit
 		EndIf
 	EndIf
@@ -653,20 +660,20 @@ EndIf
 
 ;Import main csv of logfile output
 If FileExists($LogFileCsvFile) Then
-	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileCsvFile) & "' LogFile" & @CRLF, $sOutputFile)
-	If $SQLiteExe <> 0 Then
+	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileCsvFile) & "' LogFile" & @CRLF, $sOutputFile)
+	If $SQLiteExecution <> 0 Then
 		MsgBox(0,"Error","Could not import " & $LogFileCsvFile & " into database: " & @error)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+		_DumpOutput("Error importing csv to LogFile, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 		Exit
 	EndIf
 EndIf
 
 ;Import csv of INDX decodes
 If FileExists($LogFileIndxCsvfile) Then
-	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileIndxCsvfile) & "' IndexEntries" & @CRLF, $sOutputFile)
-	If $SQLiteExe <> 0 Then
+	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileIndxCsvfile) & "' IndexEntries" & @CRLF, $sOutputFile)
+	If $SQLiteExecution <> 0 Then
 		MsgBox(0,"Error","Could not import " & $LogFileIndxCsvfile & " into database: " & @error)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+		_DumpOutput("Error importing csv to IndexEntries, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 	EndIf
 EndIf
 
@@ -696,7 +703,7 @@ _SQLite_Close()
 _SQLite_Shutdown()
 
 If $TargetMftCsvFile Then
-	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE Mft (" _
+	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE Mft (" _
 		& "RecordOffset TEXT,Signature TEXT,IntegrityCheck TEXT,Style TEXT,HEADER_MFTREcordNumber INTEGER,HEADER_SequenceNo INTEGER,Header_HardLinkCount INTEGER,FN_ParentReferenceNo INTEGER,FN_ParentSequenceNo INTEGER,FN_FileName TEXT,FilePath TEXT,HEADER_Flags TEXT," _
 		& "RecordActive TEXT,FileSizeBytes INTEGER,SI_FilePermission TEXT,FN_Flags TEXT,FN_NameType TEXT,ADS TEXT,SI_CTime TEXT,SI_ATime TEXT,SI_MTime TEXT,SI_RTime TEXT,MSecTest TEXT,FN_CTime TEXT,FN_ATime TEXT,FN_MTime TEXT,FN_RTime TEXT,CTimeTest TEXT," _
 		& "FN_AllocSize INTEGER,FN_RealSize INTEGER,FN_EaSize INTEGER,SI_USN INTEGER,DATA_Name TEXT,DATA_Flags TEXT,DATA_LengthOfAttribute TEXT,DATA_IndexedFlag TEXT,DATA_VCNs INTEGER,DATA_NonResidentFlag INTEGER,DATA_CompressionUnitSize INTEGER,HEADER_LSN INTEGER,HEADER_RecordRealSize INTEGER," _
@@ -708,15 +715,15 @@ If $TargetMftCsvFile Then
 		& "DATA_IndexedFlag_3 INTEGER,DATA_StartVCN_3 INTEGER,DATA_LastVCN_3 INTEGER,DATA_VCNs_3 INTEGER,DATA_CompressionUnitSize_3 INTEGER,DATA_AllocatedSize_3 INTEGER,DATA_RealSize_3 INTEGER,DATA_InitializedStreamSize_3 INTEGER,STANDARD_INFORMATION_ON INTEGER," _
 		& "ATTRIBUTE_LIST_ON INTEGER,FILE_NAME_ON INTEGER,OBJECT_ID_ON INTEGER,SECURITY_DESCRIPTOR_ON INTEGER,VOLUME_NAME_ON INTEGER,VOLUME_INFORMATION_ON INTEGER,DATA_ON INTEGER,INDEX_ROOT_ON INTEGER,INDEX_ALLOCATION_ON INTEGER,BITMAP_ON INTEGER,REPARSE_POINT_ON INTEGER," _
 		& "EA_INFORMATION_ON INTEGER,EA_ON INTEGER,PROPERTY_SET_ON INTEGER,LOGGED_UTILITY_STREAM_ON INTEGER" _
-		& ");", $sOutputFile)
-	If $SQLiteExe <> 0 Then
+		& ");", $sOutputFile, $SQLite3Exe)
+	If $SQLiteExecution <> 0 Then
 		MsgBox(0,"Error","Could not create table Mft in database: " & @error)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+		_DumpOutput("Error Could not create table Mft, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 	EndIf
-	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($TargetMftCsvFile) & "' Mft" & @CRLF, $sOutputFile)
-	If $SQLiteExe <> 0 Then
+	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($TargetMftCsvFile) & "' Mft" & @CRLF, $sOutputFile)
+	If $SQLiteExecution <> 0 Then
 		MsgBox(0,"Error","Could not import " & $TargetMftCsvFile & " into database: " & @error)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+		_DumpOutput("Error importing csv to Mft, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 	EndIf
 ;	_SQLite_Startup($Sqlite3DllString)
 ;	if $TargetMftCsvFile Then
@@ -730,15 +737,15 @@ If $TargetMftCsvFile Then
 ;	_SQLite_Shutdown()
 	_SQLite_SQLiteExe2($NtfsDbFile, "DELETE from Mft where ROWID = 1;", $sOutputFile)
 	_SQLite_SQLiteExe2($NtfsDbFile, "UPDATE Mft set header_lsn = -1 where header_lsn = '';", $sOutputFile)
-	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE MftTmp as select HEADER_MFTRecordNumber,HEADER_LSN,FN_FileName,FilePath from Mft;", $sOutputFile)
-	If $SQLiteExe <> 0 Then
+	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE MftTmp as select HEADER_MFTRecordNumber,HEADER_LSN,FN_FileName,FilePath from Mft;", $sOutputFile, $SQLite3Exe)
+	If $SQLiteExecution <> 0 Then
 		MsgBox(0,"Error","Could not create table MftTmp in database: " & @error)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+		_DumpOutput("Error Could not create table MftTmp, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 	EndIf
-	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE LogFileTmp as select * from LogFile left join MftTmp on LogFile.lf_LSN=MftTmp.HEADER_LSN;", $sOutputFile)
-	If $SQLiteExe <> 0 Then
-		MsgBox(0,"Error","Could not create table MftTmp in database: " & @error)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE LogFileTmp as select * from LogFile left join MftTmp on LogFile.lf_LSN=MftTmp.HEADER_LSN;", $sOutputFile, $SQLite3Exe)
+	If $SQLiteExecution <> 0 Then
+		MsgBox(0,"Error","Could not create table LogFileTmp in database: " & @error)
+		_DumpOutput("Error Could not create table LogFileTmp, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 	EndIf
 	_SQLite_SQLiteExe2($NtfsDbFile, "DROP TABLE LogFile;", $sOutputFile)
 	_SQLite_SQLiteExe2($NtfsDbFile, "ALTER TABLE LogFileTmp rename to LogFile;", $sOutputFile)
@@ -751,7 +758,7 @@ If FileExists($UsnJrnlFile) Then
 	$Progress = GUICtrlCreateLabel("Decoding $UsnJrnl info and writing to csv", 10, 280,540,20)
 	GUICtrlSetFont($Progress, 12)
 	$begin = TimerInit()
-	Dim $tBuffer2, $hUsnJrnl, $RawPage="", $TestHeader, $UsnJrnlPage="", $Remainder="", $SQLiteExe, $Record_Size = 4096, $nBytes=""
+	Dim $tBuffer2, $hUsnJrnl, $RawPage="", $TestHeader, $UsnJrnlPage="", $Remainder="", $SQLiteExecution, $Record_Size = 4096, $nBytes=""
 	$tBuffer2 = DllStructCreate("byte[" & $Record_Size & "]")
 	$hUsnJrnl = _WinAPI_CreateFile("\\.\" & $UsnJrnlFile,2,2,7)
 	If $hUsnJrnl = 0 Then
@@ -783,16 +790,16 @@ If FileExists($UsnJrnlFile) Then
 	GUICtrlSetData($ProgressUsnJrnl, 100 * ($CurrentRecord+1) / $MaxRecords)
 	_WinAPI_CloseHandle($hUsnJrnl)
 	_WinAPI_CloseHandle($UsnJrnlCsv)
-	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE UsnJrnl (UsnJrnlMFTReference INTEGER,UsnJrnlMFTParentReference INTEGER,UsnJrnlUSN INTEGER,UsnJrnlTimestamp TEXT,UsnJrnlReason TEXT,UsnJrnlSourceInfo TEXT,UsnJrnlFileAttributes TEXT,UsnJrnlFileName TEXT,UsnJrnlFileNameModified INTEGER);", $sOutputFile)
-	If $SQLiteExe <> 0 Then
+	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE UsnJrnl (UsnJrnlMFTReference INTEGER,UsnJrnlMFTParentReference INTEGER,UsnJrnlUSN INTEGER,UsnJrnlTimestamp TEXT,UsnJrnlReason TEXT,UsnJrnlSourceInfo TEXT,UsnJrnlFileAttributes TEXT,UsnJrnlFileName TEXT,UsnJrnlFileNameModified INTEGER);", $sOutputFile, $SQLite3Exe)
+	If $SQLiteExecution <> 0 Then
 		MsgBox(0,"Error","Could not create table UsnJrnl in database: " & @error)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+		_DumpOutput("Error Could not create table UsnJrnl, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 		Exit
 	EndIf
-	$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($UsnJrnlCsvFile) & "' UsnJrnl" & @CRLF, $sOutputFile)
-	If $SQLiteExe <> 0 Then
+	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($UsnJrnlCsvFile) & "' UsnJrnl" & @CRLF, $sOutputFile)
+	If $SQLiteExecution <> 0 Then
 		MsgBox(0,"Error","Could not import " & $UsnJrnlCsvFile & " into database: " & @error)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+		_DumpOutput("Error importing csv to UsnJrnl, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 		Exit
 	EndIf
 	_SQLite_Startup($Sqlite3DllString)
@@ -864,11 +871,11 @@ If FileExists($UsnJrnlFile) Then
 EndIf
 
 If FileExists($UsnJrnlFile) Or $TargetMftCsvFile Then
-	$SQLiteExe2 = _SQLite_SQLiteExe2($NtfsDbFile, ".headers on" & @CRLF & ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".output LogFileJoined.csv" & @CRLF & "select * from LogFile;" & @CRLF, $sOutputFile)
-	If $SQLiteExe <> 0 Then
+	$SQLiteExecution2 = _SQLite_SQLiteExe2($NtfsDbFile, ".headers on" & @CRLF & ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".output LogFileJoined.csv" & @CRLF & "select * from LogFile;" & @CRLF, $sOutputFile)
+	If $SQLiteExecution <> 0 Then
 		MsgBox(0,"Error","Could not export LogFile table to csv: " & @error)
-		ConsoleWrite("@error: " & @error & @CRLF)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+		_DumpOutput("@error: " & @error & @CRLF)
+		_DumpOutput("Error exporting from LogFile table to LogFileJoined.csv, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 		Exit
 	EndIf
 	$moved = FileMove(@ScriptDir&"\LogFileJoined.csv",$ParserOutDir&"\LogFileJoined.csv",9)
@@ -876,12 +883,12 @@ EndIf
 
 ;remove bogus table
 If GUICtrlRead($CheckUnicode) = 1 Then
-	$SQLiteExe2 = _SQLite_SQLiteExe2($NtfsDbFile, "DROP TABLE bogus;", $sOutputFile)
-	If $SQLiteExe2 <> 0 Then
+	$SQLiteExecution2 = _SQLite_SQLiteExe2($NtfsDbFile, "DROP TABLE bogus;", $sOutputFile)
+	If $SQLiteExecution2 <> 0 Then
 		MsgBox(0,"Error","Could not DROP TABLE bogus: " & @error)
-		ConsoleWrite("@error: " & @error & @CRLF)
-		ConsoleWrite("$SQLiteExe: " & $SQLiteExe2 & @CRLF)
-		Exit
+		_DumpOutput("@error: " & @error & @CRLF)
+		_DumpOutput("Error Could not DROP TABLE bogus, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
+;		Exit
 	EndIf
 EndIf
 
@@ -1010,16 +1017,16 @@ Next
 FileFlush($LogFileDataRunsModCsv)
 FileClose($LogFileDataRunsModCsv)
 _DisplayInfo("Reconstruction of dataruns finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
-$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE DataRunsResolved (lf_MFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_FileName TEXT,lf_LSN INTEGER,lf_OffsetInMft INTEGER,lf_DataName TEXT,lf_Flags TEXT,lf_NonResident INTEGER,lf_FileSize INTEGER,lf_InitializedStreamSize INTEGER,lf_DataRuns TEXT);", $sOutputFile)
-If $SQLiteExe <> 0 Then
+$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE DataRunsResolved (lf_MFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_FileName TEXT,lf_LSN INTEGER,lf_OffsetInMft INTEGER,lf_DataName TEXT,lf_Flags TEXT,lf_NonResident INTEGER,lf_FileSize INTEGER,lf_InitializedStreamSize INTEGER,lf_DataRuns TEXT);", $sOutputFile, $SQLite3Exe)
+If $SQLiteExecution <> 0 Then
 	MsgBox(0,"Error","Could not create table DataRunsResolved in database: " & @error)
-	ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+	_DumpOutput("Error Could not create table DataRunsResolved, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 	Exit
 EndIf
-$SQLiteExe = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileDataRunsModCsvfile) & "' DataRunsResolved" & @CRLF, $sOutputFile)
-If $SQLiteExe <> 0 Then
+$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, ".mode csv" & @CRLF & ".separator " & $de & @CRLF & ".import '" & FileGetShortName($LogFileDataRunsModCsvfile) & "' DataRunsResolved" & @CRLF, $sOutputFile)
+If $SQLiteExecution <> 0 Then
 	MsgBox(0,"Error","Could not import " & $LogFileDataRunsModCsvfile & " into database: " & @error)
-	ConsoleWrite("$SQLiteExe: " & $SQLiteExe & @CRLF)
+	_DumpOutput("Error importing csv to DataRunsResolved, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 EndIf
 $command = _SQLite_Exec($hDb, "DELETE from DataRunsResolved where ROWID = 1;")
 If @error Then
