@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.21
+Fixed bug that caused file names of mft refs 27-31 to be incorrectly overwritten for nt5.x origins.
+
 v2.0.0.20
 Fixed bug that caused sqlite3.exe to sometimes not being able to create table's or import csv's.
 

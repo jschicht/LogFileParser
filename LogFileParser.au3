@@ -2,7 +2,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.20
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.21
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -85,7 +85,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.20", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.21", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -6828,15 +6828,15 @@ Func _SetNameOnSystemFiles()
 		Case $LocalRef = 26
 			$FN_Name = "$Reparse"
 		Case $LocalRef = 27
-			$FN_Name = "$RmMetadata"
+			If Not $IsNt5x Then $FN_Name = "$RmMetadata"
 		Case $LocalRef = 28
-			$FN_Name = "$Repair"
+			If Not $IsNt5x Then $FN_Name = "$Repair"
 		Case $LocalRef = 29
-			$FN_Name = "TxfLog"
+			If Not $IsNt5x Then $FN_Name = "TxfLog"
 		Case $LocalRef = 30
-			$FN_Name = "$Txf"
+			If Not $IsNt5x Then $FN_Name = "$Txf"
 		Case $LocalRef = 31
-			$FN_Name = "$Tops"
+			If Not $IsNt5x Then $FN_Name = "$Tops"
 	EndSelect
 EndFunc
 
