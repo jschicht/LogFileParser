@@ -1,5 +1,10 @@
 LogFileParser Changelog
 
+v2.0.0.22
+Fixed bug that caused GUID_ObjectID from being included into the lf_TextInformation field after decoding $OBJECT_ID in function _Get_ObjectID().
+Fixed bug that caused UpdateResidentValue for $STANDARD_INFORMATION to be decoded incorrectly in some rare cases.
+Added identification of partial timestamp updates.
+
 v2.0.0.21
 Fixed bug that caused file names of mft refs 27-31 to be incorrectly overwritten for nt5.x origins.
 

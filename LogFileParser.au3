@@ -2,7 +2,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.21
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.22
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -85,7 +85,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.21", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.22", 540, 520, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -1644,7 +1644,7 @@ If Not $FromRcrdSlack Then
 					$AttributeString &= ":"&$OpenAttributesArray[$FoundInTable][12]
 				EndIf
 			Else
-				_DumpOutput("Error: $target_attribute was not found in array: " & $target_attribute & " at lsn " & $this_lsn & @CRLF)
+				_DumpOutput("Error: $target_attribute was not found in array: " & $target_attribute & " at lsn " & $this_lsn & @CRLF & @CRLF)
 ;				_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
 			EndIf
 		EndIf
@@ -1684,7 +1684,7 @@ EndIf
 ;Else
 ;	$VerboseOn=0
 ;EndIf
-;If $this_lsn=278686421041 Or $this_lsn=278686421187 Then
+;If $this_lsn=7918867684 Or $this_lsn=7918867684 Then
 ;	$VerboseOn=1
 ;Else
 ;	$VerboseOn=0
@@ -2511,6 +2511,7 @@ If $DoSplitCsv Then _WriteCSVExtra()
 If $VerboseOn Then
 	_DumpOutput("End of function, check the output." & @CRLF)
 	MsgBox(0,"VerboseOn","Check output of lsn: " & $this_lsn)
+;	Exit
 	_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
 EndIf
 
@@ -3329,22 +3330,22 @@ Func _Get_ObjectID($MFTEntry,$OBJECTID_Offset,$OBJECTID_Size)
 	$GUID_ObjectID = StringMid($MFTEntry,$OBJECTID_Offset+48,32)
 	$GUID_ObjectID = _HexToGuidStr($GUID_ObjectID,1)
 	Select
-		Case $OBJECTID_Size - 24 = 16
+		Case ($OBJECTID_Size/2) - 24 = 16
 			$GUID_BirthVolumeID = "NOT PRESENT"
 			$GUID_BirthObjectID = "NOT PRESENT"
 			$GUID_BirthDomainID = "NOT PRESENT"
-		Case $OBJECTID_Size - 24 = 32
+		Case ($OBJECTID_Size/2) - 24 = 32
 			$GUID_BirthVolumeID = StringMid($MFTEntry,$OBJECTID_Offset+80,32)
 			$GUID_BirthVolumeID = _HexToGuidStr($GUID_BirthVolumeID,1)
 			$GUID_BirthObjectID = "NOT PRESENT"
 			$GUID_BirthDomainID = "NOT PRESENT"
-		Case $OBJECTID_Size - 24 = 48
+		Case ($OBJECTID_Size/2) - 24 = 48
 			$GUID_BirthVolumeID = StringMid($MFTEntry,$OBJECTID_Offset+80,32)
 			$GUID_BirthVolumeID = _HexToGuidStr($GUID_BirthVolumeID,1)
 			$GUID_BirthObjectID = StringMid($MFTEntry,$OBJECTID_Offset+112,32)
 			$GUID_BirthObjectID = _HexToGuidStr($GUID_BirthObjectID,1)
 			$GUID_BirthDomainID = "NOT PRESENT"
-		Case $OBJECTID_Size - 24 = 64
+		Case ($OBJECTID_Size/2) - 24 = 64
 			$GUID_BirthVolumeID = StringMid($MFTEntry,$OBJECTID_Offset+80,32)
 			$GUID_BirthVolumeID = _HexToGuidStr($GUID_BirthVolumeID,1)
 			$GUID_BirthObjectID = StringMid($MFTEntry,$OBJECTID_Offset+112,32)
@@ -3352,11 +3353,15 @@ Func _Get_ObjectID($MFTEntry,$OBJECTID_Offset,$OBJECTID_Size)
 			$GUID_BirthDomainID = StringMid($MFTEntry,$OBJECTID_Offset+144,32)
 			$GUID_BirthDomainID = _HexToGuidStr($GUID_BirthDomainID,1)
 		Case Else
-			_DumpOutput("Error: The $OBJECT_ID size was unexpected." & @crlf)
+			_DumpOutput("Error: The $OBJECT_ID size was unexpected for lsn " & $this_lsn & @crlf)
+			_DumpOutput("$OBJECTID_Size - 24: " & $OBJECTID_Size - 24 & @CRLF)
+			_DumpOutput("$GUID_ObjectID: " & $GUID_ObjectID & @CRLF)
+			_DumpOutput(_HexEncode("0x"&StringMid($MFTEntry,$OBJECTID_Offset,$OBJECTID_Size*2)) & @crlf)
 	EndSelect
-	$TextInformation &= ";GUID_BirthVolumeID="&$GUID_BirthVolumeID&";GUID_BirthObjectID="&$GUID_BirthObjectID&";GUID_BirthDomainID="&$GUID_BirthDomainID
+	$TextInformation &= ";GUID_ObjectID="&$GUID_ObjectID&";GUID_BirthVolumeID="&$GUID_BirthVolumeID&";GUID_BirthObjectID="&$GUID_BirthObjectID&";GUID_BirthDomainID="&$GUID_BirthDomainID
 	If $VerboseOn Then
 		_DumpOutput("### $OBJECT_ID ATTRIBUTE ###" & @CRLF)
+		_DumpOutput("$GUID_ObjectID: " & $GUID_ObjectID & @CRLF)
 		_DumpOutput("$GUID_BirthVolumeID: " & $GUID_BirthVolumeID & @CRLF)
 		_DumpOutput("$GUID_BirthObjectID: " & $GUID_BirthObjectID & @CRLF)
 		_DumpOutput("$GUID_BirthDomainID: " & $GUID_BirthDomainID & @CRLF)
@@ -4839,11 +4844,64 @@ Func _Decode_StandardInformation($Attribute)
 	Local $SI_HEADER_Flags, $SI_Offset = 1-48, $Add="", $f=0, $SI_Size, $SI_CTime_tmp, $SI_ATime_tmp, $SI_MTime_tmp, $SI_RTime_tmp
 	If $attribute_offset < 24 Then $Attribute = StringTrimLeft($Attribute,24-$attribute_offset) ;For now just strip the attribute header.
 	$SI_Size = StringLen($Attribute)
+
 	Select
 		Case $attribute_offset <= 48
-			If $attribute_offset = 32 Then $Attribute = "0000000000000000"&$Attribute
-			If $attribute_offset = 40 Then $Attribute = "00000000000000000000000000000000"&$Attribute
-			If $attribute_offset = 48 Then $Attribute = "000000000000000000000000000000000000000000000000"&$Attribute
+			Local $LoopCounter = 0
+			Do
+				If StringLen($Attribute) >= 144 Then ExitLoop
+				$LoopCounter += 1
+				$Attribute = "00"&$Attribute
+			Until StringLen($Attribute) >= 144
+
+			Local $SI_XTime_Fragment = ""
+			Select
+				Case $LoopCounter < 8
+					$TextInformation &= ";CTime in $SI is incomplete. Search debug.log for " & $this_lsn
+					$BytesMissing = 8-$LoopCounter
+					$BytesMissing = $LoopCounter
+					_DumpOutput("Error in UpdateResidentValue for lsn " & $this_lsn & @CRLF)
+					_DumpOutput("CTime in $SI was incomplete as " & $BytesMissing & " bytes was missing." & @CRLF)
+					$SI_XTime_Fragment = StringMid($Attribute, $SI_Offset + 48 + ($BytesMissing*2), 16 - ($BytesMissing*2))
+				Case $LoopCounter > 8 And $LoopCounter < 16
+					$TextInformation &= ";ATime in $SI is incomplete. Search debug.log for " & $this_lsn
+					$BytesMissing = 16-$LoopCounter ;9
+					$BytesMissing = $LoopCounter-8
+					_DumpOutput("Error in UpdateResidentValue for lsn " & $this_lsn & @CRLF)
+					_DumpOutput("ATime in $SI was incomplete as " & $BytesMissing & " bytes was missing." & @CRLF)
+					$SI_XTime_Fragment = StringMid($Attribute, $SI_Offset + 64 + ($BytesMissing*2), 16 - ($BytesMissing*2))
+				Case $LoopCounter > 16 And $LoopCounter < 24
+					$TextInformation &= ";MTime in $SI is incomplete. Search debug.log for " & $this_lsn
+					$BytesMissing = 24-$LoopCounter ;17
+					$BytesMissing = $LoopCounter-16
+					_DumpOutput("Error in UpdateResidentValue for lsn " & $this_lsn & @CRLF)
+					_DumpOutput("MTime in $SI was incomplete as " & $BytesMissing & " bytes was missing." & @CRLF)
+					$SI_XTime_Fragment = StringMid($Attribute, $SI_Offset + 80 + ($BytesMissing*2), 16 - ($BytesMissing*2))
+				Case $LoopCounter > 24 And $LoopCounter < 32
+					$TextInformation &= ";RTime in $SI is incomplete. Search debug.log for " & $this_lsn
+					$BytesMissing = 32-$LoopCounter
+					$BytesMissing = $LoopCounter-24
+					_DumpOutput("Error in UpdateResidentValue for lsn " & $this_lsn & @CRLF)
+					_DumpOutput("RTime in $SI was incomplete as " & $BytesMissing & " bytes was missing." & @CRLF)
+					$SI_XTime_Fragment = StringMid($Attribute, $SI_Offset + 96 + ($BytesMissing*2), 16 - ($BytesMissing*2))
+			EndSelect
+;			_DumpOutput("$TextInformation: " & $TextInformation & @CRLF)
+			If $SI_XTime_Fragment Then
+				$UnknownBytes = ""
+				$LowBytes = ""
+				$HighBytes = ""
+				For $Byte1=1 To $BytesMissing
+					$UnknownBytes &= "XX"
+					$LowBytes &= "00"
+					$HighBytes &= "FF"
+				Next
+				_DumpOutput("The timestamp fragment in little endian: (" & $UnknownBytes & ")" & $SI_XTime_Fragment & @CRLF)
+				_DumpOutput("The XX's are the substitute for the unknown and unchanged bytes." & @CRLF)
+				_DumpOutput("The theoretical possible range the timstamp can cover for is thus " & $LowBytes & $SI_XTime_Fragment & " - " & $HighBytes & $SI_XTime_Fragment & @CRLF)
+				_DumpOutput("This is not a parsing error, but a consequence of that these specific bytes did not change from the previous timestamp." & @CRLF)
+				_DumpOutput("If there is an earlier UpdateResidentValue for this MFT ref, you may be able to resolve the missing bytes." & @CRLF & @CRLF)
+			EndIf
+
 			$SI_CTime = StringMid($Attribute, $SI_Offset + 48, 16)
 ;			$SI_CTime = _SwapEndian($SI_CTime)
 ;			$SI_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_CTime)
@@ -5338,20 +5396,21 @@ Func _Decode_StandardInformation($Attribute)
 		EndSelect
 	If $SI_USN <> "-" Then _WriteLogFileDataRunsCsv()
 	If $VerboseOn Then
-		ConsoleWrite("$SI_HEADER_Flags: " & $SI_HEADER_Flags & @CRLF)
-		ConsoleWrite("$SI_CTime: " & $SI_CTime & @CRLF)
-		ConsoleWrite("$SI_ATime: " & $SI_ATime & @CRLF)
-		ConsoleWrite("$SI_MTime: " & $SI_MTime & @CRLF)
-		ConsoleWrite("$SI_RTime: " & $SI_RTime & @CRLF)
-		ConsoleWrite("$SI_FilePermission: " & $SI_FilePermission & @CRLF)
-		ConsoleWrite("$SI_MaxVersions: " & $SI_MaxVersions & @CRLF)
-		ConsoleWrite("$SI_VersionNumber: " & $SI_VersionNumber & @CRLF)
-		ConsoleWrite("$SI_ClassID: " & $SI_ClassID & @CRLF)
-		ConsoleWrite("$SI_OwnerID: " & $SI_OwnerID & @CRLF)
-		ConsoleWrite("$SI_SecurityID: " & $SI_SecurityID & @CRLF)
-		ConsoleWrite("$SI_QuotaCharged: " & $SI_QuotaCharged & @CRLF)
-		ConsoleWrite("$SI_USN: " & $SI_USN & @CRLF)
-		ConsoleWrite("$SI_PartialValue: " & $SI_PartialValue & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$Attribute) & @CRLF)
+		_DumpOutput("$SI_HEADER_Flags: " & $SI_HEADER_Flags & @CRLF)
+		_DumpOutput("$SI_CTime: " & $SI_CTime & @CRLF)
+		_DumpOutput("$SI_ATime: " & $SI_ATime & @CRLF)
+		_DumpOutput("$SI_MTime: " & $SI_MTime & @CRLF)
+		_DumpOutput("$SI_RTime: " & $SI_RTime & @CRLF)
+		_DumpOutput("$SI_FilePermission: " & $SI_FilePermission & @CRLF)
+		_DumpOutput("$SI_MaxVersions: " & $SI_MaxVersions & @CRLF)
+		_DumpOutput("$SI_VersionNumber: " & $SI_VersionNumber & @CRLF)
+		_DumpOutput("$SI_ClassID: " & $SI_ClassID & @CRLF)
+		_DumpOutput("$SI_OwnerID: " & $SI_OwnerID & @CRLF)
+		_DumpOutput("$SI_SecurityID: " & $SI_SecurityID & @CRLF)
+		_DumpOutput("$SI_QuotaCharged: " & $SI_QuotaCharged & @CRLF)
+		_DumpOutput("$SI_USN: " & $SI_USN & @CRLF)
+		_DumpOutput("$SI_PartialValue: " & $SI_PartialValue & @CRLF)
 	EndIf
 EndFunc
 
