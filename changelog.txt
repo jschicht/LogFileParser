@@ -1,5 +1,9 @@
 LogFileParser Changelog
 
+v2.0.0.23
+Improved the information printed about partial timestamps.
+Added option to specify comma separated list of lsn's to trigger verbose output (to debug.log).
+
 v2.0.0.22
 Fixed bug that caused GUID_ObjectID from being included into the lf_TextInformation field after decoding $OBJECT_ID in function _Get_ObjectID().
 Fixed bug that caused UpdateResidentValue for $STANDARD_INFORMATION to be decoded incorrectly in some rare cases.

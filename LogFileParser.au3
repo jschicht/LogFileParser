@@ -2,7 +2,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.22
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.23
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -48,7 +48,7 @@ Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $Da
 Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
 Global $TargetImageFile, $Entries, $IsImage=False, $IsPhysicalDrive=False, $ComboPhysicalDrives, $Combo, $MFT_Record_Size
-Global $EaNonResidentArray[1][9]
+Global $EaNonResidentArray[1][9], $VerboseArr
 Global $SQLite3Exe = @ScriptDir & "\sqlite3.exe"
 
 Global Const $GUI_EVENT_CLOSE = -3
@@ -85,7 +85,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.22", 540, 520, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.23", 540, 550, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -158,9 +158,12 @@ $CheckExtractResident = GUICtrlCreateCheckbox("Extract non + resident updates of
 GUICtrlSetState($CheckExtractResident, $GUI_UNCHECKED)
 $MinSizeResidentExtraction = GUICtrlCreateInput("2",410,205,30,20)
 
+$LabelVerboseLsns = GUICtrlCreateLabel("LSN's to trigger verbose output (comma separate):",20,230,240,20)
+$InputVerboseLsns = GUICtrlCreateInput("",260,230,180,20)
+
 $ButtonStart = GUICtrlCreateButton("Start", 450, 195, 80, 30)
 
-$myctredit = GUICtrlCreateEdit("", 0, 230, 540, 85, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
+$myctredit = GUICtrlCreateEdit("", 0, 260, 540, 85, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
 _GUICtrlEdit_SetLimitText($myctredit, 128000)
 
 _InjectTimeZoneInfo()
@@ -370,6 +373,14 @@ Else
 	_DebugOut("Using precision separator: " & $PrecisionSeparator)
 EndIf
 
+$VerboseLsns = GUICtrlRead($InputVerboseLsns)
+If $VerboseLsns <> "" Then
+	$VerboseArr = StringSplit($VerboseLsns,",")
+Else
+	$VerboseArr = ""
+EndIf
+_DebugOut("LSN's for verbose output: " & $VerboseLsns)
+
 _DebugOut("LSN Validation level: " & $LsnValidationLevel & " (" & $LsnValidationLevel*100 & " %)")
 _DebugOut("Timestamps presented in UTC: " & $UTCconfig)
 _DebugOut("Sectors per cluster: " & $SectorsPerCluster)
@@ -394,13 +405,13 @@ _DebugOut("Using timestamp precision: " & $TimestampPrecision)
 _DebugOut("------------------- END CONFIGURATION -----------------------")
 
 ;$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 280,540,20)
-$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 320,540,20)
+$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 350,540,20)
 GUICtrlSetFont($Progress, 12)
-$ProgressStatus = GUICtrlCreateLabel("", 10, 350, 520, 20)
-$ElapsedTime = GUICtrlCreateLabel("", 10, 365, 520, 20)
-$ProgressLogFile = GUICtrlCreateProgress(10, 390, 520, 30)
-$ProgressUsnJrnl = GUICtrlCreateProgress(10,  425, 520, 30)
-$ProgressReconstruct = GUICtrlCreateProgress(10, 460, 520, 30)
+$ProgressStatus = GUICtrlCreateLabel("", 10, 380, 520, 20)
+$ElapsedTime = GUICtrlCreateLabel("", 10, 395, 520, 20)
+$ProgressLogFile = GUICtrlCreateProgress(10, 420, 520, 30)
+$ProgressUsnJrnl = GUICtrlCreateProgress(10,  455, 520, 30)
+$ProgressReconstruct = GUICtrlCreateProgress(10, 490, 520, 30)
 $begin = TimerInit()
 AdlibRegister("_LogFileProgress", 500)
 $InputFileSize = _WinAPI_GetFileSizeEx($hFile)
@@ -1684,15 +1695,20 @@ EndIf
 ;Else
 ;	$VerboseOn=0
 ;EndIf
-;If $this_lsn=7918867684 Or $this_lsn=7918867684 Then
+;If $this_lsn=7918867684 Or $this_lsn=7918867684 Or $this_lsn=7918867684 Then
 ;	$VerboseOn=1
 ;Else
 ;	$VerboseOn=0
 ;EndIf
+If IsArray($VerboseArr) Then
+	$VerboseOn=0
+	For $i = 1 To $VerboseArr[0]
+		If $this_lsn=$VerboseArr[$i] Then $VerboseOn=1
+	Next
+EndIf
 
 If $VerboseOn Then
-;If Dec($client_undo_next_lsn) <> $client_previous_lsn Then
-;If $redo_operation_hex="1b00" Then
+	_DumpOutput("VerboseOn" & @CRLF)
 	_DumpOutput("Calculated RefNumber: " & ((Dec($target_vcn,2)*$BytesPerCluster)/$MFT_Record_Size)+((Dec($MftClusterIndex,2)*512)/$MFT_Record_Size) & @CRLF)
 	_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
 	_DumpOutput("$KeptRef: " & $KeptRef & @CRLF)
@@ -2509,8 +2525,8 @@ _WriteLogFileCsv()
 If $DoSplitCsv Then _WriteCSVExtra()
 
 If $VerboseOn Then
-	_DumpOutput("End of function, check the output." & @CRLF)
-	MsgBox(0,"VerboseOn","Check output of lsn: " & $this_lsn)
+	_DumpOutput("End parsing transaction in verbose mode." & @CRLF)
+;	MsgBox(0,"VerboseOn","Check output of lsn: " & $this_lsn)
 ;	Exit
 	_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
 EndIf
@@ -4898,6 +4914,26 @@ Func _Decode_StandardInformation($Attribute)
 				_DumpOutput("The timestamp fragment in little endian: (" & $UnknownBytes & ")" & $SI_XTime_Fragment & @CRLF)
 				_DumpOutput("The XX's are the substitute for the unknown and unchanged bytes." & @CRLF)
 				_DumpOutput("The theoretical possible range the timstamp can cover for is thus " & $LowBytes & $SI_XTime_Fragment & " - " & $HighBytes & $SI_XTime_Fragment & @CRLF)
+				;Decode the low end timestamp of range
+				$LowEnd_SI_XTime_Fragment = _SwapEndian($LowBytes & $SI_XTime_Fragment)
+				$LowEnd_SI_XTime_Fragment_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $LowEnd_SI_XTime_Fragment)
+				$LowEnd_SI_XTime_Fragment = _WinTime_UTCFileTimeFormat(Dec($LowEnd_SI_XTime_Fragment,2) - $tDelta, $DateTimeFormat, 3)
+				If @error Then
+					$LowEnd_SI_XTime_Fragment = "-"
+				Else
+					$LowEnd_SI_XTime_Fragment = $LowEnd_SI_XTime_Fragment & ":" & _FillZero(StringRight($LowEnd_SI_XTime_Fragment_tmp, 4))
+				EndIf
+				;Decode the high end timestamp of range
+				$HighEnd_SI_XTime_Fragment = _SwapEndian($HighBytes & $SI_XTime_Fragment)
+				$HighEnd_SI_XTime_Fragment_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $HighEnd_SI_XTime_Fragment)
+				$HighEnd_SI_XTime_Fragment = _WinTime_UTCFileTimeFormat(Dec($HighEnd_SI_XTime_Fragment,2) - $tDelta, $DateTimeFormat, 3)
+				If @error Then
+					$HighEnd_SI_XTime_Fragment = "-"
+				Else
+					$HighEnd_SI_XTime_Fragment = $HighEnd_SI_XTime_Fragment & ":" & _FillZero(StringRight($HighEnd_SI_XTime_Fragment_tmp, 4))
+				EndIf
+				_DumpOutput("The decoded timestamps for the above range " & $LowEnd_SI_XTime_Fragment & " - " & $HighEnd_SI_XTime_Fragment & @CRLF)
+				_DumpOutput("The replacement values are always 00's. That is the timestamp in the low end of the range." & @CRLF)
 				_DumpOutput("This is not a parsing error, but a consequence of that these specific bytes did not change from the previous timestamp." & @CRLF)
 				_DumpOutput("If there is an earlier UpdateResidentValue for this MFT ref, you may be able to resolve the missing bytes." & @CRLF & @CRLF)
 			EndIf
@@ -5396,8 +5432,9 @@ Func _Decode_StandardInformation($Attribute)
 		EndSelect
 	If $SI_USN <> "-" Then _WriteLogFileDataRunsCsv()
 	If $VerboseOn Then
+		_DumpOutput("The rebuilt $STANDARD_INFORMATION: " & @CRLF)
 		_DumpOutput(_HexEncode("0x"&$Attribute) & @CRLF)
-		_DumpOutput("$SI_HEADER_Flags: " & $SI_HEADER_Flags & @CRLF)
+;		_DumpOutput("$SI_HEADER_Flags: " & $SI_HEADER_Flags & @CRLF)
 		_DumpOutput("$SI_CTime: " & $SI_CTime & @CRLF)
 		_DumpOutput("$SI_ATime: " & $SI_ATime & @CRLF)
 		_DumpOutput("$SI_MTime: " & $SI_MTime & @CRLF)
