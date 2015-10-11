@@ -1,5 +1,15 @@
 LogFileParser Changelog
 
+v2.0.0.24
+Added option to specify a second precision separator, to be used as separation between MilliSec and NanoSec.
+Added option to specify a custom error value for invalid timestamps, or incorrectly decoded timestamps.
+Added 2 sql's for database schema and import of data, along with instructions for how to import the csv into a MySql database.
+Changed file encoding to utf8 with BOM, when unicode configured. The previous ucs2 would not import into MySql.
+Fixed bug when parsing $STANDARD_INFORMATION attributes of non-standard size.
+Changed default values (missing values) for certain integer variables from "-" to -1.
+Changed default values (partial values) for certain integer variables from "PARTIAL_VALUE" to -2.
+Changed some values for lf_RealMFTReference from "Parent" to -2.
+
 v2.0.0.23
 Improved the information printed about partial timestamps.
 Added option to specify comma separated list of lsn's to trigger verbose output (to debug.log).

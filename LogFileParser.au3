@@ -2,7 +2,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.23
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.24
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -17,8 +17,8 @@
 #include <Math.au3>
 #include "SecureConstants.au3"
 
-Global $VerboseOn = 0, $CharReplacement=":", $de="|", $PrecisionSeparator=".", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=False, $debuglogfile, $csvextra, $CurrentTimestamp, $EncodingWhenOpen=2, $ReconstructDone=False
-Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef, $FromRcrdSlack, $IncompleteTransaction
+Global $VerboseOn = 0, $CharReplacement=":", $de="|", $PrecisionSeparator=".", $PrecisionSeparator2="", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=False, $debuglogfile, $csvextra, $CurrentTimestamp, $EncodingWhenOpen=2, $ReconstructDone=False
+Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef, $FromRcrdSlack, $IncompleteTransaction=0
 Global $ProgressLogFile, $ProgressReconstruct, $CurrentProgress=-1, $ProgressStatus, $ProgressUsnJrnl, $ProgressSize
 Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $SectorSize=512, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,$LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile
 Global $RecordOffset, $PredictedRefNumber, $this_lsn, $client_previous_lsn, $redo_operation, $undo_operation, $record_offset_in_mft, $attribute_offset, $hOutFileMFT, $tBuffer, $nBytes2, $HDR_BaseRecord, $FilePath, $HDR_SequenceNo
@@ -48,8 +48,12 @@ Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $Da
 Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
 Global $TargetImageFile, $Entries, $IsImage=False, $IsPhysicalDrive=False, $ComboPhysicalDrives, $Combo, $MFT_Record_Size
-Global $EaNonResidentArray[1][9], $VerboseArr
+Global $EaNonResidentArray[1][9], $VerboseArr, $LogFileSqlFile
 Global $SQLite3Exe = @ScriptDir & "\sqlite3.exe"
+Global $TimestampErrorVal = "0000-00-00 00:00:00"
+Global $IntegerErrorVal = -1
+Global $IntegerPartialValReplacement = -2 ;"PARTIAL VALUE"
+Global $MftRefReplacement = -2 ;Parent
 
 Global Const $GUI_EVENT_CLOSE = -3
 Global Const $GUI_CHECKED = 1
@@ -85,7 +89,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.23", 540, 550, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.24", 540, 580, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -119,57 +123,64 @@ $ComboTimestampPrecision = GUICtrlCreateCombo("", 200, 85, 70, 25)
 $CheckCsvSplit = GUICtrlCreateCheckbox("split csv", 280, 85, 60, 20)
 GUICtrlSetState($CheckCsvSplit, $GUI_UNCHECKED)
 $LabelPrecisionSeparator = GUICtrlCreateLabel("Precision separator:",350,85,100,20)
-$PrecisionSeparatorInput = GUICtrlCreateInput($PrecisionSeparator,450,85,20,20)
-
-$InputExampleTimestamp = GUICtrlCreateInput("",340,110,190,20)
-GUICtrlSetState($InputExampleTimestamp, $GUI_DISABLE)
+$PrecisionSeparatorInput = GUICtrlCreateInput($PrecisionSeparator,450,85,15,20)
 
 $Label1 = GUICtrlCreateLabel("Set decoded timestamps to specific region:",20,110,230,20)
 $Combo2 = GUICtrlCreateCombo("", 230, 110, 85, 25)
 
-$LabelSeparator = GUICtrlCreateLabel("Set separator:",20,135,70,20)
-$SaparatorInput = GUICtrlCreateInput($de,90,135,20,20)
-$SaparatorInput2 = GUICtrlCreateInput($de,120,135,30,20)
+$LabelPrecisionSeparator2 = GUICtrlCreateLabel("Precision separator2:",350,110,100,20)
+$PrecisionSeparatorInput2 = GUICtrlCreateInput($PrecisionSeparator2,450,110,15,20)
+
+$LabelTimestampError = GUICtrlCreateLabel("Timestamp ErrorVal:",20,140,100,20)
+$TimestampErrorInput = GUICtrlCreateInput($TimestampErrorVal,120,140,130,20)
+
+$InputExampleTimestamp = GUICtrlCreateInput("",340,140,190,20)
+GUICtrlSetState($InputExampleTimestamp, $GUI_DISABLE)
+
+$LabelSeparator = GUICtrlCreateLabel("Set separator:",20,165,70,20)
+$SaparatorInput = GUICtrlCreateInput($de,90,165,20,20)
+$SaparatorInput2 = GUICtrlCreateInput($de,120,165,30,20)
 GUICtrlSetState($SaparatorInput2, $GUI_DISABLE)
 
-$CheckUnicode = GUICtrlCreateCheckbox("Unicode", 160, 135, 60, 20)
+$CheckUnicode = GUICtrlCreateCheckbox("Unicode", 160, 165, 60, 20)
 GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
 
-$CheckReconstruct = GUICtrlCreateCheckbox("Reconstruct data runs", 220, 135, 120, 20)
+$CheckReconstruct = GUICtrlCreateCheckbox("Reconstruct data runs", 220, 165, 120, 20)
 GUICtrlSetState($CheckReconstruct, $GUI_UNCHECKED)
 
-$CheckBrokenHeaderRebuild = GUICtrlCreateCheckbox("Rebuild headers (in slack)", 350, 135, 140, 20)
+$CheckBrokenHeaderRebuild = GUICtrlCreateCheckbox("Rebuild headers (in slack)", 350, 165, 140, 20)
 GUICtrlSetState($CheckBrokenHeaderRebuild, $GUI_UNCHECKED)
 
-$Label2 = GUICtrlCreateLabel("Sectors per cluster:",20,170,100,20)
-$InputSectorPerCluster = GUICtrlCreateInput("8",120,170,30,20)
+$Label2 = GUICtrlCreateLabel("Sectors per cluster:",20,200,100,20)
+$InputSectorPerCluster = GUICtrlCreateInput("8",120,200,30,20)
 
-$Label3 = GUICtrlCreateLabel("MFT record size:",170,170,80,20)
-$InputMFTRecordSize = GUICtrlCreateInput("1024",260,170,40,20)
+$Label3 = GUICtrlCreateLabel("MFT record size:",170,200,80,20)
+$InputMFTRecordSize = GUICtrlCreateInput("1024",260,200,40,20)
 
-$Label4 = GUICtrlCreateLabel("LSN error level:",310,170,80,20)
-$InputErrorLevel = GUICtrlCreateInput("0.1",400,170,40,20)
-$InputErrorLevelTranslated = GUICtrlCreateInput("",450,170,80,20)
+$Label4 = GUICtrlCreateLabel("LSN error level:",310,200,80,20)
+$InputErrorLevel = GUICtrlCreateInput("0.1",400,200,40,20)
+$InputErrorLevelTranslated = GUICtrlCreateInput("",450,200,80,20)
 GUICtrlSetState($InputErrorLevelTranslated, $GUI_DISABLE)
 
-$CheckNt5x = GUICtrlCreateCheckbox("Source is from Nt5x (XP,2003)", 20, 205, 160, 20)
+$CheckNt5x = GUICtrlCreateCheckbox("Source is from Nt5x (XP,2003)", 20, 235, 160, 20)
 GUICtrlSetState($CheckNt5x, $GUI_UNCHECKED)
-$CheckExtractResident = GUICtrlCreateCheckbox("Extract non + resident updates of min size:",190, 205, 215, 20)
+$CheckExtractResident = GUICtrlCreateCheckbox("Extract non + resident updates of min size:",190, 235, 215, 20)
 GUICtrlSetState($CheckExtractResident, $GUI_UNCHECKED)
-$MinSizeResidentExtraction = GUICtrlCreateInput("2",410,205,30,20)
+$MinSizeResidentExtraction = GUICtrlCreateInput("2",410,235,30,20)
 
-$LabelVerboseLsns = GUICtrlCreateLabel("LSN's to trigger verbose output (comma separate):",20,230,240,20)
-$InputVerboseLsns = GUICtrlCreateInput("",260,230,180,20)
+$LabelVerboseLsns = GUICtrlCreateLabel("LSN's to trigger verbose output (comma separate):",20,260,240,20)
+$InputVerboseLsns = GUICtrlCreateInput("",260,260,180,20)
 
-$ButtonStart = GUICtrlCreateButton("Start", 450, 195, 80, 30)
+$ButtonStart = GUICtrlCreateButton("Start", 450, 225, 80, 30)
 
-$myctredit = GUICtrlCreateEdit("", 0, 260, 540, 85, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
+$myctredit = GUICtrlCreateEdit("", 0, 290, 540, 85, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
 _GUICtrlEdit_SetLimitText($myctredit, 128000)
 
 _InjectTimeZoneInfo()
 _InjectTimestampFormat()
 _InjectTimestampPrecision()
 $PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
+$PrecisionSeparator2 = GUICtrlRead($PrecisionSeparatorInput2)
 _TranslateTimestamp()
 _TranslateErrorLevel()
 
@@ -180,6 +191,7 @@ While 1
 	Sleep(50)
 	_TranslateSeparator()
 	$PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
+	$PrecisionSeparator2 = GUICtrlRead($PrecisionSeparatorInput2)
 	_TranslateTimestamp()
 	_TranslateErrorLevel()
 	Switch $nMsg
@@ -237,7 +249,8 @@ if StringIsDigit($MFT_Record_Size)=0 Or ($MFT_Record_Size <> 1024 And $MFT_Recor
 EndIf
 
 If GUICtrlRead($CheckUnicode) = 1 Then
-	$EncodingWhenOpen = 2+32
+	;$EncodingWhenOpen = 2+32
+	$EncodingWhenOpen = 2+128
 EndIf
 
 If GUICtrlRead($CheckNt5x) = 1 Then
@@ -246,14 +259,13 @@ Else
 	$IsNt5x = False
 EndIf
 
-
 If GUICtrlRead($CheckReconstruct) = 1 Then
 	$DoReconstructDataRuns = True
-	If $EncodingWhenOpen=34 Then
-		MsgBox(0,"Warning","Reconstruct of dataruns is not supported with UNICODE. Continuing with ANSI")
-		GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
-		$EncodingWhenOpen = 2
-	EndIf
+;	If $EncodingWhenOpen=34 Then
+;		MsgBox(0,"Warning","Reconstruct of dataruns is not supported with UNICODE. Continuing with ANSI")
+;		GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
+;		$EncodingWhenOpen = 2
+;	EndIf
 	If $ReconstructDone Then
 		MsgBox(0,"Error","Reconstruct of dataruns requires a restart of the program")
 		Return
@@ -294,6 +306,12 @@ If $DoExtractResidentUpdates Then
 	DirCreate($ParserOutDir&"\ResidentExtract")
 	DirCreate($ParserOutDir&"\NonResidentExtract")
 EndIf
+
+$FixedPath = StringReplace($LogFileCsvFile,"\","\\")
+Sleep(500)
+_ReplaceStringInFile($LogFileSqlFile,"__PathToCsv__",$FixedPath)
+If $CheckUnicode = 1 Then _ReplaceStringInFile($LogFileSqlFile,"latin1", "utf8")
+
 ;Put output filenames into an array
 $FileOutputTesterArray[0] = $LogFileCsvFile
 $FileOutputTesterArray[1] = $LogFileIndxCsvFile
@@ -364,6 +382,8 @@ Else
 	_DebugOut("Unicode: 0")
 EndIf
 
+$TimestampErrorVal = GUICtrlRead($TimestampErrorInput)
+
 If StringLen(GUICtrlRead($PrecisionSeparatorInput)) <> 1 Then
 	_DisplayInfo("Error: Precision separator not set properly" & @crlf)
 	_DebugOut("Error: Precision separator not set properly: " & GUICtrlRead($PrecisionSeparatorInput))
@@ -372,6 +392,8 @@ Else
 	$PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
 	_DebugOut("Using precision separator: " & $PrecisionSeparator)
 EndIf
+
+$PrecisionSeparator2 = GUICtrlRead($PrecisionSeparatorInput2)
 
 $VerboseLsns = GUICtrlRead($InputVerboseLsns)
 If $VerboseLsns <> "" Then
@@ -405,13 +427,13 @@ _DebugOut("Using timestamp precision: " & $TimestampPrecision)
 _DebugOut("------------------- END CONFIGURATION -----------------------")
 
 ;$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 280,540,20)
-$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 350,540,20)
+$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 380,540,20)
 GUICtrlSetFont($Progress, 12)
-$ProgressStatus = GUICtrlCreateLabel("", 10, 380, 520, 20)
-$ElapsedTime = GUICtrlCreateLabel("", 10, 395, 520, 20)
-$ProgressLogFile = GUICtrlCreateProgress(10, 420, 520, 30)
-$ProgressUsnJrnl = GUICtrlCreateProgress(10,  455, 520, 30)
-$ProgressReconstruct = GUICtrlCreateProgress(10, 490, 520, 30)
+$ProgressStatus = GUICtrlCreateLabel("", 10, 410, 520, 20)
+$ElapsedTime = GUICtrlCreateLabel("", 10, 425, 520, 20)
+$ProgressLogFile = GUICtrlCreateProgress(10, 450, 520, 30)
+$ProgressUsnJrnl = GUICtrlCreateProgress(10,  485, 520, 30)
+$ProgressReconstruct = GUICtrlCreateProgress(10, 520, 520, 30)
 $begin = TimerInit()
 AdlibRegister("_LogFileProgress", 500)
 $InputFileSize = _WinAPI_GetFileSizeEx($hFile)
@@ -766,7 +788,7 @@ _DumpOutput("Csv import and table updates took " & _WinAPI_StrFromTimeInterval(T
 
 ;----------------- UsnJrnl
 If FileExists($UsnJrnlFile) Then
-	$Progress = GUICtrlCreateLabel("Decoding $UsnJrnl info and writing to csv", 10, 280,540,20)
+	$Progress = GUICtrlCreateLabel("Decoding $UsnJrnl info and writing to csv", 10, 380,540,20)
 	GUICtrlSetFont($Progress, 12)
 	$begin = TimerInit()
 	Dim $tBuffer2, $hUsnJrnl, $RawPage="", $TestHeader, $UsnJrnlPage="", $Remainder="", $SQLiteExecution, $Record_Size = 4096, $nBytes=""
@@ -832,43 +854,43 @@ If FileExists($UsnJrnlFile) Then
 ;	Join filename from UsnJrnl into LogFile
 	ProgressOn("Stage 3: (joining data from UsnJrnl into LogFile)", "", "", -1, -1, 16)
 	ProgressSet(0, 0 & " percent")
-	$command = _SQLite_Exec($hDb, "create table LogFileTmp as select * from LogFile inner join UsnJrnl on LogFile.lf_SI_USN=UsnJrnl.UsnJrnlUSN where lf_SI_USN <> '' and lf_SI_USN <> '-' and lf_SI_USN <> 'PARTIAL VALUE';")
+	$command = _SQLite_Exec($hDb, "create table LogFileTmp as select * from LogFile inner join UsnJrnl on LogFile.lf_SI_USN=UsnJrnl.UsnJrnlUSN where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 	If @error Then
 		MsgBox(0,"Error","Create table LogFileTmp failed and returned error val: " & $command)
 		Exit
 	EndIf
-	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlFileName = (select UsnJrnlFileName from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> '-' and lf_SI_USN <> 'PARTIAL VALUE';")
+	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlFileName = (select UsnJrnlFileName from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 	If @error Then
 		MsgBox(0,"Error","update LogFile set lf_UsnJrlFileName failed and returned error val: " & $command)
 		Exit
 	EndIf
 	ProgressSet(20, 20 & " percent")
-	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlMFTReference = (select UsnJrnlMFTReference from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> '-' and lf_SI_USN <> 'PARTIAL VALUE';")
+	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlMFTReference = (select UsnJrnlMFTReference from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 	If @error Then
 		MsgBox(0,"Error","update LogFile set lf_UsnJrlMFTReference failed and returned error val: " & $command)
 		Exit
 	EndIf
 	ProgressSet(40, 40 & " percent")
-	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlMFTParentReference = (select UsnJrnlMFTParentReference from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> '-' and lf_SI_USN <> 'PARTIAL VALUE';")
+	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlMFTParentReference = (select UsnJrnlMFTParentReference from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 	If @error Then
 		MsgBox(0,"Error","update LogFile set lf_UsnJrlMFTParentReference failed and returned error val: " & $command)
 		Exit
 	EndIf
 	ProgressSet(60, 60 & " percent")
-	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlTimestamp = (select UsnJrnlTimestamp from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> '-' and lf_SI_USN <> 'PARTIAL VALUE';")
+	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlTimestamp = (select UsnJrnlTimestamp from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 	If @error Then
 		MsgBox(0,"Error","update LogFile set lf_UsnJrlTimestamp failed and returned error val: " & $command)
 		Exit
 	EndIf
 	ProgressSet(80, 80 & " percent")
-	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlReason = (select UsnJrnlReason from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> '-' and lf_SI_USN <> 'PARTIAL VALUE';")
+	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlReason = (select UsnJrnlReason from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 	If @error Then
 		MsgBox(0,"Error","update LogFile set lf_UsnJrlReason failed and returned error val: " & $command)
 		Exit
 	EndIf
 	If $DoReconstructDataRuns Then
 ;	$command = _SQLite_Exec($hDb, "create table LogFile2 as select * from LogFile order by LSN asc;")
-		$command = _SQLite_Exec($hDb, "update DataRuns set lf_FileName = (select UsnJrnlFileName from LogFileTmp where LogFileTmp.UsnJrnlUSN=DataRuns.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> '-' and lf_SI_USN <> 'PARTIAL VALUE';")
+		$command = _SQLite_Exec($hDb, "update DataRuns set lf_FileName = (select UsnJrnlFileName from LogFileTmp where LogFileTmp.UsnJrnlUSN=DataRuns.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 		If @error Then
 			MsgBox(0,"Error","update DataRuns set FileName failed and returned error val: " & $command)
 			Exit
@@ -911,7 +933,7 @@ If Not $DoReconstructDataRuns Then
 ;	GUICtrlSetData($ProgressReconstruct, 0)
 	Return
 EndIf
-$Progress = GUICtrlCreateLabel("Reconstructing dataruns", 10, 280,540,20)
+$Progress = GUICtrlCreateLabel("Reconstructing dataruns", 10, 380,540,20)
 GUICtrlSetFont($Progress, 12)
 $begin = TimerInit()
 $sSQliteDll = _SQLite_Startup($Sqlite3DllString)
@@ -2086,7 +2108,7 @@ If $redo_length > 0 Then
 				$AttributeString = $PreviousAttribute
 			Else
 				$AttributeString = "$INDEX_ROOT"
-				$RealMftRef = "Parent"
+				$RealMftRef = $MftRefReplacement
 			EndIf
 		Case $redo_operation_hex="1400" ; UpdateFileNameAllocation
 ;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
@@ -2101,7 +2123,7 @@ If $redo_length > 0 Then
 				$AttributeString = $PreviousAttribute
 			Else
 				$AttributeString = "$INDEX_ALLOCATION"
-				$RealMftRef = "Parent"
+				$RealMftRef = $MftRefReplacement
 			EndIf
 		Case $redo_operation_hex="1500" ;SetBitsInNonresidentBitMap
 			_Decode_BitsInNonresidentBitMap2($redo_chunk)
@@ -2890,8 +2912,10 @@ Func _ParserCodeOldVersion($MFTEntry)
 			Case $AttributeType = $STANDARD_INFORMATION
 				$AttributeKnown = 1
 				$AttributeArray[1][1] += 1
-				_Get_StandardInformation($MFTEntry, $NextAttributeOffset, $AttributeSize)
+;				_Get_StandardInformation($MFTEntry, $NextAttributeOffset, $AttributeSize)
+				_Get_StandardInformation(StringMid($MFTEntry,1,($NextAttributeOffset+($AttributeSize*2))-1), $NextAttributeOffset, $AttributeSize)
 				$TestAttributeString &= '$STANDARD_INFORMATION?'&($NextAttributeOffset-1)/2&','
+				If $AttributeSize <> 72 Then $TextInformation &= ";Non-standard size of $STANDARD_INFORMATION"
 			Case $AttributeType = $ATTRIBUTE_LIST
 				$AttributeKnown = 1
 				$AttributeArray[2][1] += 1
@@ -3042,12 +3066,12 @@ Func _Get_StandardInformation($MFTEntry, $SI_Offset, $SI_Size)
 	$SI_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_CTime)
 	$SI_CTime = _WinTime_UTCFileTimeFormat(Dec($SI_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$SI_CTime = "-"
+		$SI_CTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-4)
 		$SI_CTime_Precision = StringRight($SI_CTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$SI_CTime = $SI_CTime & ":" & _FillZero(StringRight($SI_CTime_tmp, 4))
+		$SI_CTime = $SI_CTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_CTime_tmp, 4))
 		$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-9)
 		$SI_CTime_Precision = StringRight($SI_CTime,8)
 	Else
@@ -3059,12 +3083,12 @@ Func _Get_StandardInformation($MFTEntry, $SI_Offset, $SI_Size)
 	$SI_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_ATime)
 	$SI_ATime = _WinTime_UTCFileTimeFormat(Dec($SI_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$SI_ATime = "-"
+		$SI_ATime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-4)
 		$SI_ATime_Precision = StringRight($SI_ATime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$SI_ATime = $SI_ATime & ":" & _FillZero(StringRight($SI_ATime_tmp, 4))
+		$SI_ATime = $SI_ATime & $PrecisionSeparator2 & _FillZero(StringRight($SI_ATime_tmp, 4))
 		$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-9)
 		$SI_ATime_Precision = StringRight($SI_ATime,8)
 	Else
@@ -3076,12 +3100,12 @@ Func _Get_StandardInformation($MFTEntry, $SI_Offset, $SI_Size)
 	$SI_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_MTime)
 	$SI_MTime = _WinTime_UTCFileTimeFormat(Dec($SI_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$SI_MTime = "-"
+		$SI_MTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-4)
 		$SI_MTime_Precision = StringRight($SI_MTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$SI_MTime = $SI_MTime & ":" & _FillZero(StringRight($SI_MTime_tmp, 4))
+		$SI_MTime = $SI_MTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_MTime_tmp, 4))
 		$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-9)
 		$SI_MTime_Precision = StringRight($SI_MTime,8)
 	Else
@@ -3093,12 +3117,12 @@ Func _Get_StandardInformation($MFTEntry, $SI_Offset, $SI_Size)
 	$SI_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_RTime)
 	$SI_RTime = _WinTime_UTCFileTimeFormat(Dec($SI_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$SI_RTime = "-"
+		$SI_RTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-4)
 		$SI_RTime_Precision = StringRight($SI_RTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$SI_RTime = $SI_RTime & ":" & _FillZero(StringRight($SI_RTime_tmp, 4))
+		$SI_RTime = $SI_RTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_RTime_tmp, 4))
 		$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-9)
 		$SI_RTime_Precision = StringRight($SI_RTime,8)
 	Else
@@ -3125,21 +3149,22 @@ Func _Get_StandardInformation($MFTEntry, $SI_Offset, $SI_Size)
 	If $redo_operation="InitializeFileRecordSegment" Then $CurrentTimestamp = $SI_MTime ; $SI_RTime,$SI_MTime
 ;	If $undo_operation_hex="0200" Then $CurrentTimestamp = $SI_MTime ; $SI_RTime,$SI_MTime ;Not needed
 	If $VerboseOn Then
-		ConsoleWrite("### $STANDARD_INFORMATION ATTRIBUTE ###" & @CRLF)
-		ConsoleWrite("$SI_HEADER_Flags: " & $SI_HEADER_Flags & @CRLF)
-		ConsoleWrite("$SI_HEADER_Flags: " & $SI_HEADER_Flags & @CRLF)
-		ConsoleWrite("$SI_CTime: " & $SI_CTime & @CRLF)
-		ConsoleWrite("$SI_ATime: " & $SI_ATime & @CRLF)
-		ConsoleWrite("$SI_MTime: " & $SI_MTime & @CRLF)
-		ConsoleWrite("$SI_RTime: " & $SI_RTime & @CRLF)
-		ConsoleWrite("$SI_FilePermission: " & $SI_FilePermission & @CRLF)
-		ConsoleWrite("$SI_MaxVersions: " & $SI_MaxVersions & @CRLF)
-		ConsoleWrite("$SI_VersionNumber: " & $SI_VersionNumber & @CRLF)
-		ConsoleWrite("$SI_ClassID: " & $SI_ClassID & @CRLF)
-		ConsoleWrite("$SI_OwnerID: " & $SI_OwnerID & @CRLF)
-		ConsoleWrite("$SI_SecurityID: " & $SI_SecurityID & @CRLF)
-		ConsoleWrite("$SI_QuotaCharged: " & $SI_QuotaCharged & @CRLF)
-		ConsoleWrite("$SI_USN: " & $SI_USN & @CRLF)
+		_DumpOutput("### $STANDARD_INFORMATION ATTRIBUTE ###" & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$MFTEntry) & @CRLF)
+		_DumpOutput("$SI_HEADER_Flags: " & $SI_HEADER_Flags & @CRLF)
+		_DumpOutput("$SI_HEADER_Flags: " & $SI_HEADER_Flags & @CRLF)
+		_DumpOutput("$SI_CTime: " & $SI_CTime & @CRLF)
+		_DumpOutput("$SI_ATime: " & $SI_ATime & @CRLF)
+		_DumpOutput("$SI_MTime: " & $SI_MTime & @CRLF)
+		_DumpOutput("$SI_RTime: " & $SI_RTime & @CRLF)
+		_DumpOutput("$SI_FilePermission: " & $SI_FilePermission & @CRLF)
+		_DumpOutput("$SI_MaxVersions: " & $SI_MaxVersions & @CRLF)
+		_DumpOutput("$SI_VersionNumber: " & $SI_VersionNumber & @CRLF)
+		_DumpOutput("$SI_ClassID: " & $SI_ClassID & @CRLF)
+		_DumpOutput("$SI_OwnerID: " & $SI_OwnerID & @CRLF)
+		_DumpOutput("$SI_SecurityID: " & $SI_SecurityID & @CRLF)
+		_DumpOutput("$SI_QuotaCharged: " & $SI_QuotaCharged & @CRLF)
+		_DumpOutput("$SI_USN: " & $SI_USN & @CRLF)
 	EndIf
 EndFunc   ;==>_Get_StandardInformation
 
@@ -3441,12 +3466,12 @@ Func _Get_FileName($MFTEntry, $FN_Offset, $FN_Size, $FN_Number)
 	$FN_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $FN_CTime)
 	$FN_CTime = _WinTime_UTCFileTimeFormat(Dec($FN_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$FN_CTime = "-"
+		$FN_CTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$FN_CTime_Core = StringMid($FN_CTime,1,StringLen($FN_CTime)-4)
 		$FN_CTime_Precision = StringRight($FN_CTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$FN_CTime = $FN_CTime & ":" & _FillZero(StringRight($FN_CTime_tmp, 4))
+		$FN_CTime = $FN_CTime & $PrecisionSeparator2 & _FillZero(StringRight($FN_CTime_tmp, 4))
 		$FN_CTime_Core = StringMid($FN_CTime,1,StringLen($FN_CTime)-9)
 		$FN_CTime_Precision = StringRight($FN_CTime,8)
 	Else
@@ -3458,12 +3483,12 @@ Func _Get_FileName($MFTEntry, $FN_Offset, $FN_Size, $FN_Number)
 	$FN_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $FN_ATime)
 	$FN_ATime = _WinTime_UTCFileTimeFormat(Dec($FN_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$FN_ATime = "-"
+		$FN_ATime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$FN_ATime_Core = StringMid($FN_ATime,1,StringLen($FN_ATime)-4)
 		$FN_ATime_Precision = StringRight($FN_ATime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$FN_ATime = $FN_ATime & ":" & _FillZero(StringRight($FN_ATime_tmp, 4))
+		$FN_ATime = $FN_ATime & $PrecisionSeparator2 & _FillZero(StringRight($FN_ATime_tmp, 4))
 		$FN_ATime_Core = StringMid($FN_ATime,1,StringLen($FN_ATime)-9)
 		$FN_ATime_Precision = StringRight($FN_ATime,8)
 	Else
@@ -3475,12 +3500,12 @@ Func _Get_FileName($MFTEntry, $FN_Offset, $FN_Size, $FN_Number)
 	$FN_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $FN_MTime)
 	$FN_MTime = _WinTime_UTCFileTimeFormat(Dec($FN_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$FN_MTime = "-"
+		$FN_MTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$FN_MTime_Core = StringMid($FN_MTime,1,StringLen($FN_MTime)-4)
 		$FN_MTime_Precision = StringRight($FN_MTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$FN_MTime = $FN_MTime & ":" & _FillZero(StringRight($FN_MTime_tmp, 4))
+		$FN_MTime = $FN_MTime & $PrecisionSeparator2 & _FillZero(StringRight($FN_MTime_tmp, 4))
 		$FN_MTime_Core = StringMid($FN_MTime,1,StringLen($FN_MTime)-9)
 		$FN_MTime_Precision = StringRight($FN_MTime,8)
 	Else
@@ -3492,12 +3517,12 @@ Func _Get_FileName($MFTEntry, $FN_Offset, $FN_Size, $FN_Number)
 	$FN_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $FN_RTime)
 	$FN_RTime = _WinTime_UTCFileTimeFormat(Dec($FN_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$FN_RTime = "-"
+		$FN_RTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$FN_RTime_Core = StringMid($FN_RTime,1,StringLen($FN_RTime)-4)
 		$FN_RTime_Precision = StringRight($FN_RTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$FN_RTime = $FN_RTime & ":" & _FillZero(StringRight($FN_RTime_tmp, 4))
+		$FN_RTime = $FN_RTime & $PrecisionSeparator2 & _FillZero(StringRight($FN_RTime_tmp, 4))
 		$FN_RTime_Core = StringMid($FN_RTime,1,StringLen($FN_RTime)-9)
 		$FN_RTime_Precision = StringRight($FN_RTime,8)
 	Else
@@ -3685,12 +3710,12 @@ Func _Decode_INDX($Entry)
 	$Indx_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_CTime)
 	$Indx_CTime = _WinTime_UTCFileTimeFormat(Dec($Indx_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_CTime = "-"
+		$Indx_CTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
 		$Indx_CTime_Precision = StringRight($Indx_CTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_CTime = $Indx_CTime & ":" & _FillZero(StringRight($Indx_CTime_tmp, 4))
+		$Indx_CTime = $Indx_CTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_CTime_tmp, 4))
 		$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
 		$Indx_CTime_Precision = StringRight($Indx_CTime,8)
 	Else
@@ -3702,12 +3727,12 @@ Func _Decode_INDX($Entry)
 	$Indx_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_ATime)
 	$Indx_ATime = _WinTime_UTCFileTimeFormat(Dec($Indx_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_ATime = "-"
+		$Indx_ATime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
 		$Indx_ATime_Precision = StringRight($Indx_ATime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_ATime = $Indx_ATime & ":" & _FillZero(StringRight($Indx_ATime_tmp, 4))
+		$Indx_ATime = $Indx_ATime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_ATime_tmp, 4))
 		$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
 		$Indx_ATime_Precision = StringRight($Indx_ATime,8)
 	Else
@@ -3719,12 +3744,12 @@ Func _Decode_INDX($Entry)
 	$Indx_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_MTime)
 	$Indx_MTime = _WinTime_UTCFileTimeFormat(Dec($Indx_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_MTime = "-"
+		$Indx_MTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
 		$Indx_MTime_Precision = StringRight($Indx_MTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_MTime = $Indx_MTime & ":" & _FillZero(StringRight($Indx_MTime_tmp, 4))
+		$Indx_MTime = $Indx_MTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_MTime_tmp, 4))
 		$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
 		$Indx_MTime_Precision = StringRight($Indx_MTime,8)
 	Else
@@ -3736,12 +3761,12 @@ Func _Decode_INDX($Entry)
 	$Indx_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_RTime)
 	$Indx_RTime = _WinTime_UTCFileTimeFormat(Dec($Indx_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_RTime = "-"
+		$Indx_RTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
 		$Indx_RTime_Precision = StringRight($Indx_RTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_RTime = $Indx_RTime & ":" & _FillZero(StringRight($Indx_RTime_tmp, 4))
+		$Indx_RTime = $Indx_RTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_RTime_tmp, 4))
 		$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
 		$Indx_RTime_Precision = StringRight($Indx_RTime,8)
 	Else
@@ -3795,7 +3820,7 @@ Func _Decode_INDX($Entry)
 	EndIf
 
 ;	FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
-	If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>"-" And $Indx_ATime<>"-" And $Indx_MTime<>"-" And $Indx_RTime<>"-" Then
+	If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
 		$DecodeOk=True
 		FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
 		$RealMftRef = $PredictedRefNumber
@@ -3839,12 +3864,12 @@ Func _Decode_INDX($Entry)
 		$Indx_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_CTime)
 		$Indx_CTime = _WinTime_UTCFileTimeFormat(Dec($Indx_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
-			$Indx_CTime = "-"
+			$Indx_CTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
 			$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
 			$Indx_CTime_Precision = StringRight($Indx_CTime,3)
 		ElseIf $TimestampPrecision = 3 Then
-			$Indx_CTime = $Indx_CTime & ":" & _FillZero(StringRight($Indx_CTime_tmp, 4))
+			$Indx_CTime = $Indx_CTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_CTime_tmp, 4))
 			$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
 			$Indx_CTime_Precision = StringRight($Indx_CTime,8)
 		Else
@@ -3856,12 +3881,12 @@ Func _Decode_INDX($Entry)
 		$Indx_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_ATime)
 		$Indx_ATime = _WinTime_UTCFileTimeFormat(Dec($Indx_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
-			$Indx_ATime = "-"
+			$Indx_ATime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
 			$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
 			$Indx_ATime_Precision = StringRight($Indx_ATime,3)
 		ElseIf $TimestampPrecision = 3 Then
-			$Indx_ATime = $Indx_ATime & ":" & _FillZero(StringRight($Indx_ATime_tmp, 4))
+			$Indx_ATime = $Indx_ATime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_ATime_tmp, 4))
 			$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
 			$Indx_ATime_Precision = StringRight($Indx_ATime,8)
 		Else
@@ -3873,12 +3898,12 @@ Func _Decode_INDX($Entry)
 		$Indx_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_MTime)
 		$Indx_MTime = _WinTime_UTCFileTimeFormat(Dec($Indx_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
-			$Indx_MTime = "-"
+			$Indx_MTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
 			$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
 			$Indx_MTime_Precision = StringRight($Indx_MTime,3)
 		ElseIf $TimestampPrecision = 3 Then
-			$Indx_MTime = $Indx_MTime & ":" & _FillZero(StringRight($Indx_MTime_tmp, 4))
+			$Indx_MTime = $Indx_MTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_MTime_tmp, 4))
 			$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
 			$Indx_MTime_Precision = StringRight($Indx_MTime,8)
 		Else
@@ -3890,12 +3915,12 @@ Func _Decode_INDX($Entry)
 		$Indx_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_RTime)
 		$Indx_RTime = _WinTime_UTCFileTimeFormat(Dec($Indx_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
-			$Indx_RTime = "-"
+			$Indx_RTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
 			$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
 			$Indx_RTime_Precision = StringRight($Indx_RTime,3)
 		ElseIf $TimestampPrecision = 3 Then
-			$Indx_RTime = $Indx_RTime & ":" & _FillZero(StringRight($Indx_RTime_tmp, 4))
+			$Indx_RTime = $Indx_RTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_RTime_tmp, 4))
 			$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
 			$Indx_RTime_Precision = StringRight($Indx_RTime,8)
 		Else
@@ -3953,7 +3978,7 @@ Func _Decode_INDX($Entry)
 		$NextEntryOffset = $NextEntryOffset+164+($Indx_NameLength*2*2)+$PaddingLength+$SubNodeVCNLength
 
 ;		FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
-		If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>"-" And $Indx_ATime<>"-" And $Indx_MTime<>"-" And $Indx_RTime<>"-" Then
+		If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
 			$DecodeOk=True
 			FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
 			$RealMftRef = $PredictedRefNumber
@@ -4003,12 +4028,12 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 	$Indx_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_CTime)
 	$Indx_CTime = _WinTime_UTCFileTimeFormat(Dec($Indx_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_CTime = "-"
+		$Indx_CTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
 		$Indx_CTime_Precision = StringRight($Indx_CTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_CTime = $Indx_CTime & ":" & _FillZero(StringRight($Indx_CTime_tmp, 4))
+		$Indx_CTime = $Indx_CTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_CTime_tmp, 4))
 		$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
 		$Indx_CTime_Precision = StringRight($Indx_CTime,8)
 	Else
@@ -4020,12 +4045,12 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 	$Indx_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_ATime)
 	$Indx_ATime = _WinTime_UTCFileTimeFormat(Dec($Indx_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_ATime = "-"
+		$Indx_ATime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
 		$Indx_ATime_Precision = StringRight($Indx_ATime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_ATime = $Indx_ATime & ":" & _FillZero(StringRight($Indx_ATime_tmp, 4))
+		$Indx_ATime = $Indx_ATime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_ATime_tmp, 4))
 		$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
 		$Indx_ATime_Precision = StringRight($Indx_ATime,8)
 	Else
@@ -4037,12 +4062,12 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 	$Indx_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_MTime)
 	$Indx_MTime = _WinTime_UTCFileTimeFormat(Dec($Indx_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_MTime = "-"
+		$Indx_MTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
 		$Indx_MTime_Precision = StringRight($Indx_MTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_MTime = $Indx_MTime & ":" & _FillZero(StringRight($Indx_MTime_tmp, 4))
+		$Indx_MTime = $Indx_MTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_MTime_tmp, 4))
 		$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
 		$Indx_MTime_Precision = StringRight($Indx_MTime,8)
 	Else
@@ -4054,12 +4079,12 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 	$Indx_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_RTime)
 	$Indx_RTime = _WinTime_UTCFileTimeFormat(Dec($Indx_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_RTime = "-"
+		$Indx_RTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
 		$Indx_RTime_Precision = StringRight($Indx_RTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_RTime = $Indx_RTime & ":" & _FillZero(StringRight($Indx_RTime_tmp, 4))
+		$Indx_RTime = $Indx_RTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_RTime_tmp, 4))
 		$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
 		$Indx_RTime_Precision = StringRight($Indx_RTime,8)
 	Else
@@ -4116,7 +4141,7 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 ;$SI_MTime & $de & $SI_RTime & $de & $SI_FilePermission & $de & $SI_MaxVersions & $de & $SI_VersionNumber & $de & $SI_ClassID & $de & $SI_SecurityID & $de & $SI_QuotaCharged & $de & $SI_USN & $de & $SI_PartialValue & $de & $FN_CTime & $de & $FN_ATime & $de &
 ;$FN_MTime & $de & $FN_RTime & $de & $FN_AllocSize & $de & $FN_RealSize & $de & $FN_Flags & $de & $DT_StartVCN & $de & $DT_LastVCN & $de & $DT_ComprUnitSize & $de & $DT_AllocSize & $de & $DT_RealSize & $de & $DT_InitStreamSize & $de & $DT_DataRuns & $de &
 ;$DT_Name & $de & $TextInformation & $de & $RedoChunkSize & $de & $UndoChunkSize & @crlf)
-	If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0 And $Indx_CTime<>"-" And $Indx_ATime<>"-" And $Indx_MTime<>"-" And $Indx_RTime<>"-" Then
+	If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0 And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
 		if $IsRedo Then
 			FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
 			If Not $FromRcrdSlack Then
@@ -4919,18 +4944,18 @@ Func _Decode_StandardInformation($Attribute)
 				$LowEnd_SI_XTime_Fragment_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $LowEnd_SI_XTime_Fragment)
 				$LowEnd_SI_XTime_Fragment = _WinTime_UTCFileTimeFormat(Dec($LowEnd_SI_XTime_Fragment,2) - $tDelta, $DateTimeFormat, 3)
 				If @error Then
-					$LowEnd_SI_XTime_Fragment = "-"
+					$LowEnd_SI_XTime_Fragment = $TimestampErrorVal
 				Else
-					$LowEnd_SI_XTime_Fragment = $LowEnd_SI_XTime_Fragment & ":" & _FillZero(StringRight($LowEnd_SI_XTime_Fragment_tmp, 4))
+					$LowEnd_SI_XTime_Fragment = $LowEnd_SI_XTime_Fragment & $PrecisionSeparator2 & _FillZero(StringRight($LowEnd_SI_XTime_Fragment_tmp, 4))
 				EndIf
 				;Decode the high end timestamp of range
 				$HighEnd_SI_XTime_Fragment = _SwapEndian($HighBytes & $SI_XTime_Fragment)
 				$HighEnd_SI_XTime_Fragment_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $HighEnd_SI_XTime_Fragment)
 				$HighEnd_SI_XTime_Fragment = _WinTime_UTCFileTimeFormat(Dec($HighEnd_SI_XTime_Fragment,2) - $tDelta, $DateTimeFormat, 3)
 				If @error Then
-					$HighEnd_SI_XTime_Fragment = "-"
+					$HighEnd_SI_XTime_Fragment = $TimestampErrorVal
 				Else
-					$HighEnd_SI_XTime_Fragment = $HighEnd_SI_XTime_Fragment & ":" & _FillZero(StringRight($HighEnd_SI_XTime_Fragment_tmp, 4))
+					$HighEnd_SI_XTime_Fragment = $HighEnd_SI_XTime_Fragment & $PrecisionSeparator2 & _FillZero(StringRight($HighEnd_SI_XTime_Fragment_tmp, 4))
 				EndIf
 				_DumpOutput("The decoded timestamps for the above range " & $LowEnd_SI_XTime_Fragment & " - " & $HighEnd_SI_XTime_Fragment & @CRLF)
 				_DumpOutput("The replacement values are always 00's. That is the timestamp in the low end of the range." & @CRLF)
@@ -4952,12 +4977,12 @@ Func _Decode_StandardInformation($Attribute)
 			$SI_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_CTime)
 			$SI_CTime = _WinTime_UTCFileTimeFormat(Dec($SI_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$SI_CTime = "-"
+				$SI_CTime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
 				$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-4)
 				$SI_CTime_Precision = StringRight($SI_CTime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$SI_CTime = $SI_CTime & ":" & _FillZero(StringRight($SI_CTime_tmp, 4))
+				$SI_CTime = $SI_CTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_CTime_tmp, 4))
 				$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-9)
 				$SI_CTime_Precision = StringRight($SI_CTime,8)
 			Else
@@ -4978,12 +5003,12 @@ Func _Decode_StandardInformation($Attribute)
 			$SI_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_ATime)
 			$SI_ATime = _WinTime_UTCFileTimeFormat(Dec($SI_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$SI_ATime = "-"
+				$SI_ATime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
 				$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-4)
 				$SI_ATime_Precision = StringRight($SI_ATime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$SI_ATime = $SI_ATime & ":" & _FillZero(StringRight($SI_ATime_tmp, 4))
+				$SI_ATime = $SI_ATime & $PrecisionSeparator2 & _FillZero(StringRight($SI_ATime_tmp, 4))
 				$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-9)
 				$SI_ATime_Precision = StringRight($SI_ATime,8)
 			Else
@@ -5004,12 +5029,12 @@ Func _Decode_StandardInformation($Attribute)
 			$SI_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_MTime)
 			$SI_MTime = _WinTime_UTCFileTimeFormat(Dec($SI_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$SI_MTime = "-"
+				$SI_MTime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
 				$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-4)
 				$SI_MTime_Precision = StringRight($SI_MTime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$SI_MTime = $SI_MTime & ":" & _FillZero(StringRight($SI_MTime_tmp, 4))
+				$SI_MTime = $SI_MTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_MTime_tmp, 4))
 				$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-9)
 				$SI_MTime_Precision = StringRight($SI_MTime,8)
 			Else
@@ -5030,12 +5055,12 @@ Func _Decode_StandardInformation($Attribute)
 			$SI_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_RTime)
 			$SI_RTime = _WinTime_UTCFileTimeFormat(Dec($SI_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$SI_RTime = "-"
+				$SI_RTime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
 				$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-4)
 				$SI_RTime_Precision = StringRight($SI_RTime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$SI_RTime = $SI_RTime & ":" & _FillZero(StringRight($SI_RTime_tmp, 4))
+				$SI_RTime = $SI_RTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_RTime_tmp, 4))
 				$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-9)
 				$SI_RTime_Precision = StringRight($SI_RTime,8)
 			Else
@@ -5054,50 +5079,50 @@ Func _Decode_StandardInformation($Attribute)
 				$SI_MaxVersions = StringMid($Attribute, $SI_Offset + 120, 8)
 				$SI_MaxVersions = Dec(_SwapEndian($SI_MaxVersions),2)
 			Else
-				$SI_MaxVersions = "-"
+				$SI_MaxVersions = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 88 Then
 				$SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
 				$SI_VersionNumber = Dec(_SwapEndian($SI_VersionNumber),2)
 			Else
-				$SI_VersionNumber = "-"
+				$SI_VersionNumber = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 96 Then
 				$SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
 				$SI_ClassID = Dec(_SwapEndian($SI_ClassID),2)
 			Else
-				$SI_ClassID = "-"
+				$SI_ClassID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 104 Then
 				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
 				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
 			Else
-				$SI_OwnerID = "-"
+				$SI_OwnerID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 112 Then
 				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
 				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
 			Else
-				$SI_SecurityID = "-"
+				$SI_SecurityID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 128 Then
 				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
 				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = "-"
+				$SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 144 Then
 				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
 				$SI_USN = Dec(_SwapEndian($SI_USN),2)
 			Else
-				$SI_USN = "-"
+				$SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 56 And $attribute_offset < 60
 			$SI_Offset = 1-112
-			$SI_CTime = "-"
-			$SI_ATime = "-"
-			$SI_MTime = "-"
-			$SI_RTime = "-"
+			$SI_CTime = $TimestampErrorVal
+			$SI_ATime = $TimestampErrorVal
+			$SI_MTime = $TimestampErrorVal
+			$SI_RTime = $TimestampErrorVal
 			If $attribute_offset = 56 Then
 				$SI_FilePermission = StringMid($Attribute, $SI_Offset + 112, 8)
 				$SI_FilePermission = _SwapEndian($SI_FilePermission)
@@ -5116,56 +5141,56 @@ Func _Decode_StandardInformation($Attribute)
 				$SI_MaxVersions = StringMid($Attribute, $SI_Offset + 120, 8)
 				$SI_MaxVersions = Dec(_SwapEndian($SI_MaxVersions),2)
 			Else
-				$SI_MaxVersions = "-"
+				$SI_MaxVersions = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 24 Then
 				$SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
 				$SI_VersionNumber = Dec(_SwapEndian($SI_VersionNumber),2)
 			Else
-				$SI_VersionNumber = "-"
+				$SI_VersionNumber = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 32 Then
 				$SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
 				$SI_ClassID = Dec(_SwapEndian($SI_ClassID),2)
 			Else
-				$SI_ClassID = "-"
+				$SI_ClassID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 40 Then
 				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
 				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
 			Else
-				$SI_OwnerID = "-"
+				$SI_OwnerID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 48 Then
 				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
 				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
 			Else
-				$SI_SecurityID = "-"
+				$SI_SecurityID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 64 Then
 				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
 				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = "-"
+				$SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 80 Then
 				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
 				$SI_USN = Dec(_SwapEndian($SI_USN),2)
 			Else
-				$SI_USN = "-"
+				$SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 60 And $attribute_offset < 64
 			$SI_Offset = 1-120
-			$SI_CTime = "-"
-			$SI_ATime = "-"
-			$SI_MTime = "-"
-			$SI_RTime = "-"
+			$SI_CTime = $TimestampErrorVal
+			$SI_ATime = $TimestampErrorVal
+			$SI_MTime = $TimestampErrorVal
+			$SI_RTime = $TimestampErrorVal
 			$SI_FilePermission = "-"
 			If $attribute_offset = 60 Then
 				$SI_MaxVersions = StringMid($Attribute, $SI_Offset + 120, 8)
 				$SI_MaxVersions = Dec(_SwapEndian($SI_MaxVersions),2)
 			Else
-				$SI_MaxVersions = "PARTIAL VALUE"
+				$SI_MaxVersions = $IntegerPartialValReplacement
 				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 120, 8 - ($attribute_offset-60)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-60
@@ -5177,51 +5202,51 @@ Func _Decode_StandardInformation($Attribute)
 				$SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
 				$SI_VersionNumber = Dec(_SwapEndian($SI_VersionNumber),2)
 			Else
-				$SI_VersionNumber = "-"
+				$SI_VersionNumber = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 24 Then
 				$SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
 				$SI_ClassID = Dec(_SwapEndian($SI_ClassID),2)
 			Else
-				$SI_ClassID = "-"
+				$SI_ClassID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 32 Then
 				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
 				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
 			Else
-				$SI_OwnerID = "-"
+				$SI_OwnerID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 40 Then
 				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
 				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
 			Else
-				$SI_SecurityID = "-"
+				$SI_SecurityID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 56 Then
 				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
 				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = "-"
+				$SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 80 Then
 				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
 				$SI_USN = Dec(_SwapEndian($SI_USN),2)
 			Else
-				$SI_USN = "-"
+				$SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 64 And $attribute_offset < 68
 			$SI_Offset = 1-128
-			$SI_CTime = "-"
-			$SI_ATime = "-"
-			$SI_MTime = "-"
-			$SI_RTime = "-"
+			$SI_CTime = $TimestampErrorVal
+			$SI_ATime = $TimestampErrorVal
+			$SI_MTime = $TimestampErrorVal
+			$SI_RTime = $TimestampErrorVal
 			$SI_FilePermission = "-"
-			$SI_MaxVersions = "-"
+			$SI_MaxVersions = $IntegerErrorVal
 			If $attribute_offset = 64 Then
 				$SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
 				$SI_VersionNumber = Dec(_SwapEndian($SI_VersionNumber),2)
 			Else
-				$SI_VersionNumber = "PARTIAL VALUE"
+				$SI_VersionNumber = $IntegerPartialValReplacement
 				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 128, 8 - ($attribute_offset-64)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-64
@@ -5233,46 +5258,46 @@ Func _Decode_StandardInformation($Attribute)
 				$SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
 				$SI_ClassID = Dec(_SwapEndian($SI_ClassID),2)
 			Else
-				$SI_ClassID = "-"
+				$SI_ClassID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 24 Then
 				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
 				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
 			Else
-				$SI_OwnerID = "-"
+				$SI_OwnerID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 32 Then
 				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
 				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
 			Else
-				$SI_SecurityID = "-"
+				$SI_SecurityID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 48 Then
 				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
 				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = "-"
+				$SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 64 Then
 				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
 				$SI_USN = Dec(_SwapEndian($SI_USN),2)
 			Else
-				$SI_USN = "-"
+				$SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 68 And $attribute_offset < 72
 			$SI_Offset = 1-136
-			$SI_CTime = "-"
-			$SI_ATime = "-"
-			$SI_MTime = "-"
-			$SI_RTime = "-"
+			$SI_CTime = $TimestampErrorVal
+			$SI_ATime = $TimestampErrorVal
+			$SI_MTime = $TimestampErrorVal
+			$SI_RTime = $TimestampErrorVal
 			$SI_FilePermission = "-"
-			$SI_MaxVersions = "-"
-			$SI_VersionNumber = "-"
+			$SI_MaxVersions = $IntegerErrorVal
+			$SI_VersionNumber = $IntegerErrorVal
 			If $attribute_offset = 68 Then
 				$SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
 				$SI_ClassID = Dec(_SwapEndian($SI_ClassID),2)
 			Else
-				$SI_ClassID = "PARTIAL VALUE"
+				$SI_ClassID = $IntegerPartialValReplacement
 				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 136, 8 - ($attribute_offset-68)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-68
@@ -5284,41 +5309,41 @@ Func _Decode_StandardInformation($Attribute)
 				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
 				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
 			Else
-				$SI_OwnerID = "-"
+				$SI_OwnerID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 24 Then
 				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
 				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
 			Else
-				$SI_SecurityID = "-"
+				$SI_SecurityID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 40 Then
 				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
 				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = "-"
+				$SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 56 Then
 				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
 				$SI_USN = Dec(_SwapEndian($SI_USN),2)
 			Else
-				$SI_USN = "-"
+				$SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 72 And $attribute_offset < 76
 			$SI_Offset = 1-144
-			$SI_CTime = "-"
-			$SI_ATime = "-"
-			$SI_MTime = "-"
-			$SI_RTime = "-"
+			$SI_CTime = $TimestampErrorVal
+			$SI_ATime = $TimestampErrorVal
+			$SI_MTime = $TimestampErrorVal
+			$SI_RTime = $TimestampErrorVal
 			$SI_FilePermission = "-"
-			$SI_MaxVersions = "-"
-			$SI_VersionNumber = "-"
-			$SI_ClassID = "-"
+			$SI_MaxVersions = $IntegerErrorVal
+			$SI_VersionNumber = $IntegerErrorVal
+			$SI_ClassID = $IntegerErrorVal
 			If $attribute_offset = 72 Then
 				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
 				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
 			Else
-				$SI_OwnerID = "PARTIAL VALUE"
+				$SI_OwnerID = $IntegerPartialValReplacement
 				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 144, 8 - ($attribute_offset-72)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-72
@@ -5330,36 +5355,36 @@ Func _Decode_StandardInformation($Attribute)
 				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
 				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
 			Else
-				$SI_SecurityID = "-"
+				$SI_SecurityID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 32 Then
 				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
 				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = "-"
+				$SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 48 Then
 				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
 				$SI_USN = Dec(_SwapEndian($SI_USN),2)
 			Else
-				$SI_USN = "-"
+				$SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 76 And $attribute_offset < 80
 			$SI_Offset = 1-152
-			$SI_CTime = "-"
-			$SI_ATime = "-"
-			$SI_MTime = "-"
-			$SI_RTime = "-"
+			$SI_CTime = $TimestampErrorVal
+			$SI_ATime = $TimestampErrorVal
+			$SI_MTime = $TimestampErrorVal
+			$SI_RTime = $TimestampErrorVal
 			$SI_FilePermission = "-"
-			$SI_MaxVersions = "-"
-			$SI_VersionNumber = "-"
-			$SI_ClassID = "-"
-			$SI_OwnerID = "-"
+			$SI_MaxVersions = $IntegerErrorVal
+			$SI_VersionNumber = $IntegerErrorVal
+			$SI_ClassID = $IntegerErrorVal
+			$SI_OwnerID = $IntegerErrorVal
 			If $attribute_offset = 76 Then
 				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
 				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
 			Else
-				$SI_SecurityID = "PARTIAL VALUE"
+				$SI_SecurityID = $IntegerPartialValReplacement
 				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 152, 8 - ($attribute_offset-76)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-76
@@ -5371,31 +5396,31 @@ Func _Decode_StandardInformation($Attribute)
 				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
 				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = "-"
+				$SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 40 Then
 				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
 				$SI_USN = Dec(_SwapEndian($SI_USN),2)
 			Else
-				$SI_USN = "-"
+				$SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 80 And $attribute_offset < 88
 			$SI_Offset = 1-160
-			$SI_CTime = "-"
-			$SI_ATime = "-"
-			$SI_MTime = "-"
-			$SI_RTime = "-"
+			$SI_CTime = $TimestampErrorVal
+			$SI_ATime = $TimestampErrorVal
+			$SI_MTime = $TimestampErrorVal
+			$SI_RTime = $TimestampErrorVal
 			$SI_FilePermission = "-"
-			$SI_MaxVersions = "-"
-			$SI_VersionNumber = "-"
-			$SI_ClassID = "-"
-			$SI_OwnerID = "-"
-			$SI_SecurityID = "-"
+			$SI_MaxVersions = $IntegerErrorVal
+			$SI_VersionNumber = $IntegerErrorVal
+			$SI_ClassID = $IntegerErrorVal
+			$SI_OwnerID = $IntegerErrorVal
+			$SI_SecurityID = $IntegerErrorVal
 			If $attribute_offset = 80 Then
 				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
 				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = "PARTIAL VALUE"
+				$SI_QuotaCharged = $IntegerPartialValReplacement
 				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 160, 16 - ($attribute_offset-80)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-80
@@ -5407,30 +5432,30 @@ Func _Decode_StandardInformation($Attribute)
 				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
 				$SI_USN = Dec(_SwapEndian($SI_USN),2)
 			Else
-				$SI_USN = "-"
+				$SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 88 And $attribute_offset < 95
 			$SI_Offset = 1-176
-			$SI_CTime = "-"
-			$SI_ATime = "-"
-			$SI_MTime = "-"
-			$SI_RTime = "-"
+			$SI_CTime = $TimestampErrorVal
+			$SI_ATime = $TimestampErrorVal
+			$SI_MTime = $TimestampErrorVal
+			$SI_RTime = $TimestampErrorVal
 			$SI_FilePermission = "-"
-			$SI_MaxVersions = "-"
-			$SI_VersionNumber = "-"
-			$SI_ClassID = "-"
-			$SI_OwnerID = "-"
-			$SI_SecurityID = "-"
-			$SI_QuotaCharged = "-"
+			$SI_MaxVersions = $IntegerErrorVal
+			$SI_VersionNumber = $IntegerErrorVal
+			$SI_ClassID = $IntegerErrorVal
+			$SI_OwnerID = $IntegerErrorVal
+			$SI_SecurityID = $IntegerErrorVal
+			$SI_QuotaCharged = $IntegerErrorVal
 			If $attribute_offset = 88 Then
 				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
 				$SI_USN = Dec(_SwapEndian($SI_USN),2)
 			Else
-				$SI_USN = "PARTIAL VALUE"
+				$SI_USN = $IntegerPartialValReplacement
 				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 176, 16 - ($attribute_offset-88)*2)
 			EndIf
 		EndSelect
-	If $SI_USN <> "-" Then _WriteLogFileDataRunsCsv()
+	If $SI_USN <> $IntegerErrorVal Then _WriteLogFileDataRunsCsv()
 	If $VerboseOn Then
 		_DumpOutput("The rebuilt $STANDARD_INFORMATION: " & @CRLF)
 		_DumpOutput(_HexEncode("0x"&$Attribute) & @CRLF)
@@ -5459,12 +5484,12 @@ Func _Decode_FileName($attribute)
 	;
 	$SI_CTime = _WinTime_UTCFileTimeFormat(Dec($SI_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$SI_CTime = "-"
+		$SI_CTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-4)
 		$SI_CTime_Precision = StringRight($SI_CTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$SI_CTime = $SI_CTime & ":" & _FillZero(StringRight($SI_CTime_tmp, 4))
+		$SI_CTime = $SI_CTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_CTime_tmp, 4))
 		$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-9)
 		$SI_CTime_Precision = StringRight($SI_CTime,8)
 	Else
@@ -5477,12 +5502,12 @@ Func _Decode_FileName($attribute)
 	;
 	$SI_ATime = _WinTime_UTCFileTimeFormat(Dec($SI_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$SI_ATime = "-"
+		$SI_ATime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-4)
 		$SI_ATime_Precision = StringRight($SI_ATime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$SI_ATime = $SI_ATime & ":" & _FillZero(StringRight($SI_ATime_tmp, 4))
+		$SI_ATime = $SI_ATime & $PrecisionSeparator2 & _FillZero(StringRight($SI_ATime_tmp, 4))
 		$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-9)
 		$SI_ATime_Precision = StringRight($SI_ATime,8)
 	Else
@@ -5495,12 +5520,12 @@ Func _Decode_FileName($attribute)
 	;
 	$SI_MTime = _WinTime_UTCFileTimeFormat(Dec($SI_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$SI_MTime = "-"
+		$SI_MTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-4)
 		$SI_MTime_Precision = StringRight($SI_MTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$SI_MTime = $SI_MTime & ":" & _FillZero(StringRight($SI_MTime_tmp, 4))
+		$SI_MTime = $SI_MTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_MTime_tmp, 4))
 		$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-9)
 		$SI_MTime_Precision = StringRight($SI_MTime,8)
 	Else
@@ -5513,12 +5538,12 @@ Func _Decode_FileName($attribute)
 	;
 	$SI_RTime = _WinTime_UTCFileTimeFormat(Dec($SI_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$SI_RTime = "-"
+		$SI_RTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-4)
 		$SI_RTime_Precision = StringRight($SI_RTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$SI_RTime = $SI_RTime & ":" & _FillZero(StringRight($SI_RTime_tmp, 4))
+		$SI_RTime = $SI_RTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_RTime_tmp, 4))
 		$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-9)
 		$SI_RTime_Precision = StringRight($SI_RTime,8)
 	Else
@@ -5563,9 +5588,9 @@ Func _DecodeTimestamp($StampDecode)
 	$StampDecode_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $StampDecode)
 	$StampDecode = _WinTime_UTCFileTimeFormat(Dec($StampDecode,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$StampDecode = "-"
+		$StampDecode = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 3 Then
-		$StampDecode = $StampDecode & ":" & _FillZero(StringRight($StampDecode_tmp, 4))
+		$StampDecode = $StampDecode & $PrecisionSeparator2 & _FillZero(StringRight($StampDecode_tmp, 4))
 	EndIf
 	Return $StampDecode
 EndFunc
@@ -5827,6 +5852,11 @@ Func _PrepareOutput()
 		Exit
 	EndIf
 	_DebugOut("Created output file: " & $LogFileCsvFile)
+
+	$LogFileSqlFile = $ParserOutDir & "\LogFile.sql"
+	FileInstall("C:\temp\import-csv-logfile.sql", $LogFileSqlFile)
+	_DebugOut("Created output file: " & $LogFileSqlFile)
+
 	$LogFileIndxCsvfile = $ParserOutDir & "\LogFile_INDX_I30.csv"
 	$LogFileIndxCsv = FileOpen($LogFileIndxCsvfile, $EncodingWhenOpen)
 	If @error Then
@@ -6420,9 +6450,9 @@ Func _TranslateTimestamp()
 	$lTimestampTmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ExampleTimestampVal)
 	$lTimestamp = _WinTime_UTCFileTimeFormat(Dec($ExampleTimestampVal,2), $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$lTimestamp = "-"
+		$lTimestamp = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 3 Then
-		$lTimestamp = $lTimestamp & ":" & _FillZero(StringRight($lTimestampTmp, 4))
+		$lTimestamp = $lTimestamp & $PrecisionSeparator2 & _FillZero(StringRight($lTimestampTmp, 4))
 	EndIf
 	GUICtrlSetData($InputExampleTimestamp,$lTimestamp)
 EndFunc
@@ -6520,12 +6550,12 @@ Func _Decode_UndoWipeINDX($Entry)
 	$Indx_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_CTime)
 	$Indx_CTime = _WinTime_UTCFileTimeFormat(Dec($Indx_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_CTime = "-"
+		$Indx_CTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
 		$Indx_CTime_Precision = StringRight($Indx_CTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_CTime = $Indx_CTime & ":" & _FillZero(StringRight($Indx_CTime_tmp, 4))
+		$Indx_CTime = $Indx_CTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_CTime_tmp, 4))
 		$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
 		$Indx_CTime_Precision = StringRight($Indx_CTime,8)
 	Else
@@ -6537,12 +6567,12 @@ Func _Decode_UndoWipeINDX($Entry)
 	$Indx_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_ATime)
 	$Indx_ATime = _WinTime_UTCFileTimeFormat(Dec($Indx_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_ATime = "-"
+		$Indx_ATime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
 		$Indx_ATime_Precision = StringRight($Indx_ATime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_ATime = $Indx_ATime & ":" & _FillZero(StringRight($Indx_ATime_tmp, 4))
+		$Indx_ATime = $Indx_ATime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_ATime_tmp, 4))
 		$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
 		$Indx_ATime_Precision = StringRight($Indx_ATime,8)
 	Else
@@ -6554,12 +6584,12 @@ Func _Decode_UndoWipeINDX($Entry)
 	$Indx_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_MTime)
 	$Indx_MTime = _WinTime_UTCFileTimeFormat(Dec($Indx_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_MTime = "-"
+		$Indx_MTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
 		$Indx_MTime_Precision = StringRight($Indx_MTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_MTime = $Indx_MTime & ":" & _FillZero(StringRight($Indx_MTime_tmp, 4))
+		$Indx_MTime = $Indx_MTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_MTime_tmp, 4))
 		$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
 		$Indx_MTime_Precision = StringRight($Indx_MTime,8)
 	Else
@@ -6571,12 +6601,12 @@ Func _Decode_UndoWipeINDX($Entry)
 	$Indx_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_RTime)
 	$Indx_RTime = _WinTime_UTCFileTimeFormat(Dec($Indx_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 	If @error Then
-		$Indx_RTime = "-"
+		$Indx_RTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
 		$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
 		$Indx_RTime_Precision = StringRight($Indx_RTime,3)
 	ElseIf $TimestampPrecision = 3 Then
-		$Indx_RTime = $Indx_RTime & ":" & _FillZero(StringRight($Indx_RTime_tmp, 4))
+		$Indx_RTime = $Indx_RTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_RTime_tmp, 4))
 		$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
 		$Indx_RTime_Precision = StringRight($Indx_RTime,8)
 	Else
@@ -6630,7 +6660,7 @@ Func _Decode_UndoWipeINDX($Entry)
 	EndIf
 
 ;	FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
-	If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>"-" And $Indx_ATime<>"-" And $Indx_MTime<>"-" And $Indx_RTime<>"-" Then
+	If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
 		$DecodeOk=True
 		FileWriteLine($LogFileUndoWipeIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
 		$PredictedRefNumber = $MFTReferenceOfParent
@@ -6667,12 +6697,12 @@ Func _Decode_UndoWipeINDX($Entry)
 		$Indx_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_CTime)
 		$Indx_CTime = _WinTime_UTCFileTimeFormat(Dec($Indx_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
-			$Indx_CTime = "-"
+			$Indx_CTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
 			$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
 			$Indx_CTime_Precision = StringRight($Indx_CTime,3)
 		ElseIf $TimestampPrecision = 3 Then
-			$Indx_CTime = $Indx_CTime & ":" & _FillZero(StringRight($Indx_CTime_tmp, 4))
+			$Indx_CTime = $Indx_CTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_CTime_tmp, 4))
 			$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
 			$Indx_CTime_Precision = StringRight($Indx_CTime,8)
 		Else
@@ -6684,12 +6714,12 @@ Func _Decode_UndoWipeINDX($Entry)
 		$Indx_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_ATime)
 		$Indx_ATime = _WinTime_UTCFileTimeFormat(Dec($Indx_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
-			$Indx_ATime = "-"
+			$Indx_ATime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
 			$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
 			$Indx_ATime_Precision = StringRight($Indx_ATime,3)
 		ElseIf $TimestampPrecision = 3 Then
-			$Indx_ATime = $Indx_ATime & ":" & _FillZero(StringRight($Indx_ATime_tmp, 4))
+			$Indx_ATime = $Indx_ATime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_ATime_tmp, 4))
 			$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
 			$Indx_ATime_Precision = StringRight($Indx_ATime,8)
 		Else
@@ -6701,12 +6731,12 @@ Func _Decode_UndoWipeINDX($Entry)
 		$Indx_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_MTime)
 		$Indx_MTime = _WinTime_UTCFileTimeFormat(Dec($Indx_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
-			$Indx_MTime = "-"
+			$Indx_MTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
 			$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
 			$Indx_MTime_Precision = StringRight($Indx_MTime,3)
 		ElseIf $TimestampPrecision = 3 Then
-			$Indx_MTime = $Indx_MTime & ":" & _FillZero(StringRight($Indx_MTime_tmp, 4))
+			$Indx_MTime = $Indx_MTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_MTime_tmp, 4))
 			$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
 			$Indx_MTime_Precision = StringRight($Indx_MTime,8)
 		Else
@@ -6718,12 +6748,12 @@ Func _Decode_UndoWipeINDX($Entry)
 		$Indx_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_RTime)
 		$Indx_RTime = _WinTime_UTCFileTimeFormat(Dec($Indx_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
-			$Indx_RTime = "-"
+			$Indx_RTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
 			$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
 			$Indx_RTime_Precision = StringRight($Indx_RTime,3)
 		ElseIf $TimestampPrecision = 3 Then
-			$Indx_RTime = $Indx_RTime & ":" & _FillZero(StringRight($Indx_RTime_tmp, 4))
+			$Indx_RTime = $Indx_RTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_RTime_tmp, 4))
 			$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
 			$Indx_RTime_Precision = StringRight($Indx_RTime,8)
 		Else
@@ -6781,7 +6811,7 @@ Func _Decode_UndoWipeINDX($Entry)
 		$NextEntryOffset = $NextEntryOffset+164+($Indx_NameLength*2*2)+$PaddingLength+$SubNodeVCNLength
 
 ;		FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
-		If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>"-" And $Indx_ATime<>"-" And $Indx_MTime<>"-" And $Indx_RTime<>"-" Then
+		If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
 			$DecodeOk=True
 			FileWriteLine($LogFileUndoWipeIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
 			$PredictedRefNumber = $MFTReferenceOfParent
@@ -6848,7 +6878,7 @@ Func _UsnDecodeRecord2($Record)
 		_DumpOutput("$UsnJrnlFileName: " & $UsnJrnlFileName & @CRLF)
 	EndIf
 ;	If Int($UsnJrnlFileReferenceNumber) > 0 And Int($UsnJrnlMFTReferenceSeqNo) > 0 And Int($UsnJrnlParentFileReferenceNumber) > 4 And $UsnJrnlFileNameLength > 0  And $UsnJrnlTimestamp<>"-" And StringInStr($UsnJrnlTimestamp,"1601")=0 Then
-	If Int($UsnJrnlFileReferenceNumber) > 0 And Int($UsnJrnlMFTReferenceSeqNo) > 0 And Int($UsnJrnlParentFileReferenceNumber) > 4 And $UsnJrnlFileNameLength > 0  And $UsnJrnlTimestamp<>"-" Then
+	If Int($UsnJrnlFileReferenceNumber) > 0 And Int($UsnJrnlMFTReferenceSeqNo) > 0 And Int($UsnJrnlParentFileReferenceNumber) > 4 And $UsnJrnlFileNameLength > 0  And $UsnJrnlTimestamp<>$TimestampErrorVal Then
 		$DecodeOk=True
 		FileWriteLine($LogFileUsnJrnlCsv, $UsnJrnlFileName&$de&$UsnJrnlUsn&$de&$UsnJrnlTimestamp&$de&$UsnJrnlReason&$de&$UsnJrnlFileReferenceNumber&$de&$UsnJrnlMFTReferenceSeqNo&$de&$UsnJrnlParentFileReferenceNumber&$de&$UsnJrnlParentReferenceSeqNo&$de&$UsnJrnlFileAttributes&$de&$UsnJrnlMajorVersion&$de&$UsnJrnlMinorVersion&$de&$UsnJrnlSourceInfo&$de&$UsnJrnlSecurityId&@crlf)
 		$RealMftRef = $PredictedRefNumber
@@ -6923,6 +6953,7 @@ Func _SetNameOnSystemFiles()
 			$FN_Name = "$ObjId"
 		Case $LocalRef = 26
 			$FN_Name = "$Reparse"
+		#cs
 		Case $LocalRef = 27
 			If Not $IsNt5x Then $FN_Name = "$RmMetadata"
 		Case $LocalRef = 28
@@ -6933,6 +6964,7 @@ Func _SetNameOnSystemFiles()
 			If Not $IsNt5x Then $FN_Name = "$Txf"
 		Case $LocalRef = 31
 			If Not $IsNt5x Then $FN_Name = "$Tops"
+		#ce
 	EndSelect
 EndFunc
 
@@ -8451,12 +8483,12 @@ Func _Decode_Quota_Q($InputData,$IsRedo)
 		$ChangeTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ChangeTime)
 		$ChangeTime = _WinTime_UTCFileTimeFormat(Dec($ChangeTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
-			$ChangeTime = "-"
+			$ChangeTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
 			$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-4)
 			$ChangeTime_Precision = StringRight($ChangeTime,3)
 		ElseIf $TimestampPrecision = 3 Then
-			$ChangeTime = $ChangeTime & ":" & _FillZero(StringRight($ChangeTime_tmp, 4))
+			$ChangeTime = $ChangeTime & $PrecisionSeparator2 & _FillZero(StringRight($ChangeTime_tmp, 4))
 			$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-9)
 			$ChangeTime_Precision = StringRight($ChangeTime,8)
 		Else
@@ -8477,12 +8509,12 @@ Func _Decode_Quota_Q($InputData,$IsRedo)
 			$ExceededTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ExceededTime)
 			$ExceededTime = _WinTime_UTCFileTimeFormat(Dec($ExceededTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$ExceededTime = "-"
+				$ExceededTime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
 				$ExceededTime_Core = StringMid($ExceededTime,1,StringLen($ExceededTime)-4)
 				$ExceededTime_Precision = StringRight($ExceededTime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$ExceededTime = $ExceededTime & ":" & _FillZero(StringRight($ExceededTime_tmp, 4))
+				$ExceededTime = $ExceededTime & $PrecisionSeparator2 & _FillZero(StringRight($ExceededTime_tmp, 4))
 				$ExceededTime_Core = StringMid($ExceededTime,1,StringLen($ExceededTime)-9)
 				$ExceededTime_Precision = StringRight($ExceededTime,8)
 			Else
@@ -10373,12 +10405,12 @@ Func _Decode_Quota_Q_SingleEntry($InputData,$IsRedo)
 			$ChangeTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ChangeTime)
 			$ChangeTime = _WinTime_UTCFileTimeFormat(Dec($ChangeTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$ChangeTime = "-"
+				$ChangeTime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
 				$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-4)
 				$ChangeTime_Precision = StringRight($ChangeTime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$ChangeTime = $ChangeTime & ":" & _FillZero(StringRight($ChangeTime_tmp, 4))
+				$ChangeTime = $ChangeTime & $PrecisionSeparator2 & _FillZero(StringRight($ChangeTime_tmp, 4))
 				$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-9)
 				$ChangeTime_Precision = StringRight($ChangeTime,8)
 			Else
@@ -10400,12 +10432,12 @@ Func _Decode_Quota_Q_SingleEntry($InputData,$IsRedo)
 				$ExceededTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ExceededTime)
 				$ExceededTime = _WinTime_UTCFileTimeFormat(Dec($ExceededTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 				If @error Then
-					$ExceededTime = "-"
+					$ExceededTime = $TimestampErrorVal
 				ElseIf $TimestampPrecision = 2 Then
 					$ExceededTime_Core = StringMid($ExceededTime,1,StringLen($ExceededTime)-4)
 					$ExceededTime_Precision = StringRight($ExceededTime,3)
 				ElseIf $TimestampPrecision = 3 Then
-					$ExceededTime = $ExceededTime & ":" & _FillZero(StringRight($ExceededTime_tmp, 4))
+					$ExceededTime = $ExceededTime & $PrecisionSeparator2 & _FillZero(StringRight($ExceededTime_tmp, 4))
 					$ExceededTime_Core = StringMid($ExceededTime,1,StringLen($ExceededTime)-9)
 					$ExceededTime_Precision = StringRight($ExceededTime,8)
 				Else
@@ -10420,12 +10452,12 @@ Func _Decode_Quota_Q_SingleEntry($InputData,$IsRedo)
 			$ChangeTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ChangeTime)
 			$ChangeTime = _WinTime_UTCFileTimeFormat(Dec($ChangeTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$ChangeTime = "-"
+				$ChangeTime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
 				$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-4)
 				$ChangeTime_Precision = StringRight($ChangeTime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$ChangeTime = $ChangeTime & ":" & _FillZero(StringRight($ChangeTime_tmp, 4))
+				$ChangeTime = $ChangeTime & $PrecisionSeparator2 & _FillZero(StringRight($ChangeTime_tmp, 4))
 				$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-9)
 				$ChangeTime_Precision = StringRight($ChangeTime,8)
 			Else
@@ -10439,19 +10471,19 @@ Func _Decode_Quota_Q_SingleEntry($InputData,$IsRedo)
 			$HardLimit = StringMid($InputData, $StartOffset + 64, 16)
 			$HardLimit = "0x" & _SwapEndian($HardLimit)
 
-			$ExceededTime = "-"
+			$ExceededTime = $TimestampErrorVal
 		Case $InputDataSize = 64
 			$ChangeTime = StringMid($InputData, $StartOffset + 32, 16)
 			$ChangeTime = _SwapEndian($ChangeTime)
 			$ChangeTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ChangeTime)
 			$ChangeTime = _WinTime_UTCFileTimeFormat(Dec($ChangeTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$ChangeTime = "-"
+				$ChangeTime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
 				$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-4)
 				$ChangeTime_Precision = StringRight($ChangeTime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$ChangeTime = $ChangeTime & ":" & _FillZero(StringRight($ChangeTime_tmp, 4))
+				$ChangeTime = $ChangeTime & $PrecisionSeparator2 & _FillZero(StringRight($ChangeTime_tmp, 4))
 				$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-9)
 				$ChangeTime_Precision = StringRight($ChangeTime,8)
 			Else
@@ -10463,19 +10495,19 @@ Func _Decode_Quota_Q_SingleEntry($InputData,$IsRedo)
 			$WarningLimit = "0x" & _SwapEndian($WarningLimit)
 
 			$HardLimit = "-"
-			$ExceededTime = "-"
+			$ExceededTime = $TimestampErrorVal
 		Case $InputDataSize = 48
 			$ChangeTime = StringMid($InputData, $StartOffset + 32, 16)
 			$ChangeTime = _SwapEndian($ChangeTime)
 			$ChangeTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $ChangeTime)
 			$ChangeTime = _WinTime_UTCFileTimeFormat(Dec($ChangeTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$ChangeTime = "-"
+				$ChangeTime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
 				$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-4)
 				$ChangeTime_Precision = StringRight($ChangeTime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$ChangeTime = $ChangeTime & ":" & _FillZero(StringRight($ChangeTime_tmp, 4))
+				$ChangeTime = $ChangeTime & $PrecisionSeparator2 & _FillZero(StringRight($ChangeTime_tmp, 4))
 				$ChangeTime_Core = StringMid($ChangeTime,1,StringLen($ChangeTime)-9)
 				$ChangeTime_Precision = StringRight($ChangeTime,8)
 			Else
@@ -10485,12 +10517,12 @@ Func _Decode_Quota_Q_SingleEntry($InputData,$IsRedo)
 
 			$WarningLimit = "-"
 			$HardLimit = "-"
-			$ExceededTime = "-"
+			$ExceededTime = $TimestampErrorVal
 		Case Else
-			$ChangeTime = "-"
+			$ChangeTime = $TimestampErrorVal
 			$WarningLimit = "-"
 			$HardLimit = "-"
-			$ExceededTime = "-"
+			$ExceededTime = $TimestampErrorVal
 	EndSelect
 
 	$SID = "-"
