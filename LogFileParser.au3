@@ -2,7 +2,7 @@
 #AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.24
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.25
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -89,7 +89,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.24", 540, 580, -1, -1)
+$Form = GUICreate("NTFS $LogFile Parser 2.0.0.25", 540, 580, -1, -1)
 
 $Menu_help = GUICtrlCreateMenu("&Help")
 ;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
@@ -2128,7 +2128,7 @@ If $redo_length > 0 Then
 		Case $redo_operation_hex="1500" ;SetBitsInNonresidentBitMap
 			_Decode_BitsInNonresidentBitMap2($redo_chunk)
 		Case $redo_operation_hex="1600"  ;ClearBitsInNonresidentBitMap
-;			_Decode_BitsInNonresidentBitMap2($redo_chunk)
+			_Decode_BitsInNonresidentBitMap2($redo_chunk)
 		Case $redo_operation_hex="1700" ;HotFix
 			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
 			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
@@ -9088,14 +9088,14 @@ Func _WriteCSVHeaderDirtyPageTable()
 	$DirtyPageTable_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"TableOffset"&$de&"AllocatedOrNextFree"&$de&"IndexOfDirtyPageEntryToOpenAttribute"&$de&"LengthOfTransfer"&$de&"LcnsToFollow"&$de&"Reserved"&$de&"Vcn"&$de&"OldestLsn"&$de&"LcnsForPage"&$de&"EndSignature"
 	FileWriteLine($LogFileDirtyPageTableCsv, $DirtyPageTable_Csv_Header & @CRLF)
 EndFunc
-;#cs
+
 Func _Decode_BitsInNonresidentBitMap2($data)
 	Local $BitMapOffset, $NumberOfBits
 	$BitMapOffset = "0x"&_SwapEndian(StringMid($data,1,8))
 	$NumberOfBits = "0x"&_SwapEndian(StringMid($data,9,8))
 	$TextInformation = ";BitMapOffset="&$BitMapOffset&";NumberOfBits="&$NumberOfBits
 EndFunc
-;#ce
+
 Func _Decode_BitsInNonresidentBitMap($RedoData,$RedoOperation,$UndoData,$UndoOperation)
 	Local $StartOffset = 1
 	Local $Redo_BitMapOffset,$Redo_NumberOfBits,$Undo_BitMapOffset,$Undo_NumberOfBits
@@ -9107,7 +9107,10 @@ Func _Decode_BitsInNonresidentBitMap($RedoData,$RedoOperation,$UndoData,$UndoOpe
 	$Undo_BitMapOffset = "0x" & _SwapEndian($Undo_BitMapOffset)
 	$Undo_NumberOfBits = StringMid($UndoData, $StartOffset + 8, 8)
 	$Undo_NumberOfBits = "0x" & _SwapEndian($Undo_NumberOfBits)
-	If ($Redo_BitMapOffset <> $Undo_BitMapOffset) Or ($Redo_NumberOfBits <> $Undo_NumberOfBits) Then MsgBox(0,"Info","Bits mismatch in redo vs undo: " & $this_lsn)
+	If ($Redo_BitMapOffset <> $Undo_BitMapOffset) Or ($Redo_NumberOfBits <> $Undo_NumberOfBits) Then
+		_DumpOutput("Error: Bits mismatch in redo vs undo: " & $this_lsn & @CRLF)
+		MsgBox(0,"Info","Bits mismatch in redo vs undo: " & $this_lsn)
+	EndIf
 	FileWriteLine($LogFileBitsInNonresidentBitMapCsv, $RecordOffset&$de&$this_lsn&$de&$RedoOperation&$de&$Redo_BitMapOffset&$de&$Redo_NumberOfBits&$de&$UndoOperation&$de&$Undo_BitMapOffset&$de&$Undo_NumberOfBits&@crlf)
 EndFunc
 

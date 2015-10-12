@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.25
+Added output of bits information of ClearBitsInNonresidentBitMap from redo operations into lf_TextInformation field.
+
 v2.0.0.24
 Added option to specify a second precision separator, to be used as separation between MilliSec and NanoSec.
 Added option to specify a custom error value for invalid timestamps, or incorrectly decoded timestamps.
