@@ -1,8 +1,10 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
+#AutoIt3Wrapper_Icon=..\..\..\Program Files (x86)\autoit-v3.3.14.2\Icons\au3.ico
 #AutoIt3Wrapper_UseUpx=y
+#AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.25
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.26
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -12,12 +14,12 @@
 #include <Array.au3>
 #Include <String.au3>
 #include <SQLite.au3>
-#include <SQLite.dll.au3>
+;#include <SQLite.dll.au3>
 #include <File.au3>
 #include <Math.au3>
 #include "SecureConstants.au3"
 
-Global $VerboseOn = 0, $CharReplacement=":", $de="|", $PrecisionSeparator=".", $PrecisionSeparator2="", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=False, $debuglogfile, $csvextra, $CurrentTimestamp, $EncodingWhenOpen=2, $ReconstructDone=False
+Global $VerboseOn = 0, $CharReplacement=":", $de="|", $PrecisionSeparator=".", $PrecisionSeparator2="", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=0, $debuglogfile, $csvextra, $CurrentTimestamp, $EncodingWhenOpen=2, $ReconstructDone=False
 Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef, $FromRcrdSlack, $IncompleteTransaction=0
 Global $ProgressLogFile, $ProgressReconstruct, $CurrentProgress=-1, $ProgressStatus, $ProgressUsnJrnl, $ProgressSize
 Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $SectorSize=512, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,$LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile
@@ -38,7 +40,7 @@ Global $SDHArray[1][1],$SIIArray[1][1],$de2=":",$LogFileSecureSDSCsv,$LogFileSec
 Global $TargetSDSOffsetHex,$SecurityDescriptorHash,$SecurityId,$ControlText,$SidOwner,$SidGroup
 Global $SAclRevision,$SAceCount,$SAceTypeText,$SAceFlagsText,$SAceMask,$SAceObjectType,$SAceInheritedObjectType,$SAceSIDString,$SAceObjectFlagsText
 Global $DAclRevision,$DAceCount,$DAceTypeText,$DAceFlagsText,$DAceMask,$DAceObjectType,$DAceInheritedObjectType,$DAceSIDString,$DAceObjectFlagsText
-Global $OpenAttributesArray[1][14],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray[1][10],$lsn_openattributestable=0,$FileOutputTesterArray[21],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][14],$SlackAttributeNamesDumpArray[1][4]
+Global $OpenAttributesArray[1][14],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray[1][10],$lsn_openattributestable=0,$FileOutputTesterArray[22],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][14],$SlackAttributeNamesDumpArray[1][4]
 Global $LogFileOpenAttributeTableCsv,$LogFileOpenAttributeTableCsvFile,$LogFileDirtyPageTableCsv,$LogFileDirtyPageTableCsvFile,$LogFileBitsInNonresidentBitMapCsv,$LogFileBitsInNonresidentBitMapCsvFile,$LogFileTransactionTableCsv,$LogFileTransactionTableCsvFile
 Global $LogFileReparseRCsv,$LogFileQuotaQCsv,$LogFileQuotaOCsv,$LogFileObjIdOCsv,$LogFileReparseRCsvFile,$LogFileQuotaQCsvFile,$LogFileQuotaOCsvFile,$LogFileObjIdOCsvFile,$LogFileRCRDCsv,$LogFileRCRDCsvFile
 Global $client_index,$record_type,$transaction_id,$lf_flags,$target_attribute,$lcns_to_follow,$record_offset_in_mft,$attribute_offset,$MftClusterIndex,$target_vcn,$target_lcn,$InOpenAttributeTable=-1,$LsnValidationLevel
@@ -48,7 +50,7 @@ Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $Da
 Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
 Global $TargetImageFile, $Entries, $IsImage=False, $IsPhysicalDrive=False, $ComboPhysicalDrives, $Combo, $MFT_Record_Size
-Global $EaNonResidentArray[1][9], $VerboseArr, $LogFileSqlFile
+Global $EaNonResidentArray[1][9], $VerboseArr, $LogFileSqlFile, $LogFileUpdateFileNameCsv,$LogFileUpdateFileNameCsvFile,$CheckSkipSqlite3
 Global $SQLite3Exe = @ScriptDir & "\sqlite3.exe"
 Global $TimestampErrorVal = "0000-00-00 00:00:00"
 Global $IntegerErrorVal = -1
@@ -83,184 +85,253 @@ Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision, $UTCconfig, $ParserOutDir
+Global $myctredit, $CheckUnicode, $MinSizeResidentExtraction, $SeparatorInput, $SeparatorInput2, $CheckNt5x, $CheckReconstruct, $CheckExtractResident, $CheckBrokenHeaderRebuild, $VerboseLsnList, $CheckCsvSplit
+Global $InputSectorPerCluster, $InputMFTRecordSize
 
 If Not FileExists($SQLite3Exe) Then
 	MsgBox(0,"Error","sqlite3.exe not found in current directory")
 	Exit
 EndIf
 
-$Form = GUICreate("NTFS $LogFile Parser 2.0.0.25", 540, 580, -1, -1)
+$Progversion = "NTFS $LogFile Parser 2.0.0.26"
+If $cmdline[0] > 0 Then
+	$CommandlineMode = 1
+	ConsoleWrite($Progversion & @CRLF)
+	_GetInputParams()
+	_Main()
+Else
+	DllCall("kernel32.dll", "bool", "FreeConsole")
+	$CommandlineMode = 0
+	Opt("GUICloseOnESC", 1)
+	$ButtonColor=0xD0D0D0
+	$Form = GUICreate($Progversion, 540, 580, -1, -1)
+;	HotKeySet("{ESC}", "ExitPgm")
 
-$Menu_help = GUICtrlCreateMenu("&Help")
-;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
-$Menu_Donate = GUICtrlCreateMenuItem("&Donate", $Menu_Help)
-$Menu_GetHelp = GUICtrlCreateMenuItem("&Help", $Menu_Help)
+	$Menu_help = GUICtrlCreateMenu("&Help")
+	;$Menu_Documentation = GUICtrlCreateMenuItem("&Documentation", $Menu_Help)
+	$Menu_Donate = GUICtrlCreateMenuItem("&Donate", $Menu_Help)
+	$Menu_GetHelp = GUICtrlCreateMenuItem("&Help", $Menu_Help)
+	GUICtrlSetTip($Form, "Press ESC to exit")
 
-$LabelLogFile = GUICtrlCreateLabel("$LogFile:",20,10,80,20)
-$LogFileField = GUICtrlCreateInput("mandatory (unless fragment)",70,10,350,20)
-GUICtrlSetState($LogFileField, $GUI_DISABLE)
-$ButtonLogFile = GUICtrlCreateButton("Select $LogFile", 430, 10, 100, 20)
+	$LabelLogFile = GUICtrlCreateLabel("$LogFile:",20,10,80,20)
+	$LogFileField = GUICtrlCreateInput("mandatory (unless fragment)",70,10,350,20)
+	GUICtrlSetState($LogFileField, $GUI_DISABLE)
+	$ButtonLogFile = GUICtrlCreateButton("Select $LogFile", 430, 10, 100, 20)
+	GUICtrlSetBkColor($ButtonLogFile, $ButtonColor)
 
-;$LabelUsnJrnl = GUICtrlCreateLabel("$UsnJrnl:",20,35,80,20)
-;$UsnJrnlField = GUICtrlCreateInput("No longer needed",70,35,350,20)
-;GUICtrlSetState($UsnJrnlField, $GUI_DISABLE)
-;$ButtonUsnJrnl = GUICtrlCreateButton("Select $UsnJrnl", 430, 35, 100, 20)
-;GUICtrlSetState($ButtonUsnJrnl, $GUI_DISABLE)
-$LabelFragment = GUICtrlCreateLabel("Fragment:",20,35,80,20)
-$FragmentField = GUICtrlCreateInput("Broken transaction fragment (optional, not yet activated)",70,35,350,20)
-GUICtrlSetState($FragmentField, $GUI_DISABLE)
-$ButtonFragment = GUICtrlCreateButton("Select fragment", 430, 35, 100, 20)
+	;$LabelUsnJrnl = GUICtrlCreateLabel("$UsnJrnl:",20,35,80,20)
+	;$UsnJrnlField = GUICtrlCreateInput("No longer needed",70,35,350,20)
+	;GUICtrlSetState($UsnJrnlField, $GUI_DISABLE)
+	;$ButtonUsnJrnl = GUICtrlCreateButton("Select $UsnJrnl", 430, 35, 100, 20)
+	;GUICtrlSetState($ButtonUsnJrnl, $GUI_DISABLE)
+	$LabelFragment = GUICtrlCreateLabel("Fragment:",20,35,80,20)
+	$FragmentField = GUICtrlCreateInput("Broken transaction fragment (optional, not yet activated)",70,35,350,20)
+	GUICtrlSetState($FragmentField, $GUI_DISABLE)
+	$ButtonFragment = GUICtrlCreateButton("Select fragment", 430, 35, 100, 20)
+	GUICtrlSetBkColor($ButtonFragment, $ButtonColor)
 
-$LabelMFT = GUICtrlCreateLabel("MFT:",20,60,80,20)
-$MFTField = GUICtrlCreateInput("Output of latest mft2csv (optional)",70,60,350,20)
-GUICtrlSetState($MFTField, $GUI_DISABLE)
-$ButtonMFT = GUICtrlCreateButton("Get MFT csv", 430, 60, 100, 20)
+	$LabelMFT = GUICtrlCreateLabel("MFT:",20,60,80,20)
+	$MFTField = GUICtrlCreateInput("Output of latest mft2csv (optional)",70,60,350,20)
+	GUICtrlSetState($MFTField, $GUI_DISABLE)
+	$ButtonMFT = GUICtrlCreateButton("Get MFT csv", 430, 60, 100, 20)
+	GUICtrlSetBkColor($ButtonMFT, $ButtonColor)
 
-$LabelTimestampFormat = GUICtrlCreateLabel("Timestamp format:",20,85,90,20)
-$ComboTimestampFormat = GUICtrlCreateCombo("", 110, 85, 30, 25)
-$LabelTimestampPrecision = GUICtrlCreateLabel("Precision:",150,85,50,20)
-$ComboTimestampPrecision = GUICtrlCreateCombo("", 200, 85, 70, 25)
-$CheckCsvSplit = GUICtrlCreateCheckbox("split csv", 280, 85, 60, 20)
-GUICtrlSetState($CheckCsvSplit, $GUI_UNCHECKED)
-$LabelPrecisionSeparator = GUICtrlCreateLabel("Precision separator:",350,85,100,20)
-$PrecisionSeparatorInput = GUICtrlCreateInput($PrecisionSeparator,450,85,15,20)
+	$LabelTimestampFormat = GUICtrlCreateLabel("Timestamp format:",20,85,90,20)
+	$ComboTimestampFormat = GUICtrlCreateCombo("", 110, 85, 30, 25)
+	$LabelTimestampPrecision = GUICtrlCreateLabel("Precision:",150,85,50,20)
+	$ComboTimestampPrecision = GUICtrlCreateCombo("", 200, 85, 70, 25)
+	$CheckCsvSplit = GUICtrlCreateCheckbox("split csv", 280, 85, 60, 20)
+	GUICtrlSetState($CheckCsvSplit, $GUI_UNCHECKED)
+	$LabelPrecisionSeparator = GUICtrlCreateLabel("Precision separator:",350,85,100,20)
+	$PrecisionSeparatorInput = GUICtrlCreateInput($PrecisionSeparator,450,85,15,20)
 
-$Label1 = GUICtrlCreateLabel("Set decoded timestamps to specific region:",20,110,230,20)
-$Combo2 = GUICtrlCreateCombo("", 230, 110, 85, 25)
+	$Label1 = GUICtrlCreateLabel("Set decoded timestamps to specific region:",20,110,230,20)
+	$Combo2 = GUICtrlCreateCombo("", 230, 110, 85, 25)
 
-$LabelPrecisionSeparator2 = GUICtrlCreateLabel("Precision separator2:",350,110,100,20)
-$PrecisionSeparatorInput2 = GUICtrlCreateInput($PrecisionSeparator2,450,110,15,20)
+	$LabelPrecisionSeparator2 = GUICtrlCreateLabel("Precision separator2:",350,110,100,20)
+	$PrecisionSeparatorInput2 = GUICtrlCreateInput($PrecisionSeparator2,450,110,15,20)
 
-$LabelTimestampError = GUICtrlCreateLabel("Timestamp ErrorVal:",20,140,100,20)
-$TimestampErrorInput = GUICtrlCreateInput($TimestampErrorVal,120,140,130,20)
+	$LabelTimestampError = GUICtrlCreateLabel("Timestamp ErrorVal:",20,140,100,20)
+	$TimestampErrorInput = GUICtrlCreateInput($TimestampErrorVal,120,140,130,20)
 
-$InputExampleTimestamp = GUICtrlCreateInput("",340,140,190,20)
-GUICtrlSetState($InputExampleTimestamp, $GUI_DISABLE)
+	$InputExampleTimestamp = GUICtrlCreateInput("",340,140,190,20)
+	GUICtrlSetState($InputExampleTimestamp, $GUI_DISABLE)
 
-$LabelSeparator = GUICtrlCreateLabel("Set separator:",20,165,70,20)
-$SaparatorInput = GUICtrlCreateInput($de,90,165,20,20)
-$SaparatorInput2 = GUICtrlCreateInput($de,120,165,30,20)
-GUICtrlSetState($SaparatorInput2, $GUI_DISABLE)
+	$LabelSeparator = GUICtrlCreateLabel("Set separator:",20,165,70,20)
+	$SaparatorInput = GUICtrlCreateInput($de,90,165,20,20)
+	$SaparatorInput2 = GUICtrlCreateInput($de,120,165,30,20)
+	GUICtrlSetState($SaparatorInput2, $GUI_DISABLE)
 
-$CheckUnicode = GUICtrlCreateCheckbox("Unicode", 160, 165, 60, 20)
-GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
+	$CheckUnicode = GUICtrlCreateCheckbox("Unicode", 160, 165, 60, 20)
+	GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
 
-$CheckReconstruct = GUICtrlCreateCheckbox("Reconstruct data runs", 220, 165, 120, 20)
-GUICtrlSetState($CheckReconstruct, $GUI_UNCHECKED)
+	$CheckReconstruct = GUICtrlCreateCheckbox("Reconstruct data runs", 220, 165, 120, 20)
+	GUICtrlSetState($CheckReconstruct, $GUI_UNCHECKED)
 
-$CheckBrokenHeaderRebuild = GUICtrlCreateCheckbox("Rebuild headers (in slack)", 350, 165, 140, 20)
-GUICtrlSetState($CheckBrokenHeaderRebuild, $GUI_UNCHECKED)
+	$CheckBrokenHeaderRebuild = GUICtrlCreateCheckbox("Rebuild headers (in slack)", 350, 165, 140, 20)
+	GUICtrlSetState($CheckBrokenHeaderRebuild, $GUI_UNCHECKED)
 
-$Label2 = GUICtrlCreateLabel("Sectors per cluster:",20,200,100,20)
-$InputSectorPerCluster = GUICtrlCreateInput("8",120,200,30,20)
+	$Label2 = GUICtrlCreateLabel("Sectors per cluster:",20,200,100,20)
+	$InputSectorPerCluster = GUICtrlCreateInput("8",120,200,30,20)
 
-$Label3 = GUICtrlCreateLabel("MFT record size:",170,200,80,20)
-$InputMFTRecordSize = GUICtrlCreateInput("1024",260,200,40,20)
+	$Label3 = GUICtrlCreateLabel("MFT record size:",170,200,80,20)
+	$InputMFTRecordSize = GUICtrlCreateInput("1024",260,200,40,20)
 
-$Label4 = GUICtrlCreateLabel("LSN error level:",310,200,80,20)
-$InputErrorLevel = GUICtrlCreateInput("0.1",400,200,40,20)
-$InputErrorLevelTranslated = GUICtrlCreateInput("",450,200,80,20)
-GUICtrlSetState($InputErrorLevelTranslated, $GUI_DISABLE)
+	$Label4 = GUICtrlCreateLabel("LSN error level:",310,200,80,20)
+	$InputErrorLevel = GUICtrlCreateInput("0.1",400,200,40,20)
+	$InputErrorLevelTranslated = GUICtrlCreateInput("",450,200,80,20)
+	GUICtrlSetState($InputErrorLevelTranslated, $GUI_DISABLE)
 
-$CheckNt5x = GUICtrlCreateCheckbox("Source is from Nt5x (XP,2003)", 20, 235, 160, 20)
-GUICtrlSetState($CheckNt5x, $GUI_UNCHECKED)
-$CheckExtractResident = GUICtrlCreateCheckbox("Extract non + resident updates of min size:",190, 235, 215, 20)
-GUICtrlSetState($CheckExtractResident, $GUI_UNCHECKED)
-$MinSizeResidentExtraction = GUICtrlCreateInput("2",410,235,30,20)
+	$CheckNt5x = GUICtrlCreateCheckbox("Source is from Nt5x (XP,2003)", 20, 235, 160, 20)
+	GUICtrlSetState($CheckNt5x, $GUI_UNCHECKED)
+	$CheckExtractResident = GUICtrlCreateCheckbox("Extract non + resident updates of min size:",190, 235, 215, 20)
+	GUICtrlSetState($CheckExtractResident, $GUI_UNCHECKED)
+	$MinSizeResidentExtraction = GUICtrlCreateInput("2",410,235,30,20)
 
-$LabelVerboseLsns = GUICtrlCreateLabel("LSN's to trigger verbose output (comma separate):",20,260,240,20)
-$InputVerboseLsns = GUICtrlCreateInput("",260,260,180,20)
+	$LabelVerboseLsns = GUICtrlCreateLabel("LSN's to trigger verbose output (comma separate):",20,260,240,20)
+	$InputVerboseLsns = GUICtrlCreateInput("",260,260,180,20)
 
-$ButtonStart = GUICtrlCreateButton("Start", 450, 225, 80, 30)
+	$CheckSkipSqlite3 = GUICtrlCreateCheckbox("skip sqlite3", 450, 260, 100, 20)
+	GUICtrlSetState($CheckSkipSqlite3, $GUI_UNCHECKED)
 
-$myctredit = GUICtrlCreateEdit("", 0, 290, 540, 85, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
-_GUICtrlEdit_SetLimitText($myctredit, 128000)
+	$ButtonStart = GUICtrlCreateButton("Start", 450, 225, 50, 30)
+	GUICtrlSetBkColor($ButtonStart, $ButtonColor)
+	$ButtonExit = GUICtrlCreateButton("Exit", 505, 225, 30, 30)
+	GUICtrlSetBkColor($ButtonExit, $ButtonColor)
+	GUICtrlSetTip($ButtonExit, "Press ESC to exit")
 
-_InjectTimeZoneInfo()
-_InjectTimestampFormat()
-_InjectTimestampPrecision()
-$PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
-$PrecisionSeparator2 = GUICtrlRead($PrecisionSeparatorInput2)
-_TranslateTimestamp()
-_TranslateErrorLevel()
+	$myctredit = GUICtrlCreateEdit("", 0, 290, 540, 85, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
+	_GUICtrlEdit_SetLimitText($myctredit, 128000)
 
-GUISetState(@SW_SHOW)
-
-While 1
-	$nMsg = GUIGetMsg()
-	Sleep(50)
-	_TranslateSeparator()
+	_InjectTimeZoneInfo()
+	_InjectTimestampFormat()
+	_InjectTimestampPrecision()
 	$PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
 	$PrecisionSeparator2 = GUICtrlRead($PrecisionSeparatorInput2)
 	_TranslateTimestamp()
 	_TranslateErrorLevel()
-	Switch $nMsg
-;		Case $Menu_Documentation
-;			ShellExecute("https://github.com/jschicht/LogFileParser")
-		Case $Menu_Donate
-			ShellExecute("https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=joakim%2eschicht%40gmail%2ecom&bn=PP%2dDonationsBF%3abtn_donateCC_LG%2egif%3aNonHostedGuest")
-		Case $Menu_GetHelp
-			ShellExecute("mailto:joakim%2eschicht%40gmail%2ecom")
-		Case $ButtonLogFile
-			_SelectLogFile()
-		Case $ButtonMFT
-			_SelectMftCsv()
-;		Case $ButtonUsnJrnl
-;			_SelectUsnJrnl()
-		Case $ButtonFragment
-			_SelectFragment()
-		Case $ButtonStart
-			_Main()
-		Case $GUI_EVENT_CLOSE
-			Exit
-	EndSwitch
-WEnd
+
+	GUISetState(@SW_SHOW)
+
+	If StringInStr(@ScriptDir," ") Or StringInStr(@ScriptDir,"&") Or StringInStr(@ScriptDir,";") Or StringInStr(@ScriptDir,"=") Then
+		If Not $CommandlineMode Then _DisplayInfo("Error: Current directory path contains whitespace or buggy char. Please change directory." & @CRLF)
+		ConsoleWrite("Error: Current directory path contains whitespace or buggy char. Please change directory." & @CRLF)
+	EndIf
+
+	While 1
+		$nMsg = GUIGetMsg()
+		Sleep(50)
+		_TranslateSeparator()
+		$PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
+		$PrecisionSeparator2 = GUICtrlRead($PrecisionSeparatorInput2)
+		_TranslateTimestamp()
+		_TranslateErrorLevel()
+		Switch $nMsg
+	;		Case $Menu_Documentation
+	;			ShellExecute("https://github.com/jschicht/LogFileParser")
+			Case $Menu_Donate
+				ShellExecute("https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=joakim%2eschicht%40gmail%2ecom&bn=PP%2dDonationsBF%3abtn_donateCC_LG%2egif%3aNonHostedGuest")
+			Case $Menu_GetHelp
+				ShellExecute("mailto:joakim%2eschicht%40gmail%2ecom")
+			Case $ButtonLogFile
+				_SelectLogFile()
+			Case $ButtonMFT
+				_SelectMftCsv()
+	;		Case $ButtonUsnJrnl
+	;			_SelectUsnJrnl()
+			Case $ButtonFragment
+				_SelectFragment()
+			Case $ButtonStart
+				_Main()
+			Case $ButtonExit
+				Exit
+			Case $GUI_EVENT_CLOSE
+				Exit
+		EndSwitch
+	WEnd
+EndIf
 
 Func _Main()
 Local $last_lsn,$page_flags,$page_count,$page_position,$next_record_offset,$page_unknown,$last_end_lsn
 Local $next_last_lsn,$next_page_flags,$next_page_count,$next_page_position,$next_next_record_offset,$next_page_unknown,$next_last_end_lsn
 Global $DataRunArr[2][18], $NewDataRunArr[1][18]
-Global $GlobalCounter = 1,$AttrArray[$GlobalCounter][2], $DoReconstructDataRuns=False, $DoRebuildBrokenHeader=False
-GUICtrlSetData($ProgressLogFile, 0)
-GUICtrlSetData($ProgressUsnJrnl, 0)
-GUICtrlSetData($ProgressReconstruct, 0)
+Global $GlobalCounter = 1,$AttrArray[$GlobalCounter][2], $DoReconstructDataRuns=0, $DoRebuildBrokenHeader=False
+If StringInStr(@ScriptDir," ") Or StringInStr(@ScriptDir,"&") Or StringInStr(@ScriptDir,";") Or StringInStr(@ScriptDir,"=") Then
+	If Not $CommandlineMode Then _DisplayInfo("Error: Current directory path contains whitespace or buggy char. Please change directory." & @CRLF)
+	ConsoleWrite("Error: Current directory path contains whitespace or buggy char. Please change directory." & @CRLF)
+	Return
+EndIf
+If Not $CommandlineMode Then
+	GUICtrlSetData($ProgressLogFile, 0)
+	GUICtrlSetData($ProgressUsnJrnl, 0)
+	GUICtrlSetData($ProgressReconstruct, 0)
+EndIf
 
-
-If GUICtrlRead($CheckCsvSplit) = 1 Then
-	$DoSplitCsv = True
+If Not $CommandlineMode Then
+	If GUICtrlRead($CheckCsvSplit) = 1 Then
+		$DoSplitCsv = True
+	EndIf
 EndIf
 
 If FileExists($InputLogFile)=0 Then
-	_DisplayInfo("Error: LogFile could not be found." & @CRLF)
+	If Not $CommandlineMode Then _DisplayInfo("Error: LogFile could not be found." & @CRLF)
 	Return
 EndIf
 
-$SectorsPerCluster = GUICtrlRead($InputSectorPerCluster)
-if StringIsDigit($SectorsPerCluster)=0 Then
-	_DisplayInfo("Error: SectorsPerCluster not given in expected format (decimal)." & @CRLF)
+If Not $CommandlineMode Then
+	$SectorsPerCluster = GUICtrlRead($InputSectorPerCluster)
+Else
+	$SectorsPerCluster = $SectorsPerCluster
+EndIf
+If Not StringIsDigit($SectorsPerCluster) Or ($SectorsPerCluster <> 1 And $SectorsPerCluster <> 2 And $SectorsPerCluster <> 4 And $SectorsPerCluster <> 8 And $SectorsPerCluster <> 16 And $SectorsPerCluster <> 32 And $SectorsPerCluster <> 64 And $SectorsPerCluster <> 128) Then
+	If Not $CommandlineMode Then   _DisplayInfo("Error: SectorsPerCluster not given in expected format (decimal)." & @CRLF)
 	Return
 EndIf
 $BytesPerCluster=$SectorsPerCluster*512
 
-$MFT_Record_Size = GUICtrlRead($InputMFTRecordSize)
-if StringIsDigit($MFT_Record_Size)=0 Or ($MFT_Record_Size <> 1024 And $MFT_Record_Size <> 4096) Then
-	_DisplayInfo("Error: MFT record size should be an integer of either 1024 or 4096" & @CRLF)
+If Not $CommandlineMode Then
+	$MFT_Record_Size = GUICtrlRead($InputMFTRecordSize)
+Else
+	$MFT_Record_Size = $MFT_Record_Size
+EndIf
+If $MFT_Record_Size <> 1024 And $MFT_Record_Size <> 4096 Then
+	If Not $CommandlineMode Then _DisplayInfo("Error: MFT record size should be an integer of either 1024 or 4096" & @CRLF)
 	Return
 EndIf
 
-If GUICtrlRead($CheckUnicode) = 1 Then
+If Not $CommandlineMode Then
+	$CheckUnicode = GUICtrlRead($CheckUnicode)
+Else
+	$CheckUnicode = $CheckUnicode
+EndIf
+If $CheckUnicode = 1 Then
 	;$EncodingWhenOpen = 2+32
 	$EncodingWhenOpen = 2+128
 EndIf
 
-If GUICtrlRead($CheckNt5x) = 1 Then
+If Not $CommandlineMode Then
+	$CheckSkipSqlite3 = GUICtrlRead($CheckSkipSqlite3)
+EndIf
+If Not $CheckSkipSqlite3 = 1 Then $CheckSkipSqlite3 = 0
+
+If Not $CommandlineMode Then
+	$CheckNt5x = GUICtrlRead($CheckNt5x)
+Else
+	$CheckNt5x = $CheckNt5x
+EndIf
+If $CheckNt5x = 1 Then
 	$IsNt5x = True
 Else
 	$IsNt5x = False
 EndIf
 
-If GUICtrlRead($CheckReconstruct) = 1 Then
-	$DoReconstructDataRuns = True
+If Not $CommandlineMode Then
+	$CheckReconstruct = GUICtrlRead($CheckReconstruct)
+Else
+	$CheckReconstruct = $CheckReconstruct
+EndIf
+If $CheckReconstruct = 1 Then
+	$DoReconstructDataRuns = 1
 ;	If $EncodingWhenOpen=34 Then
 ;		MsgBox(0,"Warning","Reconstruct of dataruns is not supported with UNICODE. Continuing with ANSI")
 ;		GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
@@ -272,17 +343,27 @@ If GUICtrlRead($CheckReconstruct) = 1 Then
 	EndIf
 EndIf
 
-If GUICtrlRead($CheckExtractResident) = 1 Then
-	$MinSizeResidentExtraction = GUICtrlRead($MinSizeResidentExtraction)
+If Not $CommandlineMode Then
+	$CheckExtractResident = GUICtrlRead($CheckExtractResident)
+Else
+	$CheckExtractResident = $CheckExtractResident
+EndIf
+If $CheckExtractResident = 1 Then
+	If Not $CommandlineMode Then $MinSizeResidentExtraction = GUICtrlRead($MinSizeResidentExtraction)
 	If $MinSizeResidentExtraction > 0 Then
 		$DoExtractResidentUpdates=1
 	EndIf
 EndIf
 
-If GUICtrlRead($CheckBrokenHeaderRebuild) = 1 Then
+If Not $CommandlineMode Then
+	$CheckBrokenHeaderRebuild = GUICtrlRead($CheckBrokenHeaderRebuild)
+Else
+	$CheckBrokenHeaderRebuild = $CheckBrokenHeaderRebuild
+EndIf
+If $CheckBrokenHeaderRebuild = 1 Then
 	$DoRebuildBrokenHeader = True
 EndIf
-
+#cs
 If $TargetMftCsvFile And FileGetEncoding($TargetMftCsvFile,2)>0 Then
 	MsgBox(0,"Warning","Skipping import of $MFT csv because it is unicode")
 	$TargetMftCsvFile = ""
@@ -295,13 +376,32 @@ If @error Then
 	Return
 EndIf
 $tDelta = $tDelta*-1 ;Since delta is substracted from timestamp later on
+#ce
+If Not $CommandlineMode Then
+	$tDelta = _GetUTCRegion(GUICtrlRead($Combo2))-$tDelta
+	If @error Then
+		_DisplayInfo("Error: Timezone configuration failed." & @CRLF)
+		Return
+	EndIf
+	$tDelta = $tDelta*-1 ;Since delta is substracted from timestamp later on
+EndIf
 
-If $LsnValidationLevel = 0 Then
-	_DisplayInfo("Error: LsnValidationLevel: " & $LsnValidationLevel & @CRLF)
+;If $LsnValidationLevel = 0 Then
+If Not StringIsFloat($LsnValidationLevel) Or Not ($LsnValidationLevel > 0 Or $LsnValidationLevel < 1) Then
+	If Not $CommandlineMode Then _DisplayInfo("Error: LsnValidationLevel: " & $LsnValidationLevel & @CRLF)
 	Return
 EndIf
 
-_PrepareOutput()
+If Not $CommandlineMode Then
+	$ParserOutDir = @ScriptDir
+Else
+	$ParserOutDir = $ParserOutDir
+EndIf
+If StringRight($ParserOutDir,1) = "\" Then
+	$ParserOutDir = StringTrimRight($ParserOutDir,1)
+EndIf
+
+_PrepareOutput($ParserOutDir)
 If $DoExtractResidentUpdates Then
 	DirCreate($ParserOutDir&"\ResidentExtract")
 	DirCreate($ParserOutDir&"\NonResidentExtract")
@@ -334,6 +434,7 @@ $FileOutputTesterArray[17] = $LogFileSlackAttributeNamesDumpCsvFile
 $FileOutputTesterArray[18] = $LogFileAttributeListCsvFile
 $FileOutputTesterArray[19] = $LogFileFileNamesCsvFile
 $FileOutputTesterArray[20] = $LogFileTxfDataCsvFile
+$FileOutputTesterArray[21] = $LogFileUpdateFileNameCsvFile
 
 
 _WriteCSVHeader()
@@ -376,32 +477,46 @@ $EaNonResidentArray[0][7] = "target_vcn"
 $EaNonResidentArray[0][8] = "OutputFileName"
 
 _DebugOut("Using $LogFile: " & $InputLogFile)
-If GUICtrlRead($CheckUnicode) = 1 Then
+If $CheckUnicode = 1 Then
 	_DebugOut("Unicode: 1")
 Else
 	_DebugOut("Unicode: 0")
 EndIf
 
-$TimestampErrorVal = GUICtrlRead($TimestampErrorInput)
+If Not $CommandlineMode Then
+	$TimestampErrorVal = GUICtrlRead($TimestampErrorInput)
+EndIf
 
-If StringLen(GUICtrlRead($PrecisionSeparatorInput)) <> 1 Then
-	_DisplayInfo("Error: Precision separator not set properly" & @crlf)
+If Not $CommandlineMode Then
+	$PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
+Else
+	$PrecisionSeparator = $PrecisionSeparator
+EndIf
+If StringLen($PrecisionSeparator) <> 1 Then
+	If Not $CommandlineMode Then _DisplayInfo("Error: Precision separator not set properly" & @crlf)
 	_DebugOut("Error: Precision separator not set properly: " & GUICtrlRead($PrecisionSeparatorInput))
 	Return
 Else
-	$PrecisionSeparator = GUICtrlRead($PrecisionSeparatorInput)
 	_DebugOut("Using precision separator: " & $PrecisionSeparator)
 EndIf
 
-$PrecisionSeparator2 = GUICtrlRead($PrecisionSeparatorInput2)
+If Not $CommandlineMode Then
+	$PrecisionSeparator2 = GUICtrlRead($PrecisionSeparatorInput2)
+Else
+	$PrecisionSeparator2 = $PrecisionSeparator2
+EndIf
 
-$VerboseLsns = GUICtrlRead($InputVerboseLsns)
-If $VerboseLsns <> "" Then
-	$VerboseArr = StringSplit($VerboseLsns,",")
+If Not $CommandlineMode Then
+	$VerboseLsnList = GUICtrlRead($InputVerboseLsns)
+Else
+	$VerboseLsnList = $VerboseLsnList
+EndIf
+If $VerboseLsnList <> "" Then
+	$VerboseArr = StringSplit($VerboseLsnList,",")
 Else
 	$VerboseArr = ""
 EndIf
-_DebugOut("LSN's for verbose output: " & $VerboseLsns)
+_DebugOut("LSN's for verbose output: " & $VerboseLsnList)
 
 _DebugOut("LSN Validation level: " & $LsnValidationLevel & " (" & $LsnValidationLevel*100 & " %)")
 _DebugOut("Timestamps presented in UTC: " & $UTCconfig)
@@ -409,6 +524,7 @@ _DebugOut("Sectors per cluster: " & $SectorsPerCluster)
 _DebugOut("DataRun reconstruct configuration: " & $DoReconstructDataRuns)
 _DebugOut("Rebuild broken header for transactions found in slack: " & $DoRebuildBrokenHeader)
 _DebugOut("Nt5x: " & $IsNt5x)
+_DebugOut("SkipSqlite3: " & $CheckSkipSqlite3)
 _DebugOut("DoExtractResidentUpdates: " & $DoExtractResidentUpdates)
 
 $tBuffer = DllStructCreate("byte[" & $Record_Size & "]")
@@ -419,23 +535,24 @@ If $hFile = 0 Then
 	Exit
 EndIf
 
-
 If FileExists($UsnJrnlFile) Then _DebugOut("Using $UsnJrnl: " & $UsnJrnlFile)
 If $TargetMftCsvFile Then _DebugOut("Using MFT csv: " & $TargetMftCsvFile)
 _DebugOut("Using DateTime format: " & $DateTimeFormat)
 _DebugOut("Using timestamp precision: " & $TimestampPrecision)
 _DebugOut("------------------- END CONFIGURATION -----------------------")
 
-;$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 280,540,20)
-$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 380,540,20)
-GUICtrlSetFont($Progress, 12)
-$ProgressStatus = GUICtrlCreateLabel("", 10, 410, 520, 20)
-$ElapsedTime = GUICtrlCreateLabel("", 10, 425, 520, 20)
-$ProgressLogFile = GUICtrlCreateProgress(10, 450, 520, 30)
-$ProgressUsnJrnl = GUICtrlCreateProgress(10,  485, 520, 30)
-$ProgressReconstruct = GUICtrlCreateProgress(10, 520, 520, 30)
 $begin = TimerInit()
-AdlibRegister("_LogFileProgress", 500)
+If Not $CommandlineMode Then
+	;$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 280,540,20)
+	$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 380,540,20)
+	GUICtrlSetFont($Progress, 12)
+	$ProgressStatus = GUICtrlCreateLabel("", 10, 410, 520, 20)
+	$ElapsedTime = GUICtrlCreateLabel("", 10, 425, 520, 20)
+	$ProgressLogFile = GUICtrlCreateProgress(10, 450, 520, 30)
+	$ProgressUsnJrnl = GUICtrlCreateProgress(10,  485, 520, 30)
+	$ProgressReconstruct = GUICtrlCreateProgress(10, 520, 520, 30)
+	AdlibRegister("_LogFileProgress", 500)
+EndIf
 $InputFileSize = _WinAPI_GetFileSizeEx($hFile)
 $MaxRecords = Ceiling($InputFileSize/$Record_Size)
 $RCRDRecord=""
@@ -477,7 +594,7 @@ For $i = 0 To $MaxRecords-1
 		;Start - Get values from next record
 		If $i < $MaxRecords-1 Then
 			_WinAPI_SetFilePointerEx($hFile, ($i+1)*$Record_Size, $FILE_BEGIN)
-			_WinAPI_ReadFile($hFile, DllStructGetPtr($tBuffer2), $SectorSize, $nBytes)
+			_WinAPI_ReadFile($hFile, DllStructGetPtr($tBuffer2), $SectorSize, $nBytes2)
 			$NextRecordChunk = DllStructGetData($tBuffer2, 1)
 			If StringMid($NextRecordChunk,3,8) = $RCRDsig Then
 				$next_last_lsn = StringMid($NextRecordChunk,19,16)
@@ -572,34 +689,61 @@ For $i = 0 To $MaxRecords-1
 		ContinueLoop
 	EndIf
 Next
+#cs
+_DumpOutput("$hFile: " & $hFile & @CRLF)
+_DumpOutput("$hOutFileMFT: " & $hOutFileMFT & @CRLF)
+_DumpOutput("$LogFileCsv: " & $LogFileCsv & @CRLF)
+_DumpOutput("$LogFileIndxCsv: " & $LogFileIndxCsv & @CRLF)
+_DumpOutput("$LogFileDataRunsCsv: " & $LogFileDataRunsCsv & @CRLF)
+_DumpOutput("$LogFileSecureSDSCsv: " & $LogFileSecureSDSCsv & @CRLF)
+_DumpOutput("$LogFileSecureSDHCsv: " & $LogFileSecureSDHCsv & @CRLF)
+_DumpOutput("$LogFileSecureSIICsv: " & $LogFileSecureSIICsv & @CRLF)
+_DumpOutput("$LogFileOpenAttributeTableCsv: " & $LogFileOpenAttributeTableCsv & @CRLF)
+_DumpOutput("$LogFileDirtyPageTableCsv: " & $LogFileDirtyPageTableCsv & @CRLF)
+_DumpOutput("$LogFileBitsInNonresidentBitMapCsv: " & $LogFileBitsInNonresidentBitMapCsv & @CRLF)
+;_DumpOutput("$UsnJrnlCsv: " & $UsnJrnlCsv & @CRLF)
+_DumpOutput("$LogFileReparseRCsv: " & $LogFileReparseRCsv & @CRLF)
+_DumpOutput("$LogFileQuotaQCsv: " & $LogFileQuotaQCsv & @CRLF)
+_DumpOutput("$LogFileQuotaOCsv: " & $LogFileQuotaOCsv & @CRLF)
+_DumpOutput("$LogFileObjIdOCsv: " & $LogFileObjIdOCsv & @CRLF)
+_DumpOutput("$LogFileTransactionTableCsv: " & $LogFileTransactionTableCsv & @CRLF)
+_DumpOutput("$LogFileSlackOpenAttributeTableCsv: " & $LogFileSlackOpenAttributeTableCsv & @CRLF)
+_DumpOutput("$LogFileSlackAttributeNamesDumpCsv: " & $LogFileSlackAttributeNamesDumpCsv & @CRLF)
+_DumpOutput("$LogFileAttributeListCsv: " & $LogFileAttributeListCsv & @CRLF)
+_DumpOutput("$LogFileFileNamesCsv: " & $LogFileFileNamesCsv & @CRLF)
+_DumpOutput("$LogFileUpdateFileNameCsv: " & $LogFileUpdateFileNameCsv & @CRLF)
+#ce
 _WinAPI_CloseHandle($hFile)
 _WinAPI_CloseHandle($hOutFileMFT)
-_WinAPI_CloseHandle($LogFileCsv)
-_WinAPI_CloseHandle($LogFileIndxCsv)
-_WinAPI_CloseHandle($LogFileDataRunsCsv)
-_WinAPI_CloseHandle($LogFileSecureSDSCsv)
-_WinAPI_CloseHandle($LogFileSecureSDHCsv)
-_WinAPI_CloseHandle($LogFileSecureSIICsv)
-_WinAPI_CloseHandle($LogFileOpenAttributeTableCsv)
-_WinAPI_CloseHandle($LogFileDirtyPageTableCsv)
-_WinAPI_CloseHandle($LogFileBitsInNonresidentBitMapCsv)
-_WinAPI_CloseHandle($UsnJrnlCsv)
-_WinAPI_CloseHandle($LogFileReparseRCsv)
-_WinAPI_CloseHandle($LogFileQuotaQCsv)
-_WinAPI_CloseHandle($LogFileQuotaOCsv)
-_WinAPI_CloseHandle($LogFileObjIdOCsv)
-_WinAPI_CloseHandle($LogFileTransactionTableCsv)
-_WinAPI_CloseHandle($LogFileSlackOpenAttributeTableCsv)
-_WinAPI_CloseHandle($LogFileSlackAttributeNamesDumpCsv)
-_WinAPI_CloseHandle($LogFileAttributeListCsv)
-_WinAPI_CloseHandle($LogFileFileNamesCsv)
+FileClose($LogFileCsv)
+FileClose($LogFileIndxCsv)
+FileClose($LogFileDataRunsCsv)
+FileClose($LogFileSecureSDSCsv)
+FileClose($LogFileSecureSDHCsv)
+FileClose($LogFileSecureSIICsv)
+FileClose($LogFileOpenAttributeTableCsv)
+FileClose($LogFileDirtyPageTableCsv)
+FileClose($LogFileBitsInNonresidentBitMapCsv)
+;FileClose($UsnJrnlCsv)
+FileClose($LogFileReparseRCsv)
+FileClose($LogFileQuotaQCsv)
+FileClose($LogFileQuotaOCsv)
+FileClose($LogFileObjIdOCsv)
+FileClose($LogFileTransactionTableCsv)
+FileClose($LogFileSlackOpenAttributeTableCsv)
+FileClose($LogFileSlackAttributeNamesDumpCsv)
+FileClose($LogFileAttributeListCsv)
+FileClose($LogFileFileNamesCsv)
+FileClose($LogFileUpdateFileNameCsv)
 
-AdlibUnRegister("_LogFileProgress")
-GUICtrlSetData($ProgressStatus, "Processing LogFile transaction " & $CurrentRecord+1 & " of " & $MaxRecords)
-GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
-GUICtrlSetData($ProgressLogFile, 100 * ($CurrentRecord+1) / $MaxRecords)
+If Not $CommandlineMode Then
+	AdlibUnRegister("_LogFileProgress")
+	GUICtrlSetData($ProgressStatus, "Processing LogFile transaction " & $CurrentRecord+1 & " of " & $MaxRecords)
+	GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
+	GUICtrlSetData($ProgressLogFile, 100 * ($CurrentRecord+1) / $MaxRecords)
+EndIf
 
-_DisplayInfo("$LogFile processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & "." & @CRLF)
+If Not $CommandlineMode Then _DisplayInfo("$LogFile processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & "." & @CRLF)
 _DumpOutput("------------------ END PROCESSING -------------------" & @CRLF)
 _DumpOutput("$LogFile processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & "." & @CRLF)
 
@@ -612,38 +756,50 @@ For $FileNumber = 0 To UBound($FileOutputTesterArray)-1
 		EndIf
 	EndIf
 Next
-;_ArrayDisplay($FileNamesArray,"$FileNamesArray")
-;#cs
-;x64 dll not working properly?
+
+If $CheckSkipSqlite3 = 1 Then
+	If Not $CommandlineMode Then
+		_DisplayInfo("Done!" & @CRLF)
+		Return
+	Else
+		_DumpOutput("Done!" & @CRLF)
+		Return
+	EndIf
+EndIf
+Sleep(500)
+
 If @AutoItX64 Then
 	$Sqlite3DllString = @ScriptDir & "\sqlite3_x64.dll"
-
 Else
 	$Sqlite3DllString = @ScriptDir & "\sqlite3.dll"
 EndIf
-;#ce
-;$Sqlite3DllString = @ScriptDir & "\sqlite3.dll"
 
 ;set encoding
-If GUICtrlRead($CheckUnicode) = 1 Then
-	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "PRAGMA encoding = 'UTF-16le';CREATE TABLE bogus(one INTEGER,two TEXT);", $sOutputFile, $SQLite3Exe)
+;If GUICtrlRead($CheckUnicode) = 1 Then
+If $CheckUnicode = 1 Then
+	;_DumpOutput("Executing sqlite3.exe" & @CRLF)
+	;$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "PRAGMA encoding = 'UTF-16le';CREATE TABLE bogus(one INTEGER,two TEXT);", $sOutputFile, $SQLite3Exe)
+	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "PRAGMA encoding = 'UTF-8';CREATE TABLE bogus(one INTEGER,two TEXT);", $sOutputFile, $SQLite3Exe)
 	If $SQLiteExecution <> 0 Then
-		MsgBox(0,"Error","Could not PRAGMA encoding = UTF-16le: " & $NtfsDbFile & " : " & @error)
-		_DumpOutput("Error Could not PRAGMA encoding = UTF-16le, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
+		MsgBox(0,"Error","Could not PRAGMA encoding = UTF-8: " & $NtfsDbFile & " : " & @error)
+		_DumpOutput("Error Could not PRAGMA encoding = UTF-8, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 		Exit
 	EndIf
-	_SQLite_Startup($Sqlite3DllString)
+	;_DumpOutput("Loading sqlite3.dll" & @CRLF)
+	_SQLite_Startup2($Sqlite3DllString)
 	If @error Then
-		MsgBox(0,"Error","sqlite3.dll was not loaded. Returned error val: " & @error)
+		MsgBox(0,"Error","Could not load " & $Sqlite3DllString & " Returned error val: " & @error)
 		Exit
 	EndIf
+	;_DumpOutput("Opening" & @CRLF)
 	$hDb = _SQLite_Open($NtfsDbFile) ;Open db
 	If @error Then
 		MsgBox(0,"Error","Opening database failed and returned error val: " & @extended)
 		Exit
 	EndIf
+	;_DumpOutput("Query" & @CRLF)
 	_SQLite_QuerySingleRow(-1, "PRAGMA encoding;", $aRow2)
-	If $aRow2[0] <> 'UTF-16le' Then
+	If $aRow2[0] <> 'UTF-8' Then
 		MsgBox(0,"Error","Detecting encoding was not correct")
 		Exit
 	EndIf
@@ -652,7 +808,7 @@ If GUICtrlRead($CheckUnicode) = 1 Then
 EndIf
 
 ; Create database with tables and import csv
-_DisplayInfo("Importing csv's to db and updating tables." & @CRLF)
+If Not $CommandlineMode Then _DisplayInfo("Importing csv's to db and updating tables." & @CRLF)
 _DumpOutput("Importing csv's to db and updating tables." & @CRLF)
 $begin = TimerInit()
 If $DoReconstructDataRuns Then
@@ -710,11 +866,12 @@ If FileExists($LogFileIndxCsvfile) Then
 	EndIf
 EndIf
 
-_SQLite_Startup($Sqlite3DllString)
+_SQLite_Startup2($Sqlite3DllString)
 If @error Then
-	MsgBox(0,"Error","sqlite3.dll was not loaded. Returned error val: " & @error)
+	MsgBox(0,"Error","Could not load " & $Sqlite3DllString & " Returned error val: " & @error)
 	Exit
 EndIf
+
 $hDb = _SQLite_Open($NtfsDbFile) ;Open db
 If @error Then
 	MsgBox(0,"Error","Opening database failed and returned error val: " & @extended)
@@ -758,7 +915,7 @@ If $TargetMftCsvFile Then
 		MsgBox(0,"Error","Could not import " & $TargetMftCsvFile & " into database: " & @error)
 		_DumpOutput("Error importing csv to Mft, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 	EndIf
-;	_SQLite_Startup($Sqlite3DllString)
+;	_SQLite_Startup2($Sqlite3DllString)
 ;	if $TargetMftCsvFile Then
 ;		$command = _SQLite_Exec($hDb, "DELETE from Mft where ROWID = 1;")
 ;		If @error Then
@@ -783,13 +940,15 @@ If $TargetMftCsvFile Then
 	_SQLite_SQLiteExe2($NtfsDbFile, "DROP TABLE LogFile;", $sOutputFile)
 	_SQLite_SQLiteExe2($NtfsDbFile, "ALTER TABLE LogFileTmp rename to LogFile;", $sOutputFile)
 EndIf
-_DisplayInfo("Csv import and table updates took " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & "." & @CRLF)
+If Not $CommandlineMode Then _DisplayInfo("Csv import and table updates took " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & "." & @CRLF)
 _DumpOutput("Csv import and table updates took " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & "." & @CRLF)
 
 ;----------------- UsnJrnl
 If FileExists($UsnJrnlFile) Then
-	$Progress = GUICtrlCreateLabel("Decoding $UsnJrnl info and writing to csv", 10, 380,540,20)
-	GUICtrlSetFont($Progress, 12)
+	If Not $CommandlineMode Then
+		$Progress = GUICtrlCreateLabel("Decoding $UsnJrnl info and writing to csv", 10, 380,540,20)
+		GUICtrlSetFont($Progress, 12)
+	EndIf
 	$begin = TimerInit()
 	Dim $tBuffer2, $hUsnJrnl, $RawPage="", $TestHeader, $UsnJrnlPage="", $Remainder="", $SQLiteExecution, $Record_Size = 4096, $nBytes=""
 	$tBuffer2 = DllStructCreate("byte[" & $Record_Size & "]")
@@ -808,7 +967,7 @@ If FileExists($UsnJrnlFile) Then
 	FileWriteLine($UsnJrnlCsv, $UsnJrnl_Csv_Header & @CRLF)
 	$InputFileSize = _WinAPI_GetFileSizeEx($hUsnJrnl)
 	ConsoleWrite("$MaxRecords " & $MaxRecords & @CRLF) ; 1712425
-	AdlibRegister("_UsnJrnlProgress",500)
+	If Not $CommandlineMode Then AdlibRegister("_UsnJrnlProgress",500)
 	$MaxRecords = Ceiling($InputFileSize/$Record_Size)
 	For $i = 0 To $MaxRecords-1
 		$CurrentRecord = $i
@@ -817,10 +976,12 @@ If FileExists($UsnJrnlFile) Then
 		$RawPage = DllStructGetData($tBuffer2, 1)
 		_UsnProcessPage(StringMid($RawPage,3))
 	Next
-	AdlibUnRegister("_UsnJrnlProgress")
-    GUICtrlSetData($ProgressStatus, "Processing UsnJrnl record " & $CurrentRecord+1 & " of " & $MaxRecords)
-    GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
-	GUICtrlSetData($ProgressUsnJrnl, 100 * ($CurrentRecord+1) / $MaxRecords)
+	If Not $CommandlineMode Then
+		AdlibUnRegister("_UsnJrnlProgress")
+		GUICtrlSetData($ProgressStatus, "Processing UsnJrnl record " & $CurrentRecord+1 & " of " & $MaxRecords)
+		GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
+		GUICtrlSetData($ProgressUsnJrnl, 100 * ($CurrentRecord+1) / $MaxRecords)
+	EndIf
 	_WinAPI_CloseHandle($hUsnJrnl)
 	_WinAPI_CloseHandle($UsnJrnlCsv)
 	$SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE UsnJrnl (UsnJrnlMFTReference INTEGER,UsnJrnlMFTParentReference INTEGER,UsnJrnlUSN INTEGER,UsnJrnlTimestamp TEXT,UsnJrnlReason TEXT,UsnJrnlSourceInfo TEXT,UsnJrnlFileAttributes TEXT,UsnJrnlFileName TEXT,UsnJrnlFileNameModified INTEGER);", $sOutputFile, $SQLite3Exe)
@@ -835,9 +996,9 @@ If FileExists($UsnJrnlFile) Then
 		_DumpOutput("Error importing csv to UsnJrnl, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
 		Exit
 	EndIf
-	_SQLite_Startup($Sqlite3DllString)
+	_SQLite_Startup2($Sqlite3DllString)
 	If @error Then
-		MsgBox(0,"Error","sqlite3.dll was not loaded. Returned error val: " & @error)
+		MsgBox(0,"Error","Could not load " & $Sqlite3DllString & " Returned error val: " & @error)
 		Exit
 	EndIf
 	$hDb = _SQLite_Open($NtfsDbFile) ;Open db
@@ -852,8 +1013,10 @@ If FileExists($UsnJrnlFile) Then
 	EndIf
 ;	_SQLite_Exec($hDb, "DELETE from LogFile where ROWID = 1;")
 ;	Join filename from UsnJrnl into LogFile
-	ProgressOn("Stage 3: (joining data from UsnJrnl into LogFile)", "", "", -1, -1, 16)
-	ProgressSet(0, 0 & " percent")
+	If Not $CommandlineMode Then
+		ProgressOn("Stage 3: (joining data from UsnJrnl into LogFile)", "", "", -1, -1, 16)
+		ProgressSet(0, 0 & " percent")
+	EndIf
 	$command = _SQLite_Exec($hDb, "create table LogFileTmp as select * from LogFile inner join UsnJrnl on LogFile.lf_SI_USN=UsnJrnl.UsnJrnlUSN where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 	If @error Then
 		MsgBox(0,"Error","Create table LogFileTmp failed and returned error val: " & $command)
@@ -864,25 +1027,25 @@ If FileExists($UsnJrnlFile) Then
 		MsgBox(0,"Error","update LogFile set lf_UsnJrlFileName failed and returned error val: " & $command)
 		Exit
 	EndIf
-	ProgressSet(20, 20 & " percent")
+	If Not $CommandlineMode Then ProgressSet(20, 20 & " percent")
 	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlMFTReference = (select UsnJrnlMFTReference from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 	If @error Then
 		MsgBox(0,"Error","update LogFile set lf_UsnJrlMFTReference failed and returned error val: " & $command)
 		Exit
 	EndIf
-	ProgressSet(40, 40 & " percent")
+	If Not $CommandlineMode Then ProgressSet(40, 40 & " percent")
 	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlMFTParentReference = (select UsnJrnlMFTParentReference from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 	If @error Then
 		MsgBox(0,"Error","update LogFile set lf_UsnJrlMFTParentReference failed and returned error val: " & $command)
 		Exit
 	EndIf
-	ProgressSet(60, 60 & " percent")
+	If Not $CommandlineMode Then ProgressSet(60, 60 & " percent")
 	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlTimestamp = (select UsnJrnlTimestamp from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 	If @error Then
 		MsgBox(0,"Error","update LogFile set lf_UsnJrlTimestamp failed and returned error val: " & $command)
 		Exit
 	EndIf
-	ProgressSet(80, 80 & " percent")
+	If Not $CommandlineMode Then ProgressSet(80, 80 & " percent")
 	$command = _SQLite_Exec($hDb, "update LogFile set lf_UsnJrlReason = (select UsnJrnlReason from LogFileTmp where LogFileTmp.UsnJrnlUSN=LogFile.lf_SI_USN) where lf_SI_USN <> '' and lf_SI_USN <> " & $IntegerErrorVal & " and lf_SI_USN <> " & $IntegerPartialValReplacement & ";")
 	If @error Then
 		MsgBox(0,"Error","update LogFile set lf_UsnJrlReason failed and returned error val: " & $command)
@@ -896,11 +1059,14 @@ If FileExists($UsnJrnlFile) Then
 			Exit
 		EndIf
 	EndIf
-	ProgressSet(100, "Done")
+	If Not $CommandlineMode Then ProgressSet(100, "Done")
 	_SQLite_Close()
 	_SQLite_Shutdown()
-	ProgressOff()
-	_DisplayInfo("$UsnJrnl processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
+	If Not $CommandlineMode Then
+		ProgressOff()
+		_DisplayInfo("$UsnJrnl processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
+	EndIf
+	_DumpOutput("$UsnJrnl processing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
 EndIf
 
 If FileExists($UsnJrnlFile) Or $TargetMftCsvFile Then
@@ -915,7 +1081,7 @@ If FileExists($UsnJrnlFile) Or $TargetMftCsvFile Then
 EndIf
 
 ;remove bogus table
-If GUICtrlRead($CheckUnicode) = 1 Then
+If $CheckUnicode = 1 Then
 	$SQLiteExecution2 = _SQLite_SQLiteExe2($NtfsDbFile, "DROP TABLE bogus;", $sOutputFile)
 	If $SQLiteExecution2 <> 0 Then
 		MsgBox(0,"Error","Could not DROP TABLE bogus: " & @error)
@@ -927,22 +1093,25 @@ EndIf
 
 ;--------- DataRuns
 If Not $DoReconstructDataRuns Then
-	_DisplayInfo("Done!" & @CRLF)
+	If Not $CommandlineMode Then _DisplayInfo("Done!" & @CRLF)
+	_DumpOutput("Done!" & @CRLF)
 ;	GUICtrlSetData($ProgressLogFile, 0)
 ;	GUICtrlSetData($ProgressUsnJrnl, 0)
 ;	GUICtrlSetData($ProgressReconstruct, 0)
 	Return
 EndIf
-$Progress = GUICtrlCreateLabel("Reconstructing dataruns", 10, 380,540,20)
-GUICtrlSetFont($Progress, 12)
+If Not $CommandlineMode Then
+	$Progress = GUICtrlCreateLabel("Reconstructing dataruns", 10, 380,540,20)
+	GUICtrlSetFont($Progress, 12)
+EndIf
 $begin = TimerInit()
-$sSQliteDll = _SQLite_Startup($Sqlite3DllString)
+$sSQliteDll = _SQLite_Startup2($Sqlite3DllString)
 If @error Then
-	MsgBox(0,"Error","sqlite3.dll was not loaded. Returned error val: " & @error)
+	MsgBox(0,"Error","Could not load " & $Sqlite3DllString & " Returned error val: " & @error)
 	Exit
 EndIf
-ConsoleWrite("SQLite3.dll Loaded: " & $sSQliteDll & @CRLF)
-ConsoleWrite("SQLite version: " & _SQLite_LibVersion() & @CRLF)
+;ConsoleWrite("SQLite3.dll Loaded: " & $sSQliteDll & @CRLF)
+;ConsoleWrite("SQLite version: " & _SQLite_LibVersion() & @CRLF)
 $hDb = _SQLite_Open($NtfsDbFile) ;Open db
 If @error Then
 	MsgBox(0,"Error","Opening database failed and returned error val: " & @extended)
@@ -971,13 +1140,16 @@ If @error Then
 	MsgBox(0,"Error","SQL select query failed and returned error val: " & $command)
 	Exit
 EndIf
-;ProgressOn("Stage 4: (reconstructing dataruns)", "", "", -1, -1, 16)
-AdlibRegister("_DataRunReconstructProgress")
+If Not $CommandlineMode Then
+;	ProgressOn("Stage 4: (reconstructing dataruns)", "", "", -1, -1, 16)
+	AdlibRegister("_DataRunReconstructProgress")
+EndIf
+ConsoleWrite("Reconstructing dataruns may take some time.." & @CRLF)
 $Counter = 0
 While _SQLite_FetchData($hQuery, $aRow) = $SQLITE_OK
 	$TargetRef = $aRow[0]
 	If $TargetRef = 'lf_MFTReference' Then ContinueLoop
-	ConsoleWrite("Current FileRef: " & $TargetRef & @CRLF)
+;	ConsoleWrite("Current FileRef: " & $TargetRef & @CRLF)
 	$command = _SQLite_GetTable2d($hDb, "SELECT * from Dataruns where lf_MFTReference = "&"'"&$TargetRef&"'"&" order by lf_LSN asc;", $DataRunArr, $iRows, $iColumns) ;Generate array from each ref and order it low-high by LSN
 	If @error Then
 		MsgBox(0,"Error","SQL select query failed and returned error val: " & $command)
@@ -1049,7 +1221,7 @@ For $k = 0 To UBound($NewDataRunArr)-1
 Next
 FileFlush($LogFileDataRunsModCsv)
 FileClose($LogFileDataRunsModCsv)
-_DisplayInfo("Reconstruction of dataruns finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
+If Not $CommandlineMode Then _DisplayInfo("Reconstruction of dataruns finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
 $SQLiteExecution = _SQLite_SQLiteExe2($NtfsDbFile, "CREATE TABLE DataRunsResolved (lf_MFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_FileName TEXT,lf_LSN INTEGER,lf_OffsetInMft INTEGER,lf_DataName TEXT,lf_Flags TEXT,lf_NonResident INTEGER,lf_FileSize INTEGER,lf_InitializedStreamSize INTEGER,lf_DataRuns TEXT);", $sOutputFile, $SQLite3Exe)
 If $SQLiteExecution <> 0 Then
 	MsgBox(0,"Error","Could not create table DataRunsResolved in database: " & @error)
@@ -1068,11 +1240,14 @@ If @error Then
 EndIf
 _SQLite_Close()
 _SQLite_Shutdown()
-AdlibUnRegister("_DataRunReconstructProgress")
-GUICtrlSetData($ProgressStatus, "Reconstructing dataruns at row " & $RowsProcessed+1 & " of " & $MaxRows)
-GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
-GUICtrlSetData($ProgressReconstruct, 100 * ($RowsProcessed+1) / $MaxRows)
-_DisplayInfo("Done!" & @CRLF)
+If Not $CommandlineMode Then
+	AdlibUnRegister("_DataRunReconstructProgress")
+	GUICtrlSetData($ProgressStatus, "Reconstructing dataruns at row " & $RowsProcessed+1 & " of " & $MaxRows)
+	GUICtrlSetData($ElapsedTime, "Elapsed time = " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)))
+	GUICtrlSetData($ProgressReconstruct, 100 * ($RowsProcessed+1) / $MaxRows)
+	_DisplayInfo("Done!" & @CRLF)
+EndIf
+_DumpOutput("Done!" & @CRLF)
 $ReconstructDone=True
 Return
 EndFunc
@@ -1728,6 +1903,7 @@ If IsArray($VerboseArr) Then
 		If $this_lsn=$VerboseArr[$i] Then $VerboseOn=1
 	Next
 EndIf
+;$VerboseOn=1
 
 If $VerboseOn Then
 	_DumpOutput("VerboseOn" & @CRLF)
@@ -1759,6 +1935,7 @@ If $VerboseOn Then
 	_DumpOutput("$target_lcn: " & $target_lcn & @CRLF)
 	_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
 	_DumpOutput("$FoundInTable: " & $FoundInTable & @CRLF)
+	_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
 	_DumpOutput(@CRLF)
 ;	MsgBox(0,"Verbose","Check output")
 EndIf
@@ -2039,7 +2216,11 @@ If $redo_length > 0 Then
 					_DumpOutput("_Decode_IndexEntry() failed for $this_lsn: " & $this_lsn & @CRLF)
 					_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 				Else
-					If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
+					If $redo_operation_hex="0c00" Then
+						_UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
+						$TextInformation &= ";See LogFile_INDX_I30.csv"
+					EndIf
+					If $redo_operation_hex="0e00" Then $TextInformation &= ";See LogFile_INDX_I30.csv"
 				EndIf
 			Else
 				Select
@@ -2081,7 +2262,11 @@ If $redo_length > 0 Then
 							_DumpOutput("_Decode_IndexEntry() failed for $this_lsn: " & $this_lsn & @CRLF)
 							_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 						Else
-							If $redo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
+							If $redo_operation_hex="0c00" Then
+								_UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $RedoChunkSize, '$INDEX_ROOT')
+								$TextInformation &= ";See LogFile_INDX_I30.csv"
+							EndIf
+							If $redo_operation_hex="0e00" Then $TextInformation &= ";See LogFile_INDX_I30.csv"
 						EndIf
 				EndSelect
 			EndIf
@@ -2103,7 +2288,7 @@ If $redo_length > 0 Then
 ;			ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
 ;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case $redo_operation_hex="1300" ; UpdateFileNameRoot
-			_Decode_FileName($redo_chunk)
+			_Decode_UpdateFileName($redo_chunk,1)
 			If $PreviousRedoOp = "1c00" Then
 				$AttributeString = $PreviousAttribute
 			Else
@@ -2111,14 +2296,16 @@ If $redo_length > 0 Then
 				$RealMftRef = $MftRefReplacement
 			EndIf
 		Case $redo_operation_hex="1400" ; UpdateFileNameAllocation
-;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+;			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 			If Not $FromRcrdSlack Then
 				If $KeptRefTmp > 0 And $client_previous_lsn = 0 Then
 					$PredictedRefNumber = $KeptRefTmp
 					$KeptRef = $KeptRefTmp
 				EndIf
 			EndIf
-			_Decode_FileName($redo_chunk)
+			_Decode_UpdateFileName($redo_chunk,1)
 			If $PreviousRedoOp = "1c00" Then
 				$AttributeString = $PreviousAttribute
 			Else
@@ -2332,6 +2519,7 @@ If $undo_length > 0 Then ; Not needed I guess
 							_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 						Else
 ;							If $undo_operation_hex="0c00" Then _UpdateSingleOffsetOfAttribute($RealMftRef, $record_offset_in_mft, $UndoChunkSize, '$INDEX_ROOT')
+							$TextInformation &= ";See LogFile_UndoWipe_INDX_I30.csv"
 						EndIf
 					Else
 						_DumpOutput(@CRLF & "Error: Unresolved: " & $undo_operation & @CRLF)
@@ -2373,6 +2561,8 @@ If $undo_length > 0 Then ; Not needed I guess
 					If Not $DecodeOk Then
 						_DumpOutput(@CRLF & "_Decode_UndoWipeINDX() failed for $this_lsn: " & $this_lsn & @CRLF)
 						_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+					Else
+						$TextInformation &= ";See LogFile_UndoWipe_INDX_I30.csv"
 					EndIf
 				Case Else
 					_DumpOutput("Unresolved: " & $undo_operation & @CRLF)
@@ -2407,9 +2597,12 @@ If $undo_length > 0 Then ; Not needed I guess
 ;			ConsoleWrite(_HexEncode("0x"&$undo_chunk) & @CRLF)
 		Case $undo_operation_hex="1200" ; SetIndexEntryVcnAllocation
 		Case $undo_operation_hex="1300" ; UpdateFileNameRoot
-;			_Decode_FileName($undo_chunk)
+			_Decode_UpdateFileName($undo_chunk,0)
 		Case $undo_operation_hex="1400" ; UpdateFileNameAllocation
-;			_Decode_FileName($undo_chunk)
+			_Decode_UpdateFileName($undo_chunk,0)
+;			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+;			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 		Case $undo_operation_hex="1500" ; SetBitsInNonresidentBitMap
 			_Decode_BitsInNonresidentBitMap($redo_chunk,$redo_operation,$undo_chunk,$undo_operation)
 			$TextInformation &= ";See LogFile_BitsInNonresidentBitMap.csv"
@@ -2791,6 +2984,7 @@ Func _HexEncode($bInput)
             "dword*", 0)
 
     If @error Or Not $a_iCall[0] Then
+		$tInput = 0
         Return SetError(1, 0, "")
     EndIf
     Local $iSize = $a_iCall[5]
@@ -2802,8 +2996,10 @@ Func _HexEncode($bInput)
             "ptr", DllStructGetPtr($tOut), _
             "dword*", $iSize)
     If @error Or Not $a_iCall[0] Then
+		$tInput = 0
         Return SetError(2, 0, "")
     EndIf
+	$tInput = 0
     Return SetError(0, 0, DllStructGetData($tOut, 1))
 EndFunc
 
@@ -2887,6 +3083,7 @@ Func _ParserCodeOldVersion($MFTEntry)
 		$HDR_MFTREcordNumber = StringMid($MFTEntry, 89, 8)
 		$HDR_MFTREcordNumber = Dec(_SwapEndian($HDR_MFTREcordNumber),2)
 		If $HDR_MFTREcordNumber <> $PredictedRefNumber And $redo_length > 24 And $undo_operation <> "CompensationlogRecord" Then
+			_DumpOutput("Error with LSN " & $this_lsn & ". Predicted Reference number: " & $PredictedRefNumber & " do not match Reference found in $MFT: " & $HDR_MFTREcordNumber & ". SectorsPerCluster (" & $SectorsPerCluster & ") or MFT Record size configuration (" & $MFT_Record_Size & ") might be incorrect." & @CRLF)
 			If MsgBox(4,"Error with LSN " & $this_lsn,"Predicted Reference number: " & $PredictedRefNumber & " do not match Reference found in $MFT: " & $HDR_MFTREcordNumber & ". Are you sure your SectorsPerCluster (" & $SectorsPerCluster & ") or MFT Record size configuration (" & $MFT_Record_Size & ") is correct?") = 7 Then Exit
 		EndIf
 	Else
@@ -4166,7 +4363,7 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 		$FN_AllocSize = $Indx_AllocSize
 		$FN_RealSize = $Indx_RealSize
 		$FN_Flags = $Indx_File_Flags
-;		$TextInformation &= ";MFTReference="&$MFTReference&";FileName="&$Indx_FileName&";FileNameModified="&$FileNameModified
+		$TextInformation &= ";MftRef="&$MFTReference&";MftSeqNo="&$MFTReferenceSeqNo
 		if $AttrType = "0c00" Or $AttrType = "0d00" Then $AttributeString = "$INDEX_ROOT"
 		if $AttrType = "0e00" Or $AttrType = "0f00" Then $AttributeString = "$INDEX_ALLOCATION"
 	EndIf
@@ -4185,6 +4382,7 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 		_DumpOutput("$Indx_AllocSize = " & $Indx_AllocSize & @crlf)
 		_DumpOutput("$Indx_RealSize = " & $Indx_RealSize & @crlf)
 		_DumpOutput("$Indx_File_Flags = " & $Indx_File_Flags & @crlf)
+		_DumpOutput("$Indx_ReparseTag = " & $Indx_ReparseTag & @crlf)
 		_DumpOutput("$Indx_NameLength = " & $Indx_NameLength & @crlf)
 		_DumpOutput("$Indx_NameSpace = " & $Indx_NameSpace & @crlf)
 		_DumpOutput("$Indx_FileName = " & $Indx_FileName & @crlf)
@@ -4753,7 +4951,7 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 EndFunc
 
 Func _WriteOut_MFTrecord($MFTref, $content)
-	Local $nBytes = "", $Counter = 1, $rBuffer, $hFileOut, $OutFile, $Written, $Written2
+	Local $nBytes = "", $Counter = 1, $rBuffer, $Written2;, $hFileOut, $OutFile, $Written
 	If Mod(StringLen($content)/2,$MFT_Record_Size) Then
 		Do
 			$content &= "00"
@@ -4763,10 +4961,11 @@ Func _WriteOut_MFTrecord($MFTref, $content)
 ; Writing each record into 1 dummy $MFT with all found records
 	$rBuffer = DllStructCreate("byte ["&$MFT_Record_Size&"]")
 	DllStructSetData($rBuffer,1,"0x"&$content)
-	$Written2 = _WinAPI_WriteFile($hOutFileMFT, DllStructGetPtr($rBuffer), DllStructGetSize($rBuffer), $nBytes2)
+	$Written2 = _WinAPI_WriteFile($hOutFileMFT, DllStructGetPtr($rBuffer), DllStructGetSize($rBuffer), $nBytes)
 	If $Written2 = 0 Then
 		ConsoleWrite("Error: WriteFile returned: " & _WinAPI_GetLastErrorMessage() & @CRLF)
 	EndIf
+	$rBuffer=0
 EndFunc
 
 Func _UpdateDataRunInformation($TargetRedoOperation, $TargetAttributeOffset, $TargetOffsetToDatarun, $TargetDatarun, $PreviousDatarun)
@@ -4824,7 +5023,6 @@ Func _UpdateDataRunInformation($TargetRedoOperation, $TargetAttributeOffset, $Ta
 	Return $ReassembledDatarun
 EndFunc
 
-;Had some problems with the original function and standard setup
 Func _SQLite_SQLiteExe2($sDatabaseFile, $sInput, ByRef $sOutput, $sSQLiteExeFilename = -1, $fDebug = False)
 	If $sSQLiteExeFilename = -1 Or (IsKeyword($sSQLiteExeFilename) And $sSQLiteExeFilename = Default) Then
 		$sSQLiteExeFilename = @ScriptDir & "\SQLite3.exe"
@@ -4845,16 +5043,22 @@ Func _SQLite_SQLiteExe2($sDatabaseFile, $sInput, ByRef $sOutput, $sSQLiteExeFile
 		FileClose($hNewFile)
 	EndIf
 	Local $sInputFile = _TempFile(), $sOutputFile = _TempFile(), $iRval = $SQLITE_OK
+	;Local $BatchFile = _TempFile(@ScriptDir,"~",".bat")
 	Local $hInputFile = FileOpen($sInputFile, 2)
 	If $hInputFile > -1 Then
 		$sInput = ".output stdout" & @CRLF & $sInput
 		FileWrite($hInputFile, $sInput)
 		FileClose($hInputFile)
+		;$hBatchFile = FileOpen($BatchFile,2)
+		If Not FileExists($sInputFile) Then MsgBox(0,"Error: File not found",$sInputFile)
 		Local $sCmd = @ComSpec & " /c " & FileGetShortName($sSQLiteExeFilename) & '  "' _
 				 & FileGetShortName($sDatabaseFile) _
 				 & '" > "' & FileGetShortName($sOutputFile) _
 				 & '" < "' & FileGetShortName($sInputFile) & '"'
+		;FileWrite($hBatchFile,$sCmd)
+		;FileClose($hBatchFile)
 		Local $nErrorLevel = RunWait($sCmd, @ScriptDir, @SW_HIDE)
+		;Local $nErrorLevel = RunWait(@ScriptDir&"\RunWait.exe " & $BatchFile, @ScriptDir, @SW_HIDE)
 		If $fDebug = True Then
 			Local $nErrorTemp = @error
 			__SQLite_Print('@@ Debug(_SQLite_SQLiteExe) : $sCmd = ' & $sCmd & @CRLF & '>ErrorLevel: ' & $nErrorLevel & @CRLF)
@@ -4870,6 +5074,7 @@ Func _SQLite_SQLiteExe2($sDatabaseFile, $sInput, ByRef $sOutput, $sSQLiteExeFile
 		$iRval = $SQLITE_CANTOPEN ; Can't open Input File
 	EndIf
 	If FileExists($sInputFile) Then FileDelete($sInputFile)
+	;If FileExists($BatchFile) Then FileDelete($BatchFile)
 	Switch $iRval
 		Case $SQLITE_MISUSE
 			SetError(2)
@@ -4897,7 +5102,7 @@ Func _Decode_StandardInformation($Attribute)
 
 			Local $SI_XTime_Fragment = ""
 			Select
-				Case $LoopCounter < 8
+				Case $LoopCounter > 0 And $LoopCounter < 8
 					$TextInformation &= ";CTime in $SI is incomplete. Search debug.log for " & $this_lsn
 					$BytesMissing = 8-$LoopCounter
 					$BytesMissing = $LoopCounter
@@ -4960,7 +5165,7 @@ Func _Decode_StandardInformation($Attribute)
 				_DumpOutput("The decoded timestamps for the above range " & $LowEnd_SI_XTime_Fragment & " - " & $HighEnd_SI_XTime_Fragment & @CRLF)
 				_DumpOutput("The replacement values are always 00's. That is the timestamp in the low end of the range." & @CRLF)
 				_DumpOutput("This is not a parsing error, but a consequence of that these specific bytes did not change from the previous timestamp." & @CRLF)
-				_DumpOutput("If there is an earlier UpdateResidentValue for this MFT ref, you may be able to resolve the missing bytes." & @CRLF & @CRLF)
+				_DumpOutput("If there is an earlier UpdateResidentValue for this MFT ref, you may be able to resolve the missing byte(s)." & @CRLF & @CRLF)
 			EndIf
 
 			$SI_CTime = StringMid($Attribute, $SI_Offset + 48, 16)
@@ -5476,99 +5681,6 @@ Func _Decode_StandardInformation($Attribute)
 	EndIf
 EndFunc
 
-Func _Decode_FileName($attribute)
-	Local $SI_CTime_tmp, $SI_ATime_tmp, $SI_MTime_tmp, $SI_RTime_tmp
-	$SI_CTime = StringMid($attribute, 1, 16)
-	$SI_CTime = _SwapEndian($SI_CTime)
-	$SI_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_CTime)
-	;
-	$SI_CTime = _WinTime_UTCFileTimeFormat(Dec($SI_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
-	If @error Then
-		$SI_CTime = $TimestampErrorVal
-	ElseIf $TimestampPrecision = 2 Then
-		$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-4)
-		$SI_CTime_Precision = StringRight($SI_CTime,3)
-	ElseIf $TimestampPrecision = 3 Then
-		$SI_CTime = $SI_CTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_CTime_tmp, 4))
-		$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-9)
-		$SI_CTime_Precision = StringRight($SI_CTime,8)
-	Else
-		$SI_CTime_Core = $SI_CTime
-	EndIf
-	;
-	$SI_ATime = StringMid($attribute, 17, 16)
-	$SI_ATime = _SwapEndian($SI_ATime)
-	$SI_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_ATime)
-	;
-	$SI_ATime = _WinTime_UTCFileTimeFormat(Dec($SI_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
-	If @error Then
-		$SI_ATime = $TimestampErrorVal
-	ElseIf $TimestampPrecision = 2 Then
-		$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-4)
-		$SI_ATime_Precision = StringRight($SI_ATime,3)
-	ElseIf $TimestampPrecision = 3 Then
-		$SI_ATime = $SI_ATime & $PrecisionSeparator2 & _FillZero(StringRight($SI_ATime_tmp, 4))
-		$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-9)
-		$SI_ATime_Precision = StringRight($SI_ATime,8)
-	Else
-		$SI_ATime_Core = $SI_ATime
-	EndIf
-	;
-	$SI_MTime = StringMid($attribute, 33, 16)
-	$SI_MTime = _SwapEndian($SI_MTime)
-	$SI_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_MTime)
-	;
-	$SI_MTime = _WinTime_UTCFileTimeFormat(Dec($SI_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
-	If @error Then
-		$SI_MTime = $TimestampErrorVal
-	ElseIf $TimestampPrecision = 2 Then
-		$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-4)
-		$SI_MTime_Precision = StringRight($SI_MTime,3)
-	ElseIf $TimestampPrecision = 3 Then
-		$SI_MTime = $SI_MTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_MTime_tmp, 4))
-		$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-9)
-		$SI_MTime_Precision = StringRight($SI_MTime,8)
-	Else
-		$SI_MTime_Core = $SI_MTime
-	EndIf
-	;
-	$SI_RTime = StringMid($attribute, 49, 16)
-	$SI_RTime = _SwapEndian($SI_RTime)
-	$SI_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_RTime)
-	;
-	$SI_RTime = _WinTime_UTCFileTimeFormat(Dec($SI_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
-	If @error Then
-		$SI_RTime = $TimestampErrorVal
-	ElseIf $TimestampPrecision = 2 Then
-		$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-4)
-		$SI_RTime_Precision = StringRight($SI_RTime,3)
-	ElseIf $TimestampPrecision = 3 Then
-		$SI_RTime = $SI_RTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_RTime_tmp, 4))
-		$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-9)
-		$SI_RTime_Precision = StringRight($SI_RTime,8)
-	Else
-		$SI_RTime_Core = $SI_RTime
-	EndIf
-	;
-	$FN_AllocSize = StringMid($attribute, 65, 16)
-	$FN_AllocSize = Dec(_SwapEndian($FN_AllocSize),2)
-	$FN_RealSize = StringMid($attribute, 81, 16)
-	$FN_RealSize = Dec(_SwapEndian($FN_RealSize),2)
-	$FN_Flags = StringMid($attribute, 97, 8)
-	$FN_Flags = _SwapEndian($FN_Flags)
-	$FN_Flags = _File_Attributes("0x" & $FN_Flags)
-	If $VerboseOn Then
-		ConsoleWrite("########### Decoding $FILE_NAME ATTTRIBUTE ###########" & @CRLF)
-		ConsoleWrite("$SI_CTime: " & $SI_CTime & @CRLF)
-		ConsoleWrite("$SI_ATime: " & $SI_ATime & @CRLF)
-		ConsoleWrite("$SI_MTime: " & $SI_MTime & @CRLF)
-		ConsoleWrite("$SI_RTime: " & $SI_RTime & @CRLF)
-		ConsoleWrite("$FN_AllocSize: " & $FN_AllocSize & @CRLF)
-		ConsoleWrite("$FN_RealSize: " & $FN_RealSize & @CRLF)
-		ConsoleWrite("$FN_Flags: " & $FN_Flags & @CRLF)
-	EndIf
-EndFunc
-
 Func _DecodeSourceInfoFlag($input)
 	Select
 		Case $input = 0x00000001
@@ -5832,9 +5944,9 @@ Func _ClearVar()
 	EndIf
 EndFunc
 
-Func _PrepareOutput()
+Func _PrepareOutput($OutputDir)
 	$TimestampStart = @YEAR & "-" & @MON & "-" & @MDAY & "_" & @HOUR & "-" & @MIN & "-" & @SEC
-	$ParserOutDir = @ScriptDir&"\NtfsOutput_"&$TimestampStart
+	$ParserOutDir = $OutputDir&"\NtfsOutput_"&$TimestampStart
 	If DirCreate($ParserOutDir) = 0 Then
 		ConsoleWrite("Error creating: " & $ParserOutDir & @CRLF)
 		Exit
@@ -6052,6 +6164,14 @@ Func _PrepareOutput()
 		Exit
 	EndIf
 	_DebugOut("Created output file: " & $LogFileTxfDataCsvFile)
+
+	$LogFileUpdateFileNameCsvFile = $ParserOutDir & "\LogFile_UpdateFileName_I30.csv"
+	$LogFileUpdateFileNameCsv = FileOpen($LogFileUpdateFileNameCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileUpdateFileNameCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileUpdateFileNameCsvFile)
 EndFunc
 
 Func _WriteCSVExtraHeader()
@@ -6076,6 +6196,8 @@ Func _WriteCSVHeader()
 ;	$LogFile_UsnJrnl_Csv_Header = "MFTReference"&$de&"MFTParentReference"&$de&"USN"&$de&"Timestamp"&$de&"Reason"&$de&"SourceInfo"&$de&"FileAttributes"&$de&"FileName"&$de&"FileNameModified"
 	$LogFile_UsnJrnl_Csv_Header = "FileName"&$de&"USN"&$de&"Timestamp"&$de&"Reason"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"MFTParentReference"&$de&"ParentReferenceSeqNo"&$de&"FileAttributes"&$de&"MajorVersion"&$de&"MinorVersion"&$de&"SourceInfo"&$de&"SecurityId"
 	FileWriteLine($LogFileUsnJrnlCsv, $LogFile_UsnJrnl_Csv_Header & @CRLF)
+	$LogFile_UpdateFileName_Csv_Header = "lf_Offset"&$de&"lf_LSN"&$de&"lf_CTime"&$de&"lf_ATime"&$de&"lf_MTime"&$de&"lf_RTime"&$de&"lf_AllocSize"&$de&"lf_RealSize"&$de&"lf_FileFlags"&$de&"lf_ReparseTag"
+	FileWriteLine($LogFileUpdateFileNameCsv, $LogFile_UpdateFileName_Csv_Header & @CRLF)
 EndFunc
 
 Func _WriteCSVExtra()
@@ -6400,10 +6522,14 @@ $Regions = "UTC: -12.00|" & _
 GUICtrlSetData($Combo2,$Regions,"UTC: 0.00")
 EndFunc
 
-Func _GetUTCRegion()
-	$UTCRegion = GUICtrlRead($Combo2)
+Func _GetUTCRegion($UTCRegion)
 	If $UTCRegion = "" Then Return SetError(1,0,0)
-	$part1 = StringMid($UTCRegion,StringInStr($UTCRegion," ")+1)
+
+	If StringInStr($UTCRegion,"UTC:") Then
+		$part1 = StringMid($UTCRegion,StringInStr($UTCRegion," ")+1)
+	Else
+		$part1 = $UTCRegion
+	EndIf
 	Global $UTCconfig = $part1
 	If StringRight($part1,2) = "15" Then $part1 = StringReplace($part1,".15",".25")
 	If StringRight($part1,2) = "30" Then $part1 = StringReplace($part1,".30",".50")
@@ -11002,4 +11128,354 @@ Func _Get_Ea_NonResident($Entry)
 ;		EndIf
 	Until $LocalAttributeOffset >= $StringLengthInput
 	$TextInformation &= ";Search debug.log for " & $this_lsn
+EndFunc
+
+Func _GetInputParams()
+	Local $TimeZone
+	For $i = 1 To $cmdline[0]
+		;ConsoleWrite("Param " & $i & ": " & $cmdline[$i] & @CRLF)
+		If StringLeft($cmdline[$i],13) = "/LogFileFile:" Then $InputLogFile = StringMid($cmdline[$i],14)
+		If StringLeft($cmdline[$i],12) = "/MftCsvFile:" Then $TargetMftCsvFile = StringMid($cmdline[$i],13)
+		If StringLeft($cmdline[$i],12) = "/OutputPath:" Then $ParserOutDir = StringMid($cmdline[$i],13)
+		If StringLeft($cmdline[$i],10) = "/TimeZone:" Then $TimeZone = StringMid($cmdline[$i],11)
+		If StringLeft($cmdline[$i],11) = "/Separator:" Then $SeparatorInput = StringMid($cmdline[$i],12)
+		;If StringLeft($cmdline[$i],15) = "/QuotationMark:" Then $checkquotes = StringMid($cmdline[$i],16)
+		If StringLeft($cmdline[$i],9) = "/Unicode:" Then $CheckUnicode = StringMid($cmdline[$i],10)
+		If StringLeft($cmdline[$i],10) = "/TSFormat:" Then $DateTimeFormat = StringMid($cmdline[$i],11)
+		If StringLeft($cmdline[$i],13) = "/TSPrecision:" Then $TimestampPrecision = StringMid($cmdline[$i],14)
+		If StringLeft($cmdline[$i],22) = "/TSPrecisionSeparator:" Then $PrecisionSeparator = StringMid($cmdline[$i],23)
+		If StringLeft($cmdline[$i],23) = "/TSPrecisionSeparator2:" Then $PrecisionSeparator2 = StringMid($cmdline[$i],24)
+		If StringLeft($cmdline[$i],12) = "/TSErrorVal:" Then $TimestampErrorVal = StringMid($cmdline[$i],13)
+		If StringLeft($cmdline[$i],21) = "/ReconstructDataruns:" Then $CheckReconstruct = StringMid($cmdline[$i],22)
+		If StringLeft($cmdline[$i],21) = "/RebuildHeadersSlack:" Then $CheckBrokenHeaderRebuild = StringMid($cmdline[$i],22)
+		If StringLeft($cmdline[$i],19) = "/SectorsPerCluster:" Then $SectorsPerCluster = StringMid($cmdline[$i],20)
+		If StringLeft($cmdline[$i],15) = "/MftRecordSize:" Then $MFT_Record_Size = StringMid($cmdline[$i],16)
+		If StringLeft($cmdline[$i],15) = "/LsnErrorLevel:" Then $LsnValidationLevel = StringMid($cmdline[$i],16)
+		If StringLeft($cmdline[$i],14) = "/SourceIsNt5x:" Then $CheckNt5x = StringMid($cmdline[$i],15)
+		If StringLeft($cmdline[$i],20) = "/ExtractDataUpdates:" Then $CheckExtractResident = StringMid($cmdline[$i],21)
+		If StringLeft($cmdline[$i],24) = "/ExtractDataUpdatesSize:" Then $MinSizeResidentExtraction = StringMid($cmdline[$i],25)
+		If StringLeft($cmdline[$i],16) = "/VerboseLsnList:" Then $VerboseLsnList = StringMid($cmdline[$i],17)
+		If StringLeft($cmdline[$i],13) = "/SkipSqlite3:" Then $CheckSkipSqlite3 = StringMid($cmdline[$i],14)
+	Next
+
+	If StringLen($ParserOutDir) > 0 Then
+		If Not FileExists($ParserOutDir) Then
+			ConsoleWrite("Error output path not found: " & $ParserOutDir & @CRLF)
+			Exit
+		EndIf
+	Else
+		$ParserOutDir = @ScriptDir
+	EndIf
+
+	If StringLen($SectorsPerCluster) > 0 Then
+		If Not StringIsDigit($SectorsPerCluster) Or ($SectorsPerCluster <> 1 And $SectorsPerCluster <> 2 And $SectorsPerCluster <> 4 And $SectorsPerCluster <> 8 And $SectorsPerCluster <> 16 And $SectorsPerCluster <> 32 And $SectorsPerCluster <> 64 And $SectorsPerCluster <> 128) Then
+			ConsoleWrite("Error validating sectors per cluster configuration: " & $SectorsPerCluster & @CRLF)
+			Exit
+		EndIf
+	Else
+		$SectorsPerCluster = 8
+	EndIf
+
+	If StringLen($MFT_Record_Size) > 0 Then
+		If $MFT_Record_Size <> 1024 And $MFT_Record_Size <> 4096 Then
+			ConsoleWrite("Error validating MFT record size configuration: " & $MFT_Record_Size & @CRLF)
+			Exit
+		EndIf
+	Else
+		$MFT_Record_Size = 1024
+	EndIf
+
+	If StringLen($LsnValidationLevel) > 0 Then
+		If Not StringIsFloat($LsnValidationLevel) Or Not ($LsnValidationLevel > 0 Or $LsnValidationLevel < 1) Then
+			ConsoleWrite("Error validating lsn validation level: " & $LsnValidationLevel & @CRLF)
+			Exit
+		EndIf
+	Else
+		$LsnValidationLevel = 0.1
+	EndIf
+
+	If StringLen($MinSizeResidentExtraction) > 0 Then
+		If Not StringIsDigit($MinSizeResidentExtraction) Or ($MinSizeResidentExtraction < 1 Or $MinSizeResidentExtraction > 4096) Then ;4096 is too high, but setting too low limit just impose possibility of lost extraction data
+			ConsoleWrite("Error validating minimum size for data updates extraction: " & $MinSizeResidentExtraction & @CRLF)
+			Exit
+		EndIf
+	Else
+		$MinSizeResidentExtraction = 2
+	EndIf
+
+	If StringLen($CheckUnicode) > 0 Then
+		If Not StringIsDigit($CheckUnicode) Or ($CheckUnicode <> 0 And $CheckUnicode <> 1) Then
+			ConsoleWrite("Error validating Unicode configuration: " & $CheckUnicode & @CRLF)
+			Exit
+		EndIf
+	Else
+		$CheckUnicode = 0
+	EndIf
+
+	If StringLen($CheckSkipSqlite3) > 0 Then
+		If Not StringIsDigit($CheckSkipSqlite3) Or ($CheckSkipSqlite3 <> 0 And $CheckSkipSqlite3 <> 1) Then
+			ConsoleWrite("Error validating Skip of sqlite3 configuration: " & $CheckSkipSqlite3 & @CRLF)
+			Exit
+		EndIf
+	Else
+		$CheckSkipSqlite3 = 0
+	EndIf
+
+	If StringLen($CheckReconstruct) > 0 Then
+		If Not StringIsDigit($CheckReconstruct) Or ($CheckReconstruct <> 0 And $CheckReconstruct <> 1) Then
+			ConsoleWrite("Error validating datarun reconstruct configuration: " & $CheckReconstruct & @CRLF)
+			Exit
+		EndIf
+	Else
+		$CheckReconstruct = 0
+	EndIf
+
+	If StringLen($CheckBrokenHeaderRebuild) > 0 Then
+		If Not StringIsDigit($CheckBrokenHeaderRebuild) Or ($CheckBrokenHeaderRebuild <> 0 And $CheckBrokenHeaderRebuild <> 1) Then
+			ConsoleWrite("Error validating broken header reconstruct from slack configuration: " & $CheckBrokenHeaderRebuild & @CRLF)
+			Exit
+		EndIf
+	Else
+		$CheckBrokenHeaderRebuild = 0
+	EndIf
+
+	If StringLen($CheckNt5x) > 0 Then
+		If Not StringIsDigit($CheckNt5x) Or ($CheckNt5x <> 0 And $CheckNt5x <> 1) Then
+			ConsoleWrite("Error validating IsNt5x configuration: " & $CheckNt5x & @CRLF)
+			Exit
+		EndIf
+	Else
+		$CheckNt5x = 0
+	EndIf
+
+	If StringLen($CheckExtractResident) > 0 Then
+		If Not StringIsDigit($CheckExtractResident) Or ($CheckExtractResident <> 0 And $CheckExtractResident <> 1) Then
+			ConsoleWrite("Error validating data updates extraction configuration: " & $CheckExtractResident & @CRLF)
+			Exit
+		EndIf
+	Else
+		$CheckExtractResident = 0
+	EndIf
+
+	If StringLen($TimeZone) > 0 Then
+		Select
+			Case $TimeZone = "-12.00"
+			Case $TimeZone = "-11.00"
+			Case $TimeZone = "-10.00"
+			Case $TimeZone = "-9.30"
+			Case $TimeZone = "-9.00"
+			Case $TimeZone = "-8.00"
+			Case $TimeZone = "-7.00"
+			Case $TimeZone = "-6.00"
+			Case $TimeZone = "-5.00"
+			Case $TimeZone = "-4.30"
+			Case $TimeZone = "-4.00"
+			Case $TimeZone = "-3.30"
+			Case $TimeZone = "-3.00"
+			Case $TimeZone = "-2.00"
+			Case $TimeZone = "-1.00"
+			Case $TimeZone = "0.00"
+			Case $TimeZone = "1.00"
+			Case $TimeZone = "2.00"
+			Case $TimeZone = "3.00"
+			Case $TimeZone = "3.30"
+			Case $TimeZone = "4.00"
+			Case $TimeZone = "4.30"
+			Case $TimeZone = "5.00"
+			Case $TimeZone = "5.30"
+			Case $TimeZone = "5.45"
+			Case $TimeZone = "6.00"
+			Case $TimeZone = "6.30"
+			Case $TimeZone = "7.00"
+			Case $TimeZone = "8.00"
+			Case $TimeZone = "8.45"
+			Case $TimeZone = "9.00"
+			Case $TimeZone = "9.30"
+			Case $TimeZone = "10.00"
+			Case $TimeZone = "10.30"
+			Case $TimeZone = "11.00"
+			Case $TimeZone = "11.30"
+			Case $TimeZone = "12.00"
+			Case $TimeZone = "12.45"
+			Case $TimeZone = "13.00"
+			Case $TimeZone = "14.00"
+			Case Else
+				$TimeZone = "0.00"
+		EndSelect
+	Else
+		$TimeZone = "0.00"
+	EndIf
+
+	$tDelta = _GetUTCRegion($TimeZone)-$tDelta
+	If @error Then
+		_DisplayInfo("Error: Timezone configuration failed." & @CRLF)
+	Else
+		_DisplayInfo("Timestamps presented in UTC: " & $UTCconfig & @CRLF)
+	EndIf
+	$tDelta = $tDelta*-1
+
+	If StringLen($InputLogFile) > 0 Then
+		If Not FileExists($InputLogFile) Then
+			ConsoleWrite("Error input $LogFile file does not exist." & @CRLF)
+			Exit
+		EndIf
+	EndIf
+
+	If StringLen($TargetMftCsvFile) > 0 Then
+		If Not FileExists($TargetMftCsvFile) Then
+			ConsoleWrite("Error input MFT csv file does not exist." & @CRLF)
+			Exit
+		EndIf
+	EndIf
+
+	If StringLen($PrecisionSeparator) <> 1 Then $PrecisionSeparator = "."
+	If StringLen($SeparatorInput) <> 1 Then $SeparatorInput = "|"
+
+	If StringLen($TimestampPrecision) > 0 Then
+		Select
+			Case $TimestampPrecision = "None"
+				ConsoleWrite("Timestamp Precision: " & $TimestampPrecision & @CRLF)
+				$TimestampPrecision = 1
+			Case $TimestampPrecision = "MilliSec"
+				ConsoleWrite("Timestamp Precision: " & $TimestampPrecision & @CRLF)
+				$TimestampPrecision = 2
+			Case $TimestampPrecision = "NanoSec"
+				ConsoleWrite("Timestamp Precision: " & $TimestampPrecision & @CRLF)
+				$TimestampPrecision = 3
+		EndSelect
+	Else
+		$TimestampPrecision = 1
+	EndIf
+
+	If StringLen($DateTimeFormat) > 0 Then
+		If $DateTimeFormat <> 1 And $DateTimeFormat <> 2 And $DateTimeFormat <> 3 And $DateTimeFormat <> 4 And $DateTimeFormat <> 5 And $DateTimeFormat <> 6 Then
+			$DateTimeFormat = 6
+		EndIf
+	Else
+		$DateTimeFormat = 6
+	EndIf
+EndFunc
+
+Func _Decode_UpdateFileName($attribute,$IsRedo)
+	Local $SI_CTime_tmp, $SI_ATime_tmp, $SI_MTime_tmp, $SI_RTime_tmp
+	If Not $IsRedo Then
+		Local $SI_CTime, $SI_ATime, $SI_MTime, $SI_RTime, $FN_AllocSize, $FN_RealSize, $FN_Flags, $ReparseTag
+	EndIf
+	$SI_CTime = StringMid($attribute, 1, 16)
+	$SI_CTime = _SwapEndian($SI_CTime)
+	$SI_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_CTime)
+	;
+	$SI_CTime = _WinTime_UTCFileTimeFormat(Dec($SI_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$SI_CTime = $TimestampErrorVal
+	ElseIf $TimestampPrecision = 2 Then
+		$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-4)
+		$SI_CTime_Precision = StringRight($SI_CTime,3)
+	ElseIf $TimestampPrecision = 3 Then
+		$SI_CTime = $SI_CTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_CTime_tmp, 4))
+		$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-9)
+		$SI_CTime_Precision = StringRight($SI_CTime,8)
+	Else
+		$SI_CTime_Core = $SI_CTime
+	EndIf
+	;
+	$SI_ATime = StringMid($attribute, 17, 16)
+	$SI_ATime = _SwapEndian($SI_ATime)
+	$SI_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_ATime)
+	;
+	$SI_ATime = _WinTime_UTCFileTimeFormat(Dec($SI_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$SI_ATime = $TimestampErrorVal
+	ElseIf $TimestampPrecision = 2 Then
+		$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-4)
+		$SI_ATime_Precision = StringRight($SI_ATime,3)
+	ElseIf $TimestampPrecision = 3 Then
+		$SI_ATime = $SI_ATime & $PrecisionSeparator2 & _FillZero(StringRight($SI_ATime_tmp, 4))
+		$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-9)
+		$SI_ATime_Precision = StringRight($SI_ATime,8)
+	Else
+		$SI_ATime_Core = $SI_ATime
+	EndIf
+	;
+	$SI_MTime = StringMid($attribute, 33, 16)
+	$SI_MTime = _SwapEndian($SI_MTime)
+	$SI_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_MTime)
+	;
+	$SI_MTime = _WinTime_UTCFileTimeFormat(Dec($SI_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$SI_MTime = $TimestampErrorVal
+	ElseIf $TimestampPrecision = 2 Then
+		$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-4)
+		$SI_MTime_Precision = StringRight($SI_MTime,3)
+	ElseIf $TimestampPrecision = 3 Then
+		$SI_MTime = $SI_MTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_MTime_tmp, 4))
+		$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-9)
+		$SI_MTime_Precision = StringRight($SI_MTime,8)
+	Else
+		$SI_MTime_Core = $SI_MTime
+	EndIf
+	;
+	$SI_RTime = StringMid($attribute, 49, 16)
+	$SI_RTime = _SwapEndian($SI_RTime)
+	$SI_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_RTime)
+	;
+	$SI_RTime = _WinTime_UTCFileTimeFormat(Dec($SI_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$SI_RTime = $TimestampErrorVal
+	ElseIf $TimestampPrecision = 2 Then
+		$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-4)
+		$SI_RTime_Precision = StringRight($SI_RTime,3)
+	ElseIf $TimestampPrecision = 3 Then
+		$SI_RTime = $SI_RTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_RTime_tmp, 4))
+		$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-9)
+		$SI_RTime_Precision = StringRight($SI_RTime,8)
+	Else
+		$SI_RTime_Core = $SI_RTime
+	EndIf
+	;
+	$FN_AllocSize = StringMid($attribute, 65, 16)
+	$FN_AllocSize = Dec(_SwapEndian($FN_AllocSize),2)
+	$FN_RealSize = StringMid($attribute, 81, 16)
+	$FN_RealSize = Dec(_SwapEndian($FN_RealSize),2)
+	$FN_Flags = StringMid($attribute, 97, 8)
+	$FN_Flags = _SwapEndian($FN_Flags)
+	$FN_Flags = _File_Attributes("0x" & $FN_Flags)
+	$ReparseTag = StringMid($attribute,105,8)
+	$ReparseTag = _SwapEndian($ReparseTag)
+	$ReparseTag = _GetReparseType("0x"&$ReparseTag)
+
+	If $VerboseOn Then
+		_DumpOutput("_Decode_UpdateFileName()" & @CRLF)
+		_DumpOutput("$SI_CTime: " & $SI_CTime & @CRLF)
+		_DumpOutput("$SI_ATime: " & $SI_ATime & @CRLF)
+		_DumpOutput("$SI_MTime: " & $SI_MTime & @CRLF)
+		_DumpOutput("$SI_RTime: " & $SI_RTime & @CRLF)
+		_DumpOutput("$FN_AllocSize: " & $FN_AllocSize & @CRLF)
+		_DumpOutput("$FN_RealSize: " & $FN_RealSize & @CRLF)
+		_DumpOutput("$FN_Flags: " & $FN_Flags & @CRLF)
+		_DumpOutput("$ReparseTag: " & $ReparseTag & @CRLF)
+		_DumpOutput("$Isredo: " & $Isredo & @CRLF)
+	EndIf
+	If $IsRedo Then
+;		If $ReparseTag <> "ZERO" Then $TextInformation &= ";ReparseTag="&$ReparseTag
+		$TextInformation &= ";See LogFile_UpdateFileName_I30.csv"
+	EndIf
+	FileWriteLine($LogFileUpdateFileNameCsv, $RecordOffset & $de & $this_lsn & $de & $SI_CTime & $de & $SI_ATime & $de & $SI_MTime & $de & $SI_RTime & $de & $FN_AllocSize & $de & $FN_RealSize & $de & $FN_Flags & $de & $ReparseTag & $de & $IsRedo & @crlf)
+EndFunc
+
+Func _SQLite_Startup2($sDll_Filename)
+	Local $hDll = DllOpen($sDll_Filename)
+	If $hDll = -1 Then
+		$g_hDll_SQLite = 0
+		$__g_hDll_SQLite = $hDll = 0
+		Return SetError(1, 0, "")
+	Else
+		$g_hDll_SQLite = $hDll
+		$__g_hDll_SQLite = $hDll
+		Return $sDll_Filename
+	EndIf
+EndFunc
+
+Func ExitPgm()
+    Exit
 EndFunc

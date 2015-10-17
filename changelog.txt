@@ -1,5 +1,21 @@
 LogFileParser Changelog
 
+v2.0.0.26
+Added command line mode.
+Fixed bug that caused a consequent program crash on certain systems at the end of parsing when calling sqlite3.exe.
+Added x64 compiled binary.
+Updated sqlite3 dll's to newer version.
+Fixed insignificant bug that caused incorrect $SI timestamp error messages to appear in debug.log.
+Removed the last forced filenames, for MftRef 0 - 26.
+Added some more references to respective csv's in lf_TextInformation.
+Added missing field for ReparseTag in UpdateFileNameRoot/UpdateFileNameAllocation.
+Added decode of undo operations for UpdateFileNameRoot/UpdateFileNameAllocation.
+Added new output file LogFile_UpdateFileName_I30.csv for logging of both undo and redo for UpdateFileNameRoot/UpdateFileNameAllocation.
+Added complete transaction dump when verbose mode triggered.
+Added option to skip all sqlite3 stuff.
+Compiled binaries with latest version 3.3.14.2.
+Added Exit button to gui, and tooltip about ESC for exit.
+
 v2.0.0.25
 Added output of bits information of ClearBitsInNonresidentBitMap from redo operations into lf_TextInformation field.
 
