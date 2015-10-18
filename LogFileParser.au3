@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.27
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.28
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -93,7 +93,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.27"
+$Progversion = "NTFS $LogFile Parser 2.0.0.28"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -1802,7 +1802,7 @@ If ($redo_operation_hex = "0000" And $undo_operation_hex <> "0000") Or $redo_ope
 		$KeptRefTmp = $PredictedRefNumber
 		$KeptRef = $PredictedRefNumber
 	EndIf
-	ElseIf $client_previous_lsn<>0 And ($redo_operation_hex = "0e00" Or $redo_operation_hex = "0f00" Or $redo_operation_hex = "1000" Or $redo_operation_hex = "1200" Or $redo_operation_hex = "1400" Or ($redo_operation_hex = "0800" And ($redo_operation_hex = "0800" Or $PreviousRedoOp = "0b00"))) Then
+ElseIf $client_previous_lsn<>0 And ($redo_operation_hex = "0e00" Or $redo_operation_hex = "0f00" Or $redo_operation_hex = "1000" Or $redo_operation_hex = "1200" Or $redo_operation_hex = "1400" Or $redo_operation_hex = "2500" Or ($redo_operation_hex = "0800" And ($redo_operation_hex = "0800" Or $PreviousRedoOp = "0b00"))) Then
 	If Not $FromRcrdSlack Then
 		$PredictedRefNumber = $KeptRef
 ;		$KeptRefTmp = $KeptRef
@@ -2407,6 +2407,11 @@ If $redo_length > 0 Then
 ;			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 			_Decode_Quota_Q_SingleEntry($redo_chunk,1)
 			$TextInformation &= ";See LogFile_QuotaQ.csv"
+		Case $redo_operation_hex="2500" ;JS_NewEndOfRecord
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case $redo_operation = "UNKNOWN"
 			$TextInformation &= ";RedoOperation="&$redo_operation_hex
 			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
@@ -2454,7 +2459,7 @@ If $undo_length > 0 Then ; Not needed I guess
 		Case $undo_operation_hex="0100" ;CompensationlogRecord
 		Case $undo_operation_hex="0200" ;InitializeFileRecordSegment
 ;			_ParserCodeOldVersion($undo_chunk)
-		Case $redo_operation_hex="0300" ;DeallocateFileRecordSegment
+		Case $undo_operation_hex="0300" ;DeallocateFileRecordSegment
 			;Just the FILE header from MFT records
 		Case $undo_operation_hex="0400" ; WriteEndOfFileRecordSegment
 ;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
@@ -2661,6 +2666,11 @@ If $undo_length > 0 Then ; Not needed I guess
 ;			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
 ;			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 			_Decode_Quota_Q_SingleEntry($undo_chunk,0)
+		Case $undo_operation_hex="2500" ;JS_NewEndOfRecord
+			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+			_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
 		Case $undo_operation = "UNKNOWN"
 			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
 			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
@@ -2961,6 +2971,8 @@ Select
 		$InterpretedCode = "UpdateRecordDataRoot"
 	Case $OpCode = 34 ;"22"
 		$InterpretedCode = "UpdateRecordDataAllocation"
+	Case $OpCode = 37 ;"25"
+		$InterpretedCode = "JS_NewEndOfRecord"
 	Case Else
 		$InterpretedCode = "UNKNOWN"
 ;		MsgBox(0,"$OpCode",$OpCode)
@@ -3072,17 +3084,17 @@ Func _ParserCodeOldVersion($MFTEntry)
 	$HDR_NextAttribID = StringMid($MFTEntry, 81, 4)
 	$HDR_NextAttribID = "0x"&_SwapEndian($HDR_NextAttribID)
 	If $VerboseOn Then
-		ConsoleWrite("------------ MFT record decode --------------" & @CRLF)
-		ConsoleWrite("$HDR_LSN: " & $HDR_LSN & @CRLF)
-		ConsoleWrite("$HDR_SequenceNo: " & $HDR_SequenceNo & @CRLF)
-		ConsoleWrite("$HDR_HardLinkCount: " & $HDR_HardLinkCount & @CRLF)
-		ConsoleWrite("$HDR_Flags: " & $HDR_Flags & @CRLF)
-		ConsoleWrite("$RecordActive: " & $RecordActive & @CRLF)
-		ConsoleWrite("$HDR_RecRealSize: " & $HDR_RecRealSize & @CRLF)
-		ConsoleWrite("$HDR_RecAllocSize: " & $HDR_RecAllocSize & @CRLF)
-		ConsoleWrite("$HDR_BaseRecord: " & $HDR_BaseRecord & @CRLF)
-		ConsoleWrite("$HDR_BaseRecSeqNo: " & $HDR_BaseRecSeqNo & @CRLF)
-		ConsoleWrite("$HDR_NextAttribID: " & $HDR_NextAttribID & @CRLF)
+		_DumpOutput("_ParserCodeOldVersion()" & @CRLF)
+		_DumpOutput("$HDR_LSN: " & $HDR_LSN & @CRLF)
+		_DumpOutput("$HDR_SequenceNo: " & $HDR_SequenceNo & @CRLF)
+		_DumpOutput("$HDR_HardLinkCount: " & $HDR_HardLinkCount & @CRLF)
+		_DumpOutput("$HDR_Flags: " & $HDR_Flags & @CRLF)
+		_DumpOutput("$RecordActive: " & $RecordActive & @CRLF)
+		_DumpOutput("$HDR_RecRealSize: " & $HDR_RecRealSize & @CRLF)
+		_DumpOutput("$HDR_RecAllocSize: " & $HDR_RecAllocSize & @CRLF)
+		_DumpOutput("$HDR_BaseRecord: " & $HDR_BaseRecord & @CRLF)
+		_DumpOutput("$HDR_BaseRecSeqNo: " & $HDR_BaseRecSeqNo & @CRLF)
+		_DumpOutput("$HDR_NextAttribID: " & $HDR_NextAttribID & @CRLF)
 	EndIf
 	If $UpdSeqArrOffset = 48 Then
 		$HDR_MFTREcordNumber = StringMid($MFTEntry, 89, 8)
@@ -3095,7 +3107,7 @@ Func _ParserCodeOldVersion($MFTEntry)
 		$HDR_MFTREcordNumber = "NT style"
 	EndIf
 	If $VerboseOn Then
-		ConsoleWrite("$HDR_MFTREcordNumber: " & $HDR_MFTREcordNumber & @CRLF)
+		_DumpOutput("$HDR_MFTREcordNumber: " & $HDR_MFTREcordNumber & @CRLF)
 	EndIf
 	$NextAttributeOffset = (Dec(StringMid($MFTEntry, 41, 2)) * 2)+1
 ;	ConsoleWrite("$NextAttributeOffset: " & $NextAttributeOffset & @CRLF)
@@ -3117,7 +3129,7 @@ Func _ParserCodeOldVersion($MFTEntry)
 ;				_Get_StandardInformation($MFTEntry, $NextAttributeOffset, $AttributeSize)
 				_Get_StandardInformation(StringMid($MFTEntry,1,($NextAttributeOffset+($AttributeSize*2))-1), $NextAttributeOffset, $AttributeSize)
 				$TestAttributeString &= '$STANDARD_INFORMATION?'&($NextAttributeOffset-1)/2&','
-				If $AttributeSize <> 72 Then $TextInformation &= ";Non-standard size of $STANDARD_INFORMATION"
+				If $AttributeSize-24 <> 72 Then $TextInformation &= ";Non-standard size of $STANDARD_INFORMATION"
 			Case $AttributeType = $ATTRIBUTE_LIST
 				$AttributeKnown = 1
 				$AttributeArray[2][1] += 1
@@ -3351,7 +3363,9 @@ Func _Get_StandardInformation($MFTEntry, $SI_Offset, $SI_Size)
 	If $redo_operation="InitializeFileRecordSegment" Then $CurrentTimestamp = $SI_MTime ; $SI_RTime,$SI_MTime
 ;	If $undo_operation_hex="0200" Then $CurrentTimestamp = $SI_MTime ; $SI_RTime,$SI_MTime ;Not needed
 	If $VerboseOn Then
-		_DumpOutput("### $STANDARD_INFORMATION ATTRIBUTE ###" & @CRLF)
+		_DumpOutput("_Get_StandardInformation()" & @CRLF)
+		_DumpOutput("$SI_Offset: 0x" & Hex(Int(($SI_Offset-1)/2),4) & @CRLF)
+		_DumpOutput("$SI_Size: 0x" & Hex(Int($SI_Size),4) & @CRLF)
 		_DumpOutput(_HexEncode("0x"&$MFTEntry) & @CRLF)
 		_DumpOutput("$SI_HEADER_Flags: " & $SI_HEADER_Flags & @CRLF)
 		_DumpOutput("$SI_HEADER_Flags: " & $SI_HEADER_Flags & @CRLF)
@@ -4667,7 +4681,7 @@ Func _Decode_UpdateResidentValue($record,$IsRedo)
 			Case $client_previous_lsn=0 And $undo_length=0
 				$TextInformation &= ";Initializing with zeros"
 			Case $PredictedRefNumber = 31 ;Updates to $Tops:$DATA
-				_DumpOutput("Verbose: Updates to $Tops:$DATA" & @CRLF)
+				_DumpOutput("Verbose: Possible update to $Tops:$DATA" & @CRLF)
 				_DumpOutput("$this_lsn: " & $this_lsn & @crlf)
 				_DumpOutput(_HexEncode("0x"&$record) & @crlf)
 			Case Else
@@ -9224,7 +9238,7 @@ Func _Decode_BitsInNonresidentBitMap2($data)
 	Local $BitMapOffset, $NumberOfBits
 	$BitMapOffset = "0x"&_SwapEndian(StringMid($data,1,8))
 	$NumberOfBits = "0x"&_SwapEndian(StringMid($data,9,8))
-	$TextInformation = ";BitMapOffset="&$BitMapOffset&";NumberOfBits="&$NumberOfBits
+	$TextInformation &= ";BitMapOffset="&$BitMapOffset&";NumberOfBits="&$NumberOfBits
 EndFunc
 
 Func _Decode_BitsInNonresidentBitMap($RedoData,$RedoOperation,$UndoData,$UndoOperation)

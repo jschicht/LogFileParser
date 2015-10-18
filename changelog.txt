@@ -1,5 +1,10 @@
 LogFileParser Changelog
 
+v2.0.0.28
+Fixed bug in the trigger for the text "Non-standard size of $STANDARD_INFORMATION" in lf_TextInformation.
+Fixed incorrect "Missed transaction!" in debug.log for undo operations of type DeallocateFileRecordSegment.
+Added preliminary interpretation of operation code 0x25 to be "JS_NewEndOfRecord".
+
 v2.0.0.27
 Added some missed decodes of undo operations for WriteEndOfIndexBuffer (I30) when absent OpenAttributeTable.
 Added some missed transactions (Windows 10), that where dumped into debug.log (as validation failed) instead of into csv.
