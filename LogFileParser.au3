@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.26
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.27
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -93,7 +93,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.26"
+$Progversion = "NTFS $LogFile Parser 2.0.0.27"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -1706,7 +1706,7 @@ Local $ValidationTest3 = $client_data_length <> $redo_offset+$redo_length_tmp An
 Local $ValidationTest4 = $redo_operation = "UNKNOWN"
 Local $ValidationTest5 = $undo_operation = "UNKNOWN"
 ;Local $ValidationTest6 = $client_data_length <> $redo_offset+$redo_length_tmp And $client_data_length <> $undo_offset+$undo_length_tmp And $redo_operation <> "CompensationlogRecord" And $redo_operation <> "SetNewAttributeSizes"
-If $ValidationTest1 Or ($ValidationTest2 And $ValidationTest3) Or $ValidationTest4 Or $ValidationTest5 Then
+If $ValidationTest1 Or ($ValidationTest2 And $ValidationTest3) Or ($ValidationTest4 And $ValidationTest5) Then
 ;If (($client_data_length <> $undo_offset+$undo_length_tmp And $redo_operation <> "CompensationlogRecord") And ($client_data_length <> $redo_offset+$redo_length_tmp And $redo_operation <> "CompensationlogRecord")) Or $redo_operation = "UNKNOWN"  Or $undo_operation = "UNKNOWN" Then
 	_DumpOutput("Error: Validation of header values failed at offset: " & $RecordOffset & @CRLF)
 	_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
@@ -1715,7 +1715,9 @@ If $ValidationTest1 Or ($ValidationTest2 And $ValidationTest3) Or $ValidationTes
 	_DumpOutput("$redo_length_tmp: 0x" & Hex($redo_length_tmp,4) & @CRLF)
 	_DumpOutput("$undo_offset: 0x" & Hex($undo_offset,4) & @CRLF)
 	_DumpOutput("$undo_length_tmp: 0x" & Hex($undo_length_tmp,4) & @CRLF)
+	_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
 	_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+	_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
 	_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
 	_DumpOutput(_HexEncode("0x"&StringMid($InputData,1)) & @CRLF)
 	_ClearVar()
@@ -2272,9 +2274,10 @@ If $redo_length > 0 Then
 			EndIf
 		Case $redo_operation_hex="1000" ; WriteEndOfIndexBuffer -> always 0 (on nt6x?) but check undo
 			If $AttributeString="" Then $AttributeString = "$INDEX_ALLOCATION"
-;			ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
-;			ConsoleWrite("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
-;			ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
+			;_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+			;_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+			;_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+			;_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case $redo_operation_hex="1100" ; SetIndexEntryVcnRoot
 			_Decode_SetIndexEntryVcn($redo_chunk)
 			$AttributeString = "$INDEX_ROOT"
@@ -2451,6 +2454,8 @@ If $undo_length > 0 Then ; Not needed I guess
 		Case $undo_operation_hex="0100" ;CompensationlogRecord
 		Case $undo_operation_hex="0200" ;InitializeFileRecordSegment
 ;			_ParserCodeOldVersion($undo_chunk)
+		Case $redo_operation_hex="0300" ;DeallocateFileRecordSegment
+			;Just the FILE header from MFT records
 		Case $undo_operation_hex="0400" ; WriteEndOfFileRecordSegment
 ;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
 ;			_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
@@ -2555,7 +2560,7 @@ If $undo_length > 0 Then ; Not needed I guess
 				Case ($PredictedRefNumber = 26 Or $RealMftRef = 26) And ($AttributeString = "$INDEX_ALLOCATION:$R" Or $AttributeString = "$INDEX_ROOT:$R" Or $AttributeString = "UNKNOWN:$R")
 					_Decode_Reparse_R($undo_chunk,0)
 					$TextInformation &= ";See LogFile_ReparseR.csv"
-				Case Not ($PredictedRefNumber = 9 Or $PredictedRefNumber = 24 Or $PredictedRefNumber = 25 Or $PredictedRefNumber = 26 Or $RealMftRef = 9 Or $RealMftRef = 24 Or $RealMftRef = 25 Or $RealMftRef = 26) And $AttributeString = "$INDEX_ALLOCATION:$I30"
+				Case Not ($PredictedRefNumber = 9 Or $PredictedRefNumber = 24 Or $PredictedRefNumber = 25 Or $PredictedRefNumber = 26 Or $RealMftRef = 9 Or $RealMftRef = 24 Or $RealMftRef = 25 Or $RealMftRef = 26) And StringInStr($AttributeString,"$INDEX_ALLOCATION")
 					$DecodeOk=0
 					$DecodeOk = _Decode_UndoWipeINDX($undo_chunk)
 					If Not $DecodeOk Then
@@ -6645,7 +6650,7 @@ Func _DebugOut($text, $var="")
 EndFunc
 
 Func _Decode_UndoWipeINDX($Entry)
-	If $VerboseOn Then ConsoleWrite("### Undo wipe of INDX record decoder ###" & @CRLF)
+	If $VerboseOn Then _DumpOutput("_Decode_UndoWipeINDX()" & @CRLF)
 	Local $LocalAttributeOffset = 1,$NewLocalAttributeOffset,$IndxHdrMagic,$IndxHdrUpdateSeqArrOffset,$IndxHdrUpdateSeqArrSize,$IndxHdrLogFileSequenceNo,$IndxHdrVCNOfIndx,$IndxHdrOffsetToIndexEntries,$IndxHdrSizeOfIndexEntries,$IndxHdrAllocatedSizeOfIndexEntries
 	Local $IndxHdrFlag,$IndxHdrPadding,$IndxHdrUpdateSequence,$IndxHdrUpdSeqArr,$IndxHdrUpdSeqArrPart0,$IndxHdrUpdSeqArrPart1,$IndxHdrUpdSeqArrPart2,$IndxHdrUpdSeqArrPart3,$IndxRecordEnd4,$IndxRecordEnd1,$IndxRecordEnd2,$IndxRecordEnd3,$IndxRecordEnd4
 	Local $FileReference,$IndexEntryLength,$StreamLength,$Flags,$Stream,$SubNodeVCN,$tmp0=0,$tmp1=0,$tmp2=0,$tmp3=0,$EntryCounter=1,$Padding2,$EntryCounter=1,$DecodeOk=False
