@@ -1,5 +1,10 @@
 LogFileParser Changelog
 
+v2.0.0.29
+Fixed errors in DirtyPageTable structure and split decoder into nt5x and nt6x.
+Added logging of CompensationlogRecord.
+Added a new field (excess data) to the output of all transaction headers.
+
 v2.0.0.28
 Fixed bug in the trigger for the text "Non-standard size of $STANDARD_INFORMATION" in lf_TextInformation.
 Fixed incorrect "Missed transaction!" in debug.log for undo operations of type DeallocateFileRecordSegment.
