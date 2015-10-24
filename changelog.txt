@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.30
+Improvement to the decoder for CompensationlogRecord.
+
 v2.0.0.29
 Fixed errors in DirtyPageTable structure and split decoder into nt5x and nt6x.
 Added logging of CompensationlogRecord.

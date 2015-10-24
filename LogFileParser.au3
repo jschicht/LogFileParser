@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.29
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.30
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -93,7 +93,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.29"
+$Progversion = "NTFS $LogFile Parser 2.0.0.30"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -2426,10 +2426,10 @@ If $redo_length > 0 Then
 			_Decode_Quota_Q_SingleEntry($redo_chunk,1)
 			$TextInformation &= ";See LogFile_QuotaQ.csv"
 		Case $redo_operation_hex="2500" ;JS_NewEndOfRecord
-			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
-			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
-			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
-			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
+;			_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;			_DumpOutput("$redo_operation: " & $redo_operation & @CRLF)
+;			_DumpOutput("$redo_operation_hex: " & $redo_operation_hex & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 		Case $redo_operation = "UNKNOWN"
 			$TextInformation &= ";RedoOperation="&$redo_operation_hex
 			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
@@ -11623,61 +11623,62 @@ Func ExitPgm()
 EndFunc
 
 Func _WriteCSVHeaderCompensationlogRecord()
-	$CompensationlogRecord_Csv_Header = "lf_LSN"&$de&"LSN1"&$de&"LSN2"&$de&"LSN3"&$de&"LSN4"&$de&"LSN5"&$de&"Unknown1"&$de&"Unknown2"&$de&"Unknown3"&$de&"Unknown4"&$de&"Unknown5"&$de&"Unknown6"&$de&"LSN6"&$de&"BytesPerCluster"&$de&"Unknown8"&$de&"UsnJrnl_MftRef"&$de&"UsnJrnl_MftRefSeqNo"&$de&"Unknown9"&$de&"LSN7"
+	$CompensationlogRecord_Csv_Header = "lf_LSN"&$de&"LSN_Checkpoint"&$de&"LSN_OpenAttributeTableDump"&$de&"LSN_AttributeNamesDump"&$de&"LSN_DirtyPageTableDump"&$de&"LSN_TransactionTableDump"&$de&"Size_OpenAttributeTableDump"&$de&"Size_AttributeNamesDump"&$de&"Size_DirtyPageTableDump"&$de&"Size_TransactionTableDump"&$de&"UsnJrnl_RealSize"&$de&"Unknown6"&$de&"LSN_FlushCache"&$de&"BytesPerCluster"&$de&"Unknown8"&$de&"UsnJrnl_MftRef"&$de&"UsnJrnl_MftRefSeqNo"&$de&"Unknown9"&$de&"LSN7"
 	FileWriteLine($LogFileCompensationlogRecordCsv, $CompensationlogRecord_Csv_Header & @CRLF)
 EndFunc
 
 Func _Decode_CompensationlogRecord($InputData)
-	Local $LSN1,$LSN2,$LSN3,$LSN4,$LSN5,$Unknown1,$Unknown2,$Unknown3,$Unknown4,$Unknown5,$Unknown6,$LSN6,$Unknown7,$Unknown8,$MftRef,$MftrefSeqNo,$Unknown9,$LSN7
-	$StartOffset = 1
+	Local $LSN_Checkpoint,$LSN_OpenAttributeTableDump,$LSN_AttributeNamesDump,$LSN_DirtyPageTableDump,$LSN_TransactionTableDump,$Size_OpenAttributeTableDump,$Size_AttributeNamesDump,$Size_DirtyPageTableDump,$Size_TransactionTableDump,$UsnjrnlRealSize
+	Local $Unknown6,$LSN_FlushCache,$Unknown7,$Unknown8,$UsnJrnlMftRef,$UsnjrnlMftrefSeqNo,$Unknown9,$LSN7
+	Local $StartOffset = 1
 
-	$LSN1 = StringMid($InputData, $StartOffset, 16)
-	$LSN1 = _SwapEndian($LSN1)
-	$LSN1 = Dec($LSN1,2)
+	$LSN_Checkpoint = StringMid($InputData, $StartOffset, 16)
+	$LSN_Checkpoint = _SwapEndian($LSN_Checkpoint)
+	$LSN_Checkpoint = Dec($LSN_Checkpoint,2)
 
-	$LSN2 = StringMid($InputData, $StartOffset + 16, 16)
-	$LSN2 = _SwapEndian($LSN2)
-	$LSN2 = Dec($LSN2,2)
+	$LSN_OpenAttributeTableDump = StringMid($InputData, $StartOffset + 16, 16)
+	$LSN_OpenAttributeTableDump = _SwapEndian($LSN_OpenAttributeTableDump)
+	$LSN_OpenAttributeTableDump = Dec($LSN_OpenAttributeTableDump,2)
 
-	$LSN3 = StringMid($InputData, $StartOffset + 32, 16)
-	$LSN3 = _SwapEndian($LSN3)
-	$LSN3 = Dec($LSN3,2)
+	$LSN_AttributeNamesDump = StringMid($InputData, $StartOffset + 32, 16)
+	$LSN_AttributeNamesDump = _SwapEndian($LSN_AttributeNamesDump)
+	$LSN_AttributeNamesDump = Dec($LSN_AttributeNamesDump,2)
 
-	$LSN4 = StringMid($InputData, $StartOffset + 48, 16)
-	$LSN4 = _SwapEndian($LSN4)
-	$LSN4 = Dec($LSN4,2)
+	$LSN_DirtyPageTableDump = StringMid($InputData, $StartOffset + 48, 16)
+	$LSN_DirtyPageTableDump = _SwapEndian($LSN_DirtyPageTableDump)
+	$LSN_DirtyPageTableDump = Dec($LSN_DirtyPageTableDump,2)
 
-	$LSN5 = StringMid($InputData, $StartOffset + 64, 16)
-	$LSN5 = _SwapEndian($LSN5)
-	$LSN5 = Dec($LSN5,2)
+	$LSN_TransactionTableDump = StringMid($InputData, $StartOffset + 64, 16)
+	$LSN_TransactionTableDump = _SwapEndian($LSN_TransactionTableDump)
+	$LSN_TransactionTableDump = Dec($LSN_TransactionTableDump,2)
 
-	$Unknown1 = StringMid($InputData, $StartOffset + 80, 8)
-	$Unknown1 = _SwapEndian($Unknown1)
-	$Unknown1 = Dec($Unknown1,2)
+	$Size_OpenAttributeTableDump = StringMid($InputData, $StartOffset + 80, 8)
+	$Size_OpenAttributeTableDump = _SwapEndian($Size_OpenAttributeTableDump)
+	$Size_OpenAttributeTableDump = Dec($Size_OpenAttributeTableDump,2)
 
-	$Unknown2 = StringMid($InputData, $StartOffset + 88, 8)
-	$Unknown2 = _SwapEndian($Unknown2)
-	$Unknown2 = Dec($Unknown2,2)
+	$Size_AttributeNamesDump = StringMid($InputData, $StartOffset + 88, 8)
+	$Size_AttributeNamesDump = _SwapEndian($Size_AttributeNamesDump)
+	$Size_AttributeNamesDump = Dec($Size_AttributeNamesDump,2)
 
-	$Unknown3 = StringMid($InputData, $StartOffset + 96, 8)
-	$Unknown3 = _SwapEndian($Unknown3)
-	$Unknown3 = Dec($Unknown3,2)
+	$Size_DirtyPageTableDump = StringMid($InputData, $StartOffset + 96, 8)
+	$Size_DirtyPageTableDump = _SwapEndian($Size_DirtyPageTableDump)
+	$Size_DirtyPageTableDump = Dec($Size_DirtyPageTableDump,2)
 
-	$Unknown4 = StringMid($InputData, $StartOffset + 104, 8)
-	$Unknown4 = _SwapEndian($Unknown4)
-	$Unknown4 = Dec($Unknown4,2)
+	$Size_TransactionTableDump = StringMid($InputData, $StartOffset + 104, 8)
+	$Size_TransactionTableDump = _SwapEndian($Size_TransactionTableDump)
+	$Size_TransactionTableDump = Dec($Size_TransactionTableDump,2)
 
-	$Unknown5 = StringMid($InputData, $StartOffset + 112, 8)
-	$Unknown5 = _SwapEndian($Unknown5)
-	$Unknown5 = Dec($Unknown5,2)
+	$UsnjrnlRealSize = StringMid($InputData, $StartOffset + 112, 8)
+	$UsnjrnlRealSize = _SwapEndian($UsnjrnlRealSize)
+	$UsnjrnlRealSize = Dec($UsnjrnlRealSize,2)
 
 	$Unknown6 = StringMid($InputData, $StartOffset + 120, 8)
 	$Unknown6 = _SwapEndian($Unknown6)
 	$Unknown6 = Dec($Unknown6,2)
 
-	$LSN6 = StringMid($InputData, $StartOffset + 128, 16)
-	$LSN6 = _SwapEndian($LSN6)
-	$LSN6 = Dec($LSN6,2)
+	$LSN_FlushCache = StringMid($InputData, $StartOffset + 128, 16)
+	$LSN_FlushCache = _SwapEndian($LSN_FlushCache)
+	$LSN_FlushCache = Dec($LSN_FlushCache,2)
 
 	$Unknown7 = StringMid($InputData, $StartOffset + 144, 8)
 	$Unknown7 = _SwapEndian($Unknown7)
@@ -11687,13 +11688,13 @@ Func _Decode_CompensationlogRecord($InputData)
 	$Unknown8 = _SwapEndian($Unknown8)
 	$Unknown8 = Dec($Unknown8,2)
 
-	$MftRef = StringMid($InputData, $StartOffset + 160, 12)
-	$MftRef = _SwapEndian($MftRef)
-	$MftRef = Dec($MftRef,2)
+	$UsnJrnlMftRef = StringMid($InputData, $StartOffset + 160, 12)
+	$UsnJrnlMftRef = _SwapEndian($UsnJrnlMftRef)
+	$UsnJrnlMftRef = Dec($UsnJrnlMftRef,2)
 
-	$MftrefSeqNo = StringMid($InputData, $StartOffset + 172, 4)
-	$MftrefSeqNo = _SwapEndian($MftrefSeqNo)
-	$MftrefSeqNo = Dec($MftrefSeqNo,2)
+	$UsnJrnlMftrefSeqNo = StringMid($InputData, $StartOffset + 172, 4)
+	$UsnJrnlMftrefSeqNo = _SwapEndian($UsnJrnlMftrefSeqNo)
+	$UsnJrnlMftrefSeqNo = Dec($UsnJrnlMftrefSeqNo,2)
 
 	$Unknown9 = StringMid($InputData, $StartOffset + 176, 16)
 	$Unknown9 = _SwapEndian($Unknown9)
@@ -11703,5 +11704,5 @@ Func _Decode_CompensationlogRecord($InputData)
 	$LSN7 = _SwapEndian($LSN7)
 	$LSN7 = Dec($LSN7,2)
 
-	FileWriteLine($LogFileCompensationlogRecordCsv, $this_lsn&$de&$LSN1&$de&$LSN2&$de&$LSN3&$de&$LSN4&$de&$LSN5&$de&$Unknown1&$de&$Unknown2&$de&$Unknown3&$de&$Unknown4&$de&$Unknown5&$de&$Unknown6&$de&$LSN6&$de&$Unknown7&$de&$Unknown8&$de&$MftRef&$de&$MftrefSeqNo&$de&$Unknown9&$de&$LSN7 & @CRLF)
+	FileWriteLine($LogFileCompensationlogRecordCsv, $this_lsn&$de&$LSN_Checkpoint&$de&$LSN_OpenAttributeTableDump&$de&$LSN_AttributeNamesDump&$de&$LSN_DirtyPageTableDump&$de&$LSN_TransactionTableDump&$de&$Size_OpenAttributeTableDump&$de&$Size_AttributeNamesDump&$de&$Size_DirtyPageTableDump&$de&$Size_TransactionTableDump&$de&$UsnjrnlRealSize&$de&$Unknown6&$de&$LSN_FlushCache&$de&$Unknown7&$de&$Unknown8&$de&$UsnJrnlMftRef&$de&$UsnJrnlMftrefSeqNo&$de&$Unknown9&$de&$LSN7 & @CRLF)
 EndFunc

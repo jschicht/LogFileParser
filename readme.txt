@@ -55,6 +55,7 @@ DirtyPageTableDump
 TransactionTableDump
 UpdateRecordDataRoot
 UpdateRecordDataAllocation
+CompensationlogRecord
 
 The list of currently supported attributes:
 $STANDARD_INFORMATION
@@ -154,6 +155,9 @@ Decoded data from $DATA:$TXF_DATA in $LOGGED_UTILITY_STREAM.
 
 LogFile_UpdateFileName_I30.csv
 All decodes of UpdateFileNameRoot and UpdateFileNameAllocation for both redo and undo operations.
+
+LogFile_CompensationlogRecord.csv
+All decodes of CompensationlogRecord. Not relevant for nt5.x.
 
 Ntfs.db
 An sqlite database file with tables almost equivalent to the above csv's. The database contains 5 tables:
