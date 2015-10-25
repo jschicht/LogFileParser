@@ -1,5 +1,10 @@
 LogFileParser Changelog
 
+v2.0.0.31
+Changed incorrect distinction of nt5x vs nt6x to 32bit vs 64bit.
+Split output csv of DirtyPageTable to 32bit and 64bit.
+More changes to the structures of DirtyPageTable and OpenAttributeTable.
+
 v2.0.0.30
 Improvement to the decoder for CompensationlogRecord.
 
