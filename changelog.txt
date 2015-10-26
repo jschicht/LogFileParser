@@ -1,5 +1,12 @@
 LogFileParser Changelog
 
+v2.0.0.32
+Improved decode of Checkpoint records to also cover 32-bit OS.
+Changed LogFile_CompensationlogRecord.csv to LogFile_CheckpointRecord.csv.
+Fixed small bug introduced lately, that caused an incorrect Is32bit field in the output for OpenAttributeTable.
+Changed output value for RecordType to be decimal instead of hex.
+Updated schema in logfile.sql.
+
 v2.0.0.31
 Changed incorrect distinction of nt5x vs nt6x to 32bit vs 64bit.
 Split output csv of DirtyPageTable to 32bit and 64bit.

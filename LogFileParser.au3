@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.31
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.32
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -50,7 +50,7 @@ Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $Da
 Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
 Global $TargetImageFile, $Entries, $IsImage=False, $IsPhysicalDrive=False, $ComboPhysicalDrives, $Combo, $MFT_Record_Size
-Global $EaNonResidentArray[1][9], $VerboseArr, $LogFileSqlFile, $LogFileUpdateFileNameCsv,$LogFileUpdateFileNameCsvFile,$CheckSkipSqlite3,$LogFileCompensationlogRecordCsvFile,$LogFileCompensationlogRecordCsv
+Global $EaNonResidentArray[1][9], $VerboseArr, $LogFileSqlFile, $LogFileUpdateFileNameCsv,$LogFileUpdateFileNameCsvFile,$CheckSkipSqlite3,$LogFileCheckpointRecordCsvFile,$LogFileCheckpointRecordCsv
 Global $SQLite3Exe = @ScriptDir & "\sqlite3.exe"
 Global $TimestampErrorVal = "0000-00-00 00:00:00"
 Global $IntegerErrorVal = -1
@@ -93,7 +93,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.31"
+$Progversion = "NTFS $LogFile Parser 2.0.0.32"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -435,7 +435,7 @@ $FileOutputTesterArray[18] = $LogFileAttributeListCsvFile
 $FileOutputTesterArray[19] = $LogFileFileNamesCsvFile
 $FileOutputTesterArray[20] = $LogFileTxfDataCsvFile
 $FileOutputTesterArray[21] = $LogFileUpdateFileNameCsvFile
-$FileOutputTesterArray[22] = $LogFileCompensationlogRecordCsvFile
+$FileOutputTesterArray[22] = $LogFileCheckpointRecordCsvFile
 $FileOutputTesterArray[23] = $LogFileDirtyPageTable64bitCsvFile
 
 
@@ -464,7 +464,7 @@ _WriteCSVHeaderSlackAttributeNamesDump()
 _WriteCSVHeaderAttributeList()
 _WriteCSVHeaderFileNames()
 _WriteCSVHeaderTxfData()
-_WriteCSVHeaderCompensationlogRecord()
+_WriteCSVHeaderCheckpointRecord()
 
 $FileNamesArray[0][0] = "Ref"
 $FileNamesArray[0][1] = "FileName"
@@ -740,7 +740,7 @@ FileClose($LogFileSlackAttributeNamesDumpCsv)
 FileClose($LogFileAttributeListCsv)
 FileClose($LogFileFileNamesCsv)
 FileClose($LogFileUpdateFileNameCsv)
-FileClose($LogFileCompensationlogRecordCsv)
+FileClose($LogFileCheckpointRecordCsv)
 
 If Not $CommandlineMode Then
 	AdlibUnRegister("_LogFileProgress")
@@ -1666,7 +1666,7 @@ $client_data_length = Dec(_SwapEndian($client_data_length),2)
 $client_index = StringMid($InputData,57,8)
 $client_index = "0x"&_SwapEndian($client_index)
 $record_type = StringMid($InputData,65,8)
-$record_type = "0x"&_SwapEndian($record_type)
+$record_type = Dec(_SwapEndian($record_type),2)
 $transaction_id = StringMid($InputData,73,8)
 $transaction_id = "0x"&_SwapEndian($transaction_id)
 $lf_flags = StringMid($InputData,81,4)
@@ -1911,7 +1911,7 @@ If IsArray($VerboseArr) Then
 	For $i = 1 To $VerboseArr[0]
 		If $this_lsn=$VerboseArr[$i] Then $VerboseOn=1
 	Next
-	If ($redo_operation_hex = "1400" Or $redo_operation_hex = "1300") Then $VerboseOn=1
+;	If ($redo_operation_hex = "1400" Or $redo_operation_hex = "1300") Then $VerboseOn=1
 EndIf
 ;$VerboseOn=1
 
@@ -1956,9 +1956,9 @@ EndIf
 ;ConsoleWrite("$this_lsn: " & $this_lsn & @CRLF)
 ;ConsoleWrite("$redo_operation: " & $redo_operation & @CRLF)
 
-If $redo_operation_hex="0100" Then ;CompensationlogRecord
-	_Decode_CompensationlogRecord(StringMid($InputData,113))
-	$TextInformation &= ";See LogFile_CompensationlogRecord.csv"
+If $record_type=2 Then
+	_Decode_CheckpointRecord(StringMid($InputData,113))
+	$TextInformation &= ";See LogFile_CheckpointRecord.csv"
 EndIf
 
 If $redo_length > 0 Then
@@ -6220,13 +6220,13 @@ Func _PrepareOutput($OutputDir)
 	EndIf
 	_DebugOut("Created output file: " & $LogFileUpdateFileNameCsvFile)
 
-	$LogFileCompensationlogRecordCsvFile = $ParserOutDir & "\LogFile_CompensationlogRecord.csv"
-	$LogFileCompensationlogRecordCsv = FileOpen($LogFileCompensationlogRecordCsvFile, $EncodingWhenOpen)
+	$LogFileCheckpointRecordCsvFile = $ParserOutDir & "\LogFile_CheckpointRecord.csv"
+	$LogFileCheckpointRecordCsv = FileOpen($LogFileCheckpointRecordCsvFile, $EncodingWhenOpen)
 	If @error Then
-		_DebugOut("Error creating: " & $LogFileCompensationlogRecordCsvFile)
+		_DebugOut("Error creating: " & $LogFileCheckpointRecordCsvFile)
 		Exit
 	EndIf
-	_DebugOut("Created output file: " & $LogFileCompensationlogRecordCsvFile)
+	_DebugOut("Created output file: " & $LogFileCheckpointRecordCsvFile)
 EndFunc
 
 Func _WriteCSVExtraHeader()
@@ -8606,7 +8606,7 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 	EndIf
 
 	Select
-		Case StringLen($datachunk) = 80 ;OPEN_ATTRIBUTE_ENTRY Nt6.x
+		Case StringLen($datachunk) = 80 ;OPEN_ATTRIBUTE_ENTRY x64
 			If $Is32bit Then $TextInformation &= ";Mixed OS detected"
 			$AllocatedOrNextFree = _SwapEndian(StringMid($datachunk,1,8))
 ;			$DirtyPagesSeen = StringMid($datachunk, 9, 2)
@@ -8665,7 +8665,7 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 ;					$OpenAttributesArray[$FoundInTable][11] = "0x" & $EndSignature
 					$OpenAttributesArray[$FoundInTable][11] = "-"
 	;				$OpenAttributesArray[$FoundInTable][12] = "Attribute name in undo chunk"
-					$OpenAttributesArray[$FoundInTable][13] = 1
+					$OpenAttributesArray[$FoundInTable][13] = 0
 					$RetVal = $FoundInTable
 					$TextInformation &= ";Updated OpenAttributesArray"
 				Else
@@ -8708,11 +8708,11 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 				$OpenAttributesArray[$ArrayEnd][10] = "0x" & $UnknownPointer
 ;				$OpenAttributesArray[$ArrayEnd][11] = "0x" & $EndSignature
 				$OpenAttributesArray[$ArrayEnd][11] = "-"
-				$OpenAttributesArray[$ArrayEnd][13] = 1
+				$OpenAttributesArray[$ArrayEnd][13] = 0
 				$RetVal = $ArrayEnd
 				$TextInformation &= ";Updated OpenAttributesArray"
 			EndIf
-		Case StringLen($datachunk) = 88 ;OPEN_ATTRIBUTE_ENTRY Nt5.x
+		Case StringLen($datachunk) = 88 ;OPEN_ATTRIBUTE_ENTRY x86
 			If Not $Is32bit Then $TextInformation &= ";Mixed OS detected"
 			$AllocatedOrNextFree = _SwapEndian(StringMid($datachunk,1,8))
 			$UnknownPointer = _SwapEndian(StringMid($datachunk, 9, 8))
@@ -8768,7 +8768,7 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 					$OpenAttributesArray[$FoundInTable][10] = "0x" & $UnknownPointer
 					$OpenAttributesArray[$FoundInTable][11] = "0x" & $EndSignature
 	;				$OpenAttributesArray[$FoundInTable][12] = "Attribute name in undo chunk"
-					$OpenAttributesArray[$FoundInTable][13] = 0
+					$OpenAttributesArray[$FoundInTable][13] = 1
 					$RetVal = $FoundInTable
 					$TextInformation &= ";Updated OpenAttributesArray"
 ;					_DumpOutput($TextInformation & " (existing entry)" & @CRLF)
@@ -8812,7 +8812,7 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 				$OpenAttributesArray[$ArrayEnd][9] = $LsnOfOpenRecord
 				$OpenAttributesArray[$ArrayEnd][10] = "0x" & $UnknownPointer
 				$OpenAttributesArray[$ArrayEnd][11] = "0x" & $EndSignature
-				$OpenAttributesArray[$ArrayEnd][13] = 0
+				$OpenAttributesArray[$ArrayEnd][13] = 1
 				$RetVal = $ArrayEnd
 				$TextInformation &= ";Updated OpenAttributesArray"
 ;_DumpOutput($TextInformation & " (new entry)" & @CRLF)
@@ -8904,7 +8904,7 @@ Func _Decode_OpenAttributeTableDump64bit($InputData,$IsFirst)
 		_Decode_OpenAttributeTableDump32bit($InputData,0)
 		Return
 	EndIf
-	$LocalIs32bit=1
+	$LocalIs32bit=0
 
 	ReDim $OpenAttributesArray[1+$NumberOfEntries][14]
 	Do
@@ -9059,7 +9059,7 @@ Func _Decode_OpenAttributeTableDump32bit($InputData,$IsFirst)
 		_Decode_OpenAttributeTableDump64bit($InputData,0)
 		Return
 	EndIf
-	$LocalIs32bit=0
+	$LocalIs32bit=1
 
 	ReDim $OpenAttributesArray[1+$NumberOfEntries][14]
 	Do
@@ -9212,7 +9212,7 @@ Func _Decode_SlackOpenAttributeTableDump64bit($InputData,$IsFirst)
 		_Decode_SlackOpenAttributeTableDump32bit($InputData,0)
 		Return
 	EndIf
-	$LocalIs32bit=1
+	$LocalIs32bit=0
 
 	ReDim $SlackOpenAttributesArray[1+$NumberOfEntries][14]
 	Do
@@ -9356,7 +9356,7 @@ Func _Decode_SlackOpenAttributeTableDump32bit($InputData,$IsFirst)
 		_Decode_SlackOpenAttributeTableDump64bit($InputData,0)
 		Return
 	EndIf
-	$LocalIs32bit=0
+	$LocalIs32bit=1
 
 	ReDim $SlackOpenAttributesArray[1+$NumberOfEntries][14]
 	Do
@@ -11499,7 +11499,7 @@ Func _GetInputParams()
 
 	If StringLen($Check32bit) > 0 Then
 		If Not StringIsDigit($Check32bit) Or ($Check32bit <> 0 And $Check32bit <> 1) Then
-			ConsoleWrite("Error validating IsNt5x configuration: " & $Check32bit & @CRLF)
+			ConsoleWrite("Error validating Is32bit configuration: " & $Check32bit & @CRLF)
 			Exit
 		EndIf
 	Else
@@ -11738,12 +11738,12 @@ Func ExitPgm()
     Exit
 EndFunc
 
-Func _WriteCSVHeaderCompensationlogRecord()
-	$CompensationlogRecord_Csv_Header = "lf_LSN"&$de&"LSN_Checkpoint"&$de&"LSN_OpenAttributeTableDump"&$de&"LSN_AttributeNamesDump"&$de&"LSN_DirtyPageTableDump"&$de&"LSN_TransactionTableDump"&$de&"Size_OpenAttributeTableDump"&$de&"Size_AttributeNamesDump"&$de&"Size_DirtyPageTableDump"&$de&"Size_TransactionTableDump"&$de&"UsnJrnl_RealSize"&$de&"Unknown6"&$de&"LSN_FlushCache"&$de&"BytesPerCluster"&$de&"Unknown8"&$de&"UsnJrnl_MftRef"&$de&"UsnJrnl_MftRefSeqNo"&$de&"Unknown9"&$de&"LSN7"
-	FileWriteLine($LogFileCompensationlogRecordCsv, $CompensationlogRecord_Csv_Header & @CRLF)
+Func _WriteCSVHeaderCheckpointRecord()
+	$CheckpointRecord_Csv_Header = "lf_LSN"&$de&"LSN_Checkpoint"&$de&"LSN_OpenAttributeTableDump"&$de&"LSN_AttributeNamesDump"&$de&"LSN_DirtyPageTableDump"&$de&"LSN_TransactionTableDump"&$de&"Size_OpenAttributeTableDump"&$de&"Size_AttributeNamesDump"&$de&"Size_DirtyPageTableDump"&$de&"Size_TransactionTableDump"&$de&"UsnJrnl_RealSize"&$de&"Unknown6"&$de&"LSN_FlushCache"&$de&"BytesPerCluster"&$de&"Unknown8"&$de&"UsnJrnl_MftRef"&$de&"UsnJrnl_MftRefSeqNo"&$de&"Unknown9"&$de&"LSN7"
+	FileWriteLine($LogFileCheckpointRecordCsv, $CheckpointRecord_Csv_Header & @CRLF)
 EndFunc
 
-Func _Decode_CompensationlogRecord($InputData)
+Func _Decode_CheckpointRecord($InputData)
 	Local $LSN_Checkpoint,$LSN_OpenAttributeTableDump,$LSN_AttributeNamesDump,$LSN_DirtyPageTableDump,$LSN_TransactionTableDump,$Size_OpenAttributeTableDump,$Size_AttributeNamesDump,$Size_DirtyPageTableDump,$Size_TransactionTableDump,$UsnjrnlRealSize
 	Local $Unknown6,$LSN_FlushCache,$Unknown7,$Unknown8,$UsnJrnlMftRef,$UsnjrnlMftrefSeqNo,$Unknown9,$LSN7
 	Local $StartOffset = 1
@@ -11820,5 +11820,5 @@ Func _Decode_CompensationlogRecord($InputData)
 	$LSN7 = _SwapEndian($LSN7)
 	$LSN7 = Dec($LSN7,2)
 
-	FileWriteLine($LogFileCompensationlogRecordCsv, $this_lsn&$de&$LSN_Checkpoint&$de&$LSN_OpenAttributeTableDump&$de&$LSN_AttributeNamesDump&$de&$LSN_DirtyPageTableDump&$de&$LSN_TransactionTableDump&$de&$Size_OpenAttributeTableDump&$de&$Size_AttributeNamesDump&$de&$Size_DirtyPageTableDump&$de&$Size_TransactionTableDump&$de&$UsnjrnlRealSize&$de&$Unknown6&$de&$LSN_FlushCache&$de&$Unknown7&$de&$Unknown8&$de&$UsnJrnlMftRef&$de&$UsnJrnlMftrefSeqNo&$de&$Unknown9&$de&$LSN7 & @CRLF)
+	FileWriteLine($LogFileCheckpointRecordCsv, $this_lsn&$de&$LSN_Checkpoint&$de&$LSN_OpenAttributeTableDump&$de&$LSN_AttributeNamesDump&$de&$LSN_DirtyPageTableDump&$de&$LSN_TransactionTableDump&$de&$Size_OpenAttributeTableDump&$de&$Size_AttributeNamesDump&$de&$Size_DirtyPageTableDump&$de&$Size_TransactionTableDump&$de&$UsnjrnlRealSize&$de&$Unknown6&$de&$LSN_FlushCache&$de&$Unknown7&$de&$Unknown8&$de&$UsnJrnlMftRef&$de&$UsnJrnlMftrefSeqNo&$de&$Unknown9&$de&$LSN7 & @CRLF)
 EndFunc

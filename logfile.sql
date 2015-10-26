@@ -55,7 +55,7 @@ CREATE TABLE logfile(
   ,lf_RedoChunkSize             INTEGER
   ,lf_UndoChunkSize             INTEGER
   ,lf_client_index              VARCHAR(10)
-  ,lf_record_type               VARCHAR(10)
+  ,lf_record_type               INTEGER
   ,lf_transaction_id            VARCHAR(10)
   ,lf_flags                     VARCHAR(6)
   ,lf_target_attribute          VARCHAR(6)
