@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.32
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.33
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -93,7 +93,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.32"
+$Progversion = "NTFS $LogFile Parser 2.0.0.33"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -2778,7 +2778,8 @@ If $VerboseOn Then
 	_DumpOutput("End parsing transaction in verbose mode." & @CRLF)
 ;	MsgBox(0,"VerboseOn","Check output of lsn: " & $this_lsn)
 ;	Exit
-	_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+;	_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
+;	_ArrayDisplay($AttrArray,"$AttrArray")
 EndIf
 
 _ClearVar()
@@ -4766,6 +4767,7 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 			Case $AttributeTypeCheck = "3000"
 				_Get_FileName($record, 1, $RecordSize, 1)
 				$AttributeString = "$FILE_NAME"
+				If $FN_NameType <> "DOS" Then _UpdateFileNameArray($PredictedRefNumber,"",$FN_Name,$this_lsn)
 			Case $AttributeTypeCheck = "4000"
 				_Get_ObjectID($record, 1, $RecordSize)
 				$AttributeString = "$OBJECT_ID"
@@ -6905,8 +6907,8 @@ Func _SetNameOnSystemFiles()
 			$FN_Name = "$Boot"
 		Case $LocalRef = 8
 			$FN_Name = "$BadClus"
-		Case $LocalRef = 9
-			$FN_Name = "$Secure"
+;		Case $LocalRef = 9
+;			$FN_Name = "$Secure"
 		Case $LocalRef = 10
 			$FN_Name = "$UpCase"
 		Case $LocalRef = 11
@@ -6961,7 +6963,7 @@ Func _RemoveSingleOffsetOfAttribute($TestRef, $TestOffsetAttr, $TestSize, $TestS
 				$check=1
 			EndIf
 ;			If Not $check Then ContinueLoop
-			If Not StringIsDigit($FoundOffset) Then _DumpOutput("Not number: " & $FoundOffset & " at lsn " & $this_lsn)
+			If Not StringIsDigit($FoundOffset) Then _DumpOutput("Not number: " & $FoundOffset & " at lsn " & $this_lsn & @CRLF)
 			If Int($TestOffsetAttr) > Int($FoundOffset) Then ContinueLoop
 			If $TestOffset Then
 				$AttrArraySplit[$i] = ''
@@ -6970,7 +6972,7 @@ Func _RemoveSingleOffsetOfAttribute($TestRef, $TestOffsetAttr, $TestSize, $TestS
 				If Int($TestOffsetAttr) < Int($FoundOffset) Then
 					$AttrArraySplit[$i] = $FoundAttr&'?'&Int($FoundOffset)-Int($TestSize)
 					ConsoleWrite("Modified entry: " & $FoundAttr&'?'&Int($FoundOffset)-Int($TestSize) & @CRLF)
-					If Int($FoundOffset)-Int($TestSize) < 0 Then _DebugOut("Error in _RemoveSingleOffsetOfAttribute() with " & $this_lsn)
+					If Int($FoundOffset)-Int($TestSize) < 0 Then _DumpOutput("Error in _RemoveSingleOffsetOfAttribute() with " & $this_lsn & @CRLF)
 				EndIf
 			EndIf
 		Next
@@ -6998,7 +7000,7 @@ EndFunc
 Func _UpdateSingleOffsetOfAttribute($TestRef, $TestOffsetAttr, $TestSize, $TestString)
 	Local $RefIndex,$Replaced,$AttrArraySplit,$check=0,$ConcatString
 	If $VerboseOn Then
-		ConsoleWrite("_RemoveSingleOffsetOfAttribute()" & @CRLF)
+		ConsoleWrite("_UpdateSingleOffsetOfAttribute()" & @CRLF)
 		ConsoleWrite("$TestOffsetAttr: " & $TestOffsetAttr & @CRLF)
 		ConsoleWrite("$TestSize: " & $TestSize & @CRLF)
 		ConsoleWrite("$TestString: " & $TestString & @CRLF)

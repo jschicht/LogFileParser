@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.33
+Improvement to filename identification logic through CreateAttribute.
+
 v2.0.0.32
 Improved decode of Checkpoint records to also cover 32-bit OS.
 Changed LogFile_CompensationlogRecord.csv to LogFile_CheckpointRecord.csv.
