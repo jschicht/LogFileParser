@@ -22,7 +22,7 @@ CREATE TABLE logfile(
   ,lf_SI_ATime                  DATETIME(6) 
   ,lf_SI_MTime                  DATETIME(6) 
   ,lf_SI_RTime                  DATETIME(6) 
-  ,lf_SI_FilePermission         VARCHAR(128)
+  ,lf_SI_FilePermission         VARCHAR(256)
   ,lf_SI_MaxVersions            INTEGER 
   ,lf_SI_VersionNumber          INTEGER 
   ,lf_SI_ClassID                INTEGER 
