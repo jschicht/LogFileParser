@@ -1,5 +1,14 @@
 LogFileParser Changelog
 
+v2.0.0.34
+Added more output to debug.log to help identify pages that are not of type RSTR/RCRD.
+Added decode of single entry updates to OpenAttributeTable through OpenNonResidentAttribute for transactions found in slack.
+Changed $SubNodeVCN from hex big endian to decimal in all outputs.
+Added missing column name for IsRedo in LogFile_UpdateFileName_I30.csv.
+Improved db schema for logfile table.
+Added schema and import sql for LogFile_UpdateFileName_I30.csv.
+Changed default output directory prefix from NtfsOutput_ to LogFile_.
+
 v2.0.0.33
 Improvement to filename identification logic through CreateAttribute.
 

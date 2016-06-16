@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.33
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.34
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -25,7 +25,7 @@ Global $ProgressLogFile, $ProgressReconstruct, $CurrentProgress=-1, $ProgressSta
 Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $SectorSize=512, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,$LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile
 Global $RecordOffset, $PredictedRefNumber, $this_lsn, $client_previous_lsn, $redo_operation, $undo_operation, $record_offset_in_mft, $attribute_offset, $hOutFileMFT, $tBuffer, $nBytes2, $HDR_BaseRecord, $FilePath, $HDR_SequenceNo
 Global $nBytes, $rFile, $DataRunArr[2][18], $NewDataRunArr[1][18], $RowsProcessed, $MaxRows, $hQuery, $aRow, $aRow2, $iRows, $iColumns, $aRes, $sOutputFile
-Global $RSTRsig = "52535452", $RCRDsig = "52435244", $BAADsig = "44414142", $CHKDsig = "444b4843", $Emptysig = "ffffffff"
+Global $RSTRsig = "52535452", $RCRDsig = "52435244", $BAADsig = "42414144", $CHKDsig = "43484d44", $Emptysig = "ffffffff"
 Global $SI_CTime, $SI_ATime, $SI_MTime, $SI_RTime, $SI_FilePermission, $SI_MaxVersions, $SI_VersionNumber, $SI_ClassID, $SI_SecurityID, $SI_QuotaCharged, $SI_USN, $SI_PartialValue
 Global $SI_CTime_Core,$SI_ATime_Core,$SI_MTime_Core,$SI_RTime_Core,$SI_CTime_Precision,$SI_ATime_Precision,$SI_MTime_Precision,$SI_RTime_Precision
 Global $FN_CTime, $FN_ATime, $FN_MTime, $FN_RTime, $FN_AllocSize, $FN_RealSize, $FN_Flags, $FN_Name, $FN_NameType
@@ -50,7 +50,7 @@ Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $Da
 Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
 Global $TargetImageFile, $Entries, $IsImage=False, $IsPhysicalDrive=False, $ComboPhysicalDrives, $Combo, $MFT_Record_Size
-Global $EaNonResidentArray[1][9], $VerboseArr, $LogFileSqlFile, $LogFileUpdateFileNameCsv,$LogFileUpdateFileNameCsvFile,$CheckSkipSqlite3,$LogFileCheckpointRecordCsvFile,$LogFileCheckpointRecordCsv
+Global $EaNonResidentArray[1][9], $VerboseArr, $LogFileSqlFile, $LogFileUpdateFilenameI30SqlFile, $LogFileUpdateFileNameCsv,$LogFileUpdateFileNameCsvFile,$CheckSkipSqlite3,$LogFileCheckpointRecordCsvFile,$LogFileCheckpointRecordCsv
 Global $SQLite3Exe = @ScriptDir & "\sqlite3.exe"
 Global $TimestampErrorVal = "0000-00-00 00:00:00"
 Global $IntegerErrorVal = -1
@@ -93,7 +93,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.33"
+$Progversion = "NTFS $LogFile Parser 2.0.0.34"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -407,10 +407,17 @@ If $DoExtractResidentUpdates Then
 	DirCreate($ParserOutDir&"\NonResidentExtract")
 EndIf
 
+;Fix the path to csv file inside the sql
 $FixedPath = StringReplace($LogFileCsvFile,"\","\\")
 Sleep(500)
 _ReplaceStringInFile($LogFileSqlFile,"__PathToCsv__",$FixedPath)
 If $CheckUnicode = 1 Then _ReplaceStringInFile($LogFileSqlFile,"latin1", "utf8")
+
+;Fix the path to csv file inside the sql
+$FixedPath = StringReplace($LogFileUpdateFileNameCsvFile,"\","\\")
+Sleep(500)
+_ReplaceStringInFile($LogFileUpdateFilenameI30SqlFile,"__PathToCsv__",$FixedPath)
+If $CheckUnicode = 1 Then _ReplaceStringInFile($LogFileUpdateFilenameI30SqlFile,"latin1", "utf8")
 
 ;Put output filenames into an array
 $FileOutputTesterArray[0] = $LogFileCsvFile
@@ -680,16 +687,16 @@ For $i = 0 To $MaxRecords-1
 		_DecodeRSTR($LogFileRecord)
 		ContinueLoop
 	ElseIf $Magic = $BAADsig Then
-		ConsoleWrite("BAAD record" & @CRLF)
+		_DumpOutput("PageVerbose: BAAD record at 0x" & Hex($CurrentFileOffset,8) & @CRLF)
 		ContinueLoop
 	ElseIf $Magic = $CHKDsig Then
-		ConsoleWrite("CHKD record" & @CRLF)
+		_DumpOutput("PageVerbose: CHKD record at 0x" & Hex($CurrentFileOffset,8) & @CRLF)
 		ContinueLoop
 	ElseIf $Magic = $Emptysig Then
-		If $VerboseOn Then ConsoleWrite("Empty/Unitialized record" & @CRLF)
+		_DumpOutput("PageVerbose: Overwritten or unitialized page at 0x" & Hex($CurrentFileOffset,8) & @CRLF)
 		ContinueLoop
 	ElseIf $Magic <> $RSTRsig And $Magic <> $RCRDsig And $Magic <> $Emptysig Then
-		ConsoleWrite("Invalid record signature" & @CRLF)
+		_DumpOutput("PageVerbose: Invalid page signature at 0x" & Hex($CurrentFileOffset,8) & @CRLF)
 		ContinueLoop
 	EndIf
 Next
@@ -1636,7 +1643,7 @@ EndFunc
 Func _DecodeLSNRecord($InputData,$last_lsn_tmp)
 ;Local $target_lcn, $client_undo_next_lsn, $client_data_length, $client_index, $record_type, $flags, $redo_offset, $undo_offset, $target_attribute, $lcns_to_follow, $redo_operation_hex, $undo_operation_hex,$MftClusterIndex, $target_vcn
 Local $client_undo_next_lsn, $client_data_length, $redo_offset, $undo_offset, $redo_operation_hex, $undo_operation_hex
-Local $DecodeOk=False,$UsnOk=False,$TestAttributeType,$ResolvedAttributeOffset,$FoundInTable=0,$FoundInTableDummy=0,$AttrNameTmp,$last_lsn_tmp_refup,$last_lsn_tmp_refdown,$FoundInTableSlack=0
+Local $DecodeOk=False,$UsnOk=False,$TestAttributeType,$ResolvedAttributeOffset,$FoundInTable=0,$FoundInTableDummy=0,$AttrNameTmp,$last_lsn_tmp_refup,$last_lsn_tmp_refdown,$FoundInTableSlack=0,$FoundInTableSlackDummy=0
 Global $AttributeString
 
 ;_ClearVar()
@@ -2354,10 +2361,18 @@ If $redo_length > 0 Then
 		Case $redo_operation_hex="1c00" ; OpenNonresidentAttribute
 			If Not $FromRcrdSlack Then
 				$FoundInTableDummy = _Decode_OpenNonresidentAttribute($redo_chunk)
-				If $undo_length = 0 Then ;We inject an empty name in array since the undo part did not contain any name (should never happen though)..
+				If $undo_length = 0 Then ;We inject an empty name in array since the undo part did not contain any name.
 					If $FoundInTableDummy > 0 Then
 						$OpenAttributesArray[$FoundInTableDummy][12] = ""
 						FileWriteLine($LogFileOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$OpenAttributesArray[$FoundInTableDummy][0]&$de&$OpenAttributesArray[$FoundInTableDummy][12]&$de&$OpenAttributesArray[$FoundInTableDummy][1]&$de&$OpenAttributesArray[$FoundInTableDummy][2]&$de&$OpenAttributesArray[$FoundInTableDummy][3]&$de&$OpenAttributesArray[$FoundInTableDummy][4]&$de&$OpenAttributesArray[$FoundInTableDummy][5]&$de&_ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTableDummy][5],3,4))&$de&$OpenAttributesArray[$FoundInTableDummy][6]&$de&$OpenAttributesArray[$FoundInTableDummy][7]&$de&$OpenAttributesArray[$FoundInTableDummy][8]&$de&$OpenAttributesArray[$FoundInTableDummy][9]&$de&$OpenAttributesArray[$FoundInTableDummy][10]&$de&$OpenAttributesArray[$FoundInTableDummy][11]&$de&$OpenAttributesArray[$FoundInTableDummy][13]&@crlf)
+					EndIf
+				EndIf
+			Else
+				$FoundInTableSlackDummy = _Decode_SlackOpenNonresidentAttribute($redo_chunk)
+				If $undo_length = 0 Then ;We inject an empty name in array since the undo part did not contain any name.
+					If $FoundInTableSlackDummy > 0 Then
+						$SlackOpenAttributesArray[$FoundInTableSlackDummy][12] = ""
+						FileWriteLine($LogFileSlackOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][0]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][12]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][1]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][2]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][3]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][4]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][5]&$de&_ResolveAttributeType(StringMid($SlackOpenAttributesArray[$FoundInTableSlackDummy][5],3,4))&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][6]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][7]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][8]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][9]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][10]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][11]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][13]&@crlf)
 					EndIf
 				EndIf
 			EndIf
@@ -2473,6 +2488,19 @@ If $undo_length > 0 Then ; Not needed I guess
 							_DumpOutput("Updating $OpenAttributesArray at row: " & $FoundInTableDummy & @CRLF)
 							_ArrayDisplay($OpenAttributesArray,"$OpenAttributesArray")
 						EndIf
+					EndIf
+				EndIf
+			Else
+				$AttrNameTmp = _Decode_AttributeName($undo_chunk)
+				If $FoundInTableSlackDummy > 0 Then
+;					MsgBox(0,"Info","Writing entry")
+					$SlackOpenAttributesArray[$FoundInTableSlackDummy][12] = $AttrNameTmp
+					FileWriteLine($LogFileSlackOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][0]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][12]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][1]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][2]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][3]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][4]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][5]&$de&_ResolveAttributeType(StringMid($SlackOpenAttributesArray[$FoundInTableSlackDummy][5],3,4))&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][6]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][7]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][8]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][9]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][10]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][11]&$de&$SlackOpenAttributesArray[$FoundInTableSlackDummy][13]&@crlf)
+;					FileWriteLine($LogFileOpenAttributeTableCsv, $RecordOffset&$de&$this_lsn&$de&$OpenAttributesArray[$FoundInTableDummy][0]&$de&$OpenAttributesArray[$FoundInTableDummy][12]&$de&$OpenAttributesArray[$FoundInTableDummy][1]&$de&$OpenAttributesArray[$FoundInTableDummy][2]&$de&$OpenAttributesArray[$FoundInTableDummy][3]&$de&$OpenAttributesArray[$FoundInTableDummy][4]&$de&$OpenAttributesArray[$FoundInTableDummy][5]&$de&_ResolveAttributeType(StringMid($OpenAttributesArray[$FoundInTableDummy][5],3,4))&$de&$OpenAttributesArray[$FoundInTableDummy][6]&$de&$OpenAttributesArray[$FoundInTableDummy][7]&$de&$OpenAttributesArray[$FoundInTableDummy][8]&$de&$OpenAttributesArray[$FoundInTableDummy][9]&$de&$OpenAttributesArray[$FoundInTableDummy][10]&$de&"0xDEADBEEF"&@crlf)
+					If $VerboseOn Then
+						_DumpOutput("_Decode_AttributeName() returned: " & $AttrNameTmp & @CRLF)
+						_DumpOutput("Updating $SlackOpenAttributesArray at row: " & $FoundInTableSlackDummy & @CRLF)
+						_ArrayDisplay($SlackOpenAttributesArray,"$SlackOpenAttributesArray")
 					EndIf
 				EndIf
 			EndIf
@@ -4050,6 +4078,8 @@ Func _Decode_INDX($Entry)
 ;	$Padding2 = StringMid($Entry,$NewLocalAttributeOffset+164+($Indx_NameLength*2*2),$PaddingLength)
 	If $IndexFlags <> "0000" Then
 		$SubNodeVCN = StringMid($Entry,$NewLocalAttributeOffset+164+($Indx_NameLength*2*2)+$PaddingLength,16)
+		$SubNodeVCN = Dec(_SwapEndian($SubNodeVCN),2)
+
 		$SubNodeVCNLength = 16
 	Else
 		$SubNodeVCN = ""
@@ -4207,6 +4237,7 @@ Func _Decode_INDX($Entry)
 ;		$Padding = StringMid($Entry,$NextEntryOffset+164+($Indx_NameLength*2*2),$PaddingLength)
 		If $IndexFlags <> "0000" Then
 			$SubNodeVCN = StringMid($Entry,$NextEntryOffset+164+($Indx_NameLength*2*2)+$PaddingLength,16)
+			$SubNodeVCN = Dec(_SwapEndian($SubNodeVCN),2)
 			$SubNodeVCNLength = 16
 		Else
 			$SubNodeVCN = ""
@@ -4368,6 +4399,7 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 ;	$Padding2 = StringMid($Entry,$NewLocalAttributeOffset+164+($Indx_NameLength*2*2),$PaddingLength)
 	If $IndexFlags <> "0000" Then
 		$SubNodeVCN = StringMid($Entry,$NewLocalAttributeOffset+164+($Indx_NameLength*2*2)+$PaddingLength,16)
+		$SubNodeVCN = Dec(_SwapEndian($SubNodeVCN),2)
 		$SubNodeVCNLength = 16
 	Else
 		$SubNodeVCN = ""
@@ -5987,7 +6019,7 @@ EndFunc
 
 Func _PrepareOutput($OutputDir)
 	$TimestampStart = @YEAR & "-" & @MON & "-" & @MDAY & "_" & @HOUR & "-" & @MIN & "-" & @SEC
-	$ParserOutDir = $OutputDir&"\NtfsOutput_"&$TimestampStart
+	$ParserOutDir = $OutputDir&"\LogFile_"&$TimestampStart
 	If DirCreate($ParserOutDir) = 0 Then
 		ConsoleWrite("Error creating: " & $ParserOutDir & @CRLF)
 		Exit
@@ -6009,6 +6041,10 @@ Func _PrepareOutput($OutputDir)
 	$LogFileSqlFile = $ParserOutDir & "\LogFile.sql"
 	FileInstall("C:\temp\import-csv-logfile.sql", $LogFileSqlFile)
 	_DebugOut("Created output file: " & $LogFileSqlFile)
+
+	$LogFileUpdateFilenameI30SqlFile = $ParserOutDir & "\LogFile-UpdateFileName_I30.sql"
+	FileInstall("C:\temp\import-csv-logfile-updatefilename-I30.sql", $LogFileUpdateFilenameI30SqlFile)
+	_DebugOut("Created output file: " & $LogFileUpdateFilenameI30SqlFile)
 
 	$LogFileIndxCsvfile = $ParserOutDir & "\LogFile_INDX_I30.csv"
 	$LogFileIndxCsv = FileOpen($LogFileIndxCsvfile, $EncodingWhenOpen)
@@ -6253,7 +6289,7 @@ Func _WriteCSVHeader()
 ;	$LogFile_UsnJrnl_Csv_Header = "MFTReference"&$de&"MFTParentReference"&$de&"USN"&$de&"Timestamp"&$de&"Reason"&$de&"SourceInfo"&$de&"FileAttributes"&$de&"FileName"&$de&"FileNameModified"
 	$LogFile_UsnJrnl_Csv_Header = "FileName"&$de&"USN"&$de&"Timestamp"&$de&"Reason"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"MFTParentReference"&$de&"ParentReferenceSeqNo"&$de&"FileAttributes"&$de&"MajorVersion"&$de&"MinorVersion"&$de&"SourceInfo"&$de&"SecurityId"
 	FileWriteLine($LogFileUsnJrnlCsv, $LogFile_UsnJrnl_Csv_Header & @CRLF)
-	$LogFile_UpdateFileName_Csv_Header = "lf_Offset"&$de&"lf_LSN"&$de&"lf_CTime"&$de&"lf_ATime"&$de&"lf_MTime"&$de&"lf_RTime"&$de&"lf_AllocSize"&$de&"lf_RealSize"&$de&"lf_FileFlags"&$de&"lf_ReparseTag"
+	$LogFile_UpdateFileName_Csv_Header = "lf_Offset"&$de&"lf_LSN"&$de&"lf_CTime"&$de&"lf_ATime"&$de&"lf_MTime"&$de&"lf_RTime"&$de&"lf_AllocSize"&$de&"lf_RealSize"&$de&"lf_FileFlags"&$de&"lf_ReparseTag"&$de&"lf_IsRedo"
 	FileWriteLine($LogFileUpdateFileNameCsv, $LogFile_UpdateFileName_Csv_Header & @CRLF)
 EndFunc
 
@@ -6619,6 +6655,7 @@ Func _Decode_UndoWipeINDX($Entry)
 ;	$Padding2 = StringMid($Entry,$NewLocalAttributeOffset+164+($Indx_NameLength*2*2),$PaddingLength)
 	If $IndexFlags <> "0000" Then
 		$SubNodeVCN = StringMid($Entry,$NewLocalAttributeOffset+164+($Indx_NameLength*2*2)+$PaddingLength,16)
+		$SubNodeVCN = Dec(_SwapEndian($SubNodeVCN),2)
 		$SubNodeVCNLength = 16
 	Else
 		$SubNodeVCN = ""
@@ -6769,6 +6806,7 @@ Func _Decode_UndoWipeINDX($Entry)
 ;		$Padding = StringMid($Entry,$NextEntryOffset+164+($Indx_NameLength*2*2),$PaddingLength)
 		If $IndexFlags <> "0000" Then
 			$SubNodeVCN = StringMid($Entry,$NextEntryOffset+164+($Indx_NameLength*2*2)+$PaddingLength,16)
+			$SubNodeVCN = Dec(_SwapEndian($SubNodeVCN),2)
 			$SubNodeVCNLength = 16
 		Else
 			$SubNodeVCN = ""
@@ -8826,6 +8864,244 @@ Func _Decode_OpenNonresidentAttribute($datachunk)
 
 	If $VerboseOn Then
 		_DumpOutput("_Decode_OpenNonresidentAttribute(): " & @CRLF)
+		_DumpOutput("$Unknown1: " & $Unknown1 & @CRLF)
+		_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+		_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+		_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+		_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+		_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+		_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
+	EndIf
+	Return $RetVal
+EndFunc
+
+Func _Decode_SlackOpenNonresidentAttribute($datachunk)
+	Local $Unknown1, $aMFTReference, $aMFTReferenceSeqNo, $LsnOfOpenRecord, $aAttributeHex, $Unknown2, $AllocatedOrNextFree, $DirtyPagesSeen, $SizeOfIndx, $AttributeNamePresent, $UnknownPointer, $EndSignature, $RetVal=0
+	If $VerboseOn Then
+		_DumpOutput("_Decode_SlackOpenNonresidentAttribute(): " & @CRLF)
+		_DumpOutput("LSN: " & $this_lsn & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
+	EndIf
+
+	Select
+		Case StringLen($datachunk) = 80 ;OPEN_ATTRIBUTE_ENTRY x64
+			If $Is32bit Then $TextInformation &= ";Mixed OS detected"
+			$AllocatedOrNextFree = _SwapEndian(StringMid($datachunk,1,8))
+;			$DirtyPagesSeen = StringMid($datachunk, 9, 2)
+;			$unknown0 = StringMid($datachunk, 9, 2)
+;			$AttributeNamePresent = StringMid($datachunk, 11, 2)
+;			$unknown1 = StringMid($datachunk, 13, 4)
+			$SizeOfIndx = StringMid($datachunk, 9, 8)
+			$SizeOfIndx = Dec(_SwapEndian($SizeOfIndx),2)
+
+			$aAttributeHex = StringMid($datachunk,17,8)
+			$AttributeString = _ResolveAttributeType(StringLeft($aAttributeHex,4))
+
+;			$unknown2 = StringMid($datachunk, 25, 8)
+			$DirtyPagesSeen = StringMid($datachunk, 25, 2)
+			$unknown2 = StringMid($datachunk, 27, 6)
+
+			$PredictedRefNumber = Dec(_SwapEndian(StringMid($datachunk,33,12)))
+			$KeptRef = $PredictedRefNumber
+			$aMFTReferenceSeqNo = Dec(_SwapEndian(StringMid($datachunk,45,4)))
+			$LsnOfOpenRecord = Dec(_SwapEndian(StringMid($datachunk,49,16))) ;LsnOfOpenRecord
+			$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
+
+			$UnknownPointer = _SwapEndian(StringMid($datachunk, 65, 16))
+;			$EndSignature = StringMid($datachunk,73,8)
+			If $VerboseOn Then
+				_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
+				_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
+				_DumpOutput("$SizeOfIndx: " & $SizeOfIndx & @CRLF)
+				_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+				_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+				_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
+				_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+				_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+				_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+				_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
+;				_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
+			EndIf
+
+			$FoundInTable = _ArraySearch($SlackOpenAttributesArray,$target_attribute,0,0,0,2,1,0)
+			If $FoundInTable > 0 Then
+				If $SlackOpenAttributesArray[$FoundInTable][1] <> 0xffffffff Then
+	;				_ArrayDisplay($SlackOpenAttributesArray,"$SlackOpenAttributesArray")
+	;				$SlackOpenAttributesArray[$FoundInTable][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
+					$SlackOpenAttributesArray[$FoundInTable][1] = "0xFFFFFFFF"
+					$SlackOpenAttributesArray[$FoundInTable][2] = "0x" & $DirtyPagesSeen
+;					$SlackOpenAttributesArray[$FoundInTable][3] = "0x" & $AttributeNamePresent
+					$SlackOpenAttributesArray[$FoundInTable][3] = $SizeOfIndx
+;					$SlackOpenAttributesArray[$FoundInTable][4] = "0x" & $unknown1
+					$SlackOpenAttributesArray[$FoundInTable][4] = "-"
+					$SlackOpenAttributesArray[$FoundInTable][5] = "0x" & $aAttributeHex
+					$SlackOpenAttributesArray[$FoundInTable][6] = "0x" & $unknown2
+					$SlackOpenAttributesArray[$FoundInTable][7] = $PredictedRefNumber
+					$SlackOpenAttributesArray[$FoundInTable][8] = $aMFTReferenceSeqNo
+					$SlackOpenAttributesArray[$FoundInTable][9] = $LsnOfOpenRecord
+					$SlackOpenAttributesArray[$FoundInTable][10] = "0x" & $UnknownPointer
+;					$SlackOpenAttributesArray[$FoundInTable][11] = "0x" & $EndSignature
+					$SlackOpenAttributesArray[$FoundInTable][11] = "-"
+	;				$SlackOpenAttributesArray[$FoundInTable][12] = "Attribute name in undo chunk"
+					$SlackOpenAttributesArray[$FoundInTable][13] = 0
+					$RetVal = $FoundInTable
+					$TextInformation &= ";Updated SlackOpenAttributesArray"
+				Else
+					_DumpOutput("Error in Slack OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+					_DumpOutput("AllocatedOrNextFree was 0xffffffff" & @CRLF)
+				EndIf
+			Else
+				#cs
+				_DumpOutput("Error in OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+				_DumpOutput("Could not update array with new entry" & @CRLF)
+				_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
+				_DumpOutput("$target_attribute: " & $target_attribute & @CRLF)
+				_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
+				_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
+				_DumpOutput("$AttributeNamePresent: " & $AttributeNamePresent & @CRLF)
+				_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+				_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+				_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
+				_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+				_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+				_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+				_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
+				_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
+				_ArrayDisplay($SlackOpenAttributesArray,"$SlackOpenAttributesArray")
+				#ce
+				$ArrayEnd = UBound($SlackOpenAttributesArray)
+				ReDim $SlackOpenAttributesArray[$ArrayEnd+1][14]
+				$SlackOpenAttributesArray[$ArrayEnd][0] = $target_attribute
+				$SlackOpenAttributesArray[$ArrayEnd][1] = "0x" & $AllocatedOrNextFree
+				$SlackOpenAttributesArray[$ArrayEnd][2] = "0x" & $DirtyPagesSeen
+;				$SlackOpenAttributesArray[$ArrayEnd][3] = "0x" & $AttributeNamePresent
+				$SlackOpenAttributesArray[$ArrayEnd][3] = $SizeOfIndx
+;				$SlackOpenAttributesArray[$ArrayEnd][4] = "0x" & $unknown1
+				$SlackOpenAttributesArray[$ArrayEnd][4] = "-"
+				$SlackOpenAttributesArray[$ArrayEnd][5] = "0x" & $aAttributeHex
+				$SlackOpenAttributesArray[$ArrayEnd][6] = "0x" & $unknown2
+				$SlackOpenAttributesArray[$ArrayEnd][7] = $PredictedRefNumber
+				$SlackOpenAttributesArray[$ArrayEnd][8] = $aMFTReferenceSeqNo
+				$SlackOpenAttributesArray[$ArrayEnd][9] = $LsnOfOpenRecord
+				$SlackOpenAttributesArray[$ArrayEnd][10] = "0x" & $UnknownPointer
+;				$SlackOpenAttributesArray[$ArrayEnd][11] = "0x" & $EndSignature
+				$SlackOpenAttributesArray[$ArrayEnd][11] = "-"
+				$SlackOpenAttributesArray[$ArrayEnd][13] = 0
+				$RetVal = $ArrayEnd
+				$TextInformation &= ";Updated SlackOpenAttributesArray"
+			EndIf
+		Case StringLen($datachunk) = 88 ;OPEN_ATTRIBUTE_ENTRY x86
+			If Not $Is32bit Then $TextInformation &= ";Mixed OS detected"
+			$AllocatedOrNextFree = _SwapEndian(StringMid($datachunk,1,8))
+			$UnknownPointer = _SwapEndian(StringMid($datachunk, 9, 8))
+			$PredictedRefNumber = Dec(_SwapEndian(StringMid($datachunk,17,12)))
+			$KeptRef = $PredictedRefNumber
+			$aMFTReferenceSeqNo = Dec(_SwapEndian(StringMid($datachunk,29,4)))
+			$LsnOfOpenRecord = Dec(_SwapEndian(StringMid($datachunk,33,16))) ;LsnOfOpenRecord
+			$unknown2 = StringMid($datachunk, 49, 8)
+			$aAttributeHex = StringMid($datachunk,57,8)
+			$AttributeString = _ResolveAttributeType(StringLeft($aAttributeHex,4))
+;			$unknown3 = StringMid($datachunk, 65, 8)
+;			$EndSignature = StringMid($datachunk,73,8)
+			$EndSignature = StringMid($datachunk,65,16)
+;			$DirtyPagesSeen = StringMid($datachunk, 81, 2)
+;			$AttributeNamePresent = StringMid($datachunk, 83, 2)
+;			$unknown1 = StringMid($datachunk, 85, 4)
+			$SizeOfIndx = StringMid($datachunk, 81, 2)
+			$SizeOfIndx = Dec(_SwapEndian($SizeOfIndx),2)
+
+			$TextInformation &= ";LsnOfOpenRecord="&$LsnOfOpenRecord
+
+			If $VerboseOn Then
+				_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
+				_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
+				_DumpOutput("$SizeOfIndx: " & $SizeOfIndx & @CRLF)
+				_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+				_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+				_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
+				_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+				_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+				_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+				_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
+				_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
+			EndIf
+
+			$FoundInTable = _ArraySearch($SlackOpenAttributesArray,$target_attribute,0,0,0,2,1,0)
+			If $FoundInTable > 0 Then
+				If $SlackOpenAttributesArray[$FoundInTable][1] <> 0xffffffff Then
+	;				_ArrayDisplay($SlackOpenAttributesArray,"$SlackOpenAttributesArray")
+	;				$SlackOpenAttributesArray[$FoundInTable][0] = "0x" & Hex(Int(($StartOffset + $OffsetFirstEntry - 1)/2),4)
+					$SlackOpenAttributesArray[$FoundInTable][1] = "0xFFFFFFFF"
+;					$SlackOpenAttributesArray[$FoundInTable][2] = "0x" & $DirtyPagesSeen
+					$SlackOpenAttributesArray[$FoundInTable][2] = "-"
+;					$SlackOpenAttributesArray[$FoundInTable][3] = "0x" & $AttributeNamePresent
+					$SlackOpenAttributesArray[$FoundInTable][3] = $SizeOfIndx
+;					$SlackOpenAttributesArray[$FoundInTable][4] = "0x" & $unknown1
+					$SlackOpenAttributesArray[$FoundInTable][4] = "-"
+					$SlackOpenAttributesArray[$FoundInTable][5] = "0x" & $aAttributeHex
+					$SlackOpenAttributesArray[$FoundInTable][6] = "0x" & $unknown2
+					$SlackOpenAttributesArray[$FoundInTable][7] = $PredictedRefNumber
+					$SlackOpenAttributesArray[$FoundInTable][8] = $aMFTReferenceSeqNo
+					$SlackOpenAttributesArray[$FoundInTable][9] = $LsnOfOpenRecord
+					$SlackOpenAttributesArray[$FoundInTable][10] = "0x" & $UnknownPointer
+					$SlackOpenAttributesArray[$FoundInTable][11] = "0x" & $EndSignature
+	;				$SlackOpenAttributesArray[$FoundInTable][12] = "Attribute name in undo chunk"
+					$SlackOpenAttributesArray[$FoundInTable][13] = 1
+					$RetVal = $FoundInTable
+					$TextInformation &= ";Updated SlackOpenAttributesArray"
+;					_DumpOutput($TextInformation & " (existing entry)" & @CRLF)
+				Else
+					_DumpOutput("Error in Slack OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+					_DumpOutput("AllocatedOrNextFree was 0xffffffff" & @CRLF)
+				EndIf
+			Else
+				#cs
+				_DumpOutput("Error in OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+				_DumpOutput("Could not update array with new entry" & @CRLF)
+				_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
+				_DumpOutput("$target_attribute: " & $target_attribute & @CRLF)
+				_DumpOutput("$AllocatedOrNextFree: " & $AllocatedOrNextFree & @CRLF)
+				_DumpOutput("$DirtyPagesSeen: " & $DirtyPagesSeen & @CRLF)
+				_DumpOutput("$AttributeNamePresent: " & $AttributeNamePresent & @CRLF)
+				_DumpOutput("$aAttributeHex: " & $aAttributeHex & @CRLF)
+				_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+				_DumpOutput("$Unknown2: " & $Unknown2 & @CRLF)
+				_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
+				_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
+				_DumpOutput("$LsnOfOpenRecord: " & $LsnOfOpenRecord & @CRLF)
+				_DumpOutput("$UnknownPointer: " & $UnknownPointer & @CRLF)
+				_DumpOutput("$EndSignature: " & $EndSignature & @CRLF)
+				_ArrayDisplay($SlackOpenAttributesArray,"$SlackOpenAttributesArray")
+				#ce
+				$ArrayEnd = UBound($SlackOpenAttributesArray)
+				ReDim $SlackOpenAttributesArray[$ArrayEnd+1][14]
+				$SlackOpenAttributesArray[$ArrayEnd][0] = $target_attribute
+				$SlackOpenAttributesArray[$ArrayEnd][1] = "0x" & $AllocatedOrNextFree
+;				$SlackOpenAttributesArray[$ArrayEnd][2] = "0x" & $DirtyPagesSeen
+				$SlackOpenAttributesArray[$ArrayEnd][2] = "-"
+;				$SlackOpenAttributesArray[$ArrayEnd][3] = "0x" & $AttributeNamePresent
+				$SlackOpenAttributesArray[$ArrayEnd][3] = $SizeOfIndx
+;				$SlackOpenAttributesArray[$ArrayEnd][4] = "0x" & $unknown1
+				$SlackOpenAttributesArray[$ArrayEnd][4] = "-"
+				$SlackOpenAttributesArray[$ArrayEnd][5] = "0x" & $aAttributeHex
+				$SlackOpenAttributesArray[$ArrayEnd][6] = "0x" & $unknown2
+				$SlackOpenAttributesArray[$ArrayEnd][7] = $PredictedRefNumber
+				$SlackOpenAttributesArray[$ArrayEnd][8] = $aMFTReferenceSeqNo
+				$SlackOpenAttributesArray[$ArrayEnd][9] = $LsnOfOpenRecord
+				$SlackOpenAttributesArray[$ArrayEnd][10] = "0x" & $UnknownPointer
+				$SlackOpenAttributesArray[$ArrayEnd][11] = "0x" & $EndSignature
+				$SlackOpenAttributesArray[$ArrayEnd][13] = 1
+				$RetVal = $ArrayEnd
+				$TextInformation &= ";Updated SlackOpenAttributesArray"
+;_DumpOutput($TextInformation & " (new entry)" & @CRLF)
+			EndIf
+		Case Else
+			_DumpOutput("Error: Unresolved Slack OpenNonresidentAttribute for LSN: " & $this_lsn & @CRLF)
+			_DumpOutput(_HexEncode("0x"&$datachunk) & @CRLF)
+	EndSelect
+
+	If $VerboseOn Then
+		_DumpOutput("_Decode_SlackOpenNonresidentAttribute(): " & @CRLF)
 		_DumpOutput("$Unknown1: " & $Unknown1 & @CRLF)
 		_DumpOutput("$PredictedRefNumber: " & $PredictedRefNumber & @CRLF)
 		_DumpOutput("$aMFTReferenceSeqNo: " & $aMFTReferenceSeqNo & @CRLF)
