@@ -1,5 +1,10 @@
 LogFileParser Changelog
 
+
+v2.0.0.35
+Merged the two outputs, LogFile_INDX_I30.csv and LogFile_UndoWipe_INDX_I30.csv, into LogFile_INDX_I30.csv and added a column for IsRedo to be able to distinguish.
+Added schema and import sql for LogFile_INDX_I30.csv.
+
 v2.0.0.34
 Added more output to debug.log to help identify pages that are not of type RSTR/RCRD.
 Added decode of single entry updates to OpenAttributeTable through OpenNonResidentAttribute for transactions found in slack.

@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.34
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.35
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -22,7 +22,7 @@
 Global $VerboseOn = 0, $CharReplacement=":", $de="|", $PrecisionSeparator=".", $PrecisionSeparator2="", $DoSplitCsv=False, $csvextra, $InputLogFile,$TargetMftCsvFile, $UsnJrnlFile, $SectorsPerCluster, $DoReconstructDataRuns=0, $debuglogfile, $csvextra, $CurrentTimestamp, $EncodingWhenOpen=2, $ReconstructDone=False
 Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef, $FromRcrdSlack, $IncompleteTransaction=0
 Global $ProgressLogFile, $ProgressReconstruct, $CurrentProgress=-1, $ProgressStatus, $ProgressUsnJrnl, $ProgressSize
-Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $SectorSize=512, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,$LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile
+Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $SectorSize=512, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile;$LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,
 Global $RecordOffset, $PredictedRefNumber, $this_lsn, $client_previous_lsn, $redo_operation, $undo_operation, $record_offset_in_mft, $attribute_offset, $hOutFileMFT, $tBuffer, $nBytes2, $HDR_BaseRecord, $FilePath, $HDR_SequenceNo
 Global $nBytes, $rFile, $DataRunArr[2][18], $NewDataRunArr[1][18], $RowsProcessed, $MaxRows, $hQuery, $aRow, $aRow2, $iRows, $iColumns, $aRes, $sOutputFile
 Global $RSTRsig = "52535452", $RCRDsig = "52435244", $BAADsig = "42414144", $CHKDsig = "43484d44", $Emptysig = "ffffffff"
@@ -50,7 +50,7 @@ Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $Da
 Global $IsCompressed = False, $IsSparse = False
 Global $outputpath=@ScriptDir, $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
 Global $TargetImageFile, $Entries, $IsImage=False, $IsPhysicalDrive=False, $ComboPhysicalDrives, $Combo, $MFT_Record_Size
-Global $EaNonResidentArray[1][9], $VerboseArr, $LogFileSqlFile, $LogFileUpdateFilenameI30SqlFile, $LogFileUpdateFileNameCsv,$LogFileUpdateFileNameCsvFile,$CheckSkipSqlite3,$LogFileCheckpointRecordCsvFile,$LogFileCheckpointRecordCsv
+Global $EaNonResidentArray[1][9], $VerboseArr, $LogFileSqlFile, $LogFileUpdateFilenameI30SqlFile, $LogFileINDXI30SqlFile, $LogFileUpdateFileNameCsv,$LogFileUpdateFileNameCsvFile,$CheckSkipSqlite3,$LogFileCheckpointRecordCsvFile,$LogFileCheckpointRecordCsv
 Global $SQLite3Exe = @ScriptDir & "\sqlite3.exe"
 Global $TimestampErrorVal = "0000-00-00 00:00:00"
 Global $IntegerErrorVal = -1
@@ -93,7 +93,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.34"
+$Progversion = "NTFS $LogFile Parser 2.0.0.35"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -418,6 +418,12 @@ $FixedPath = StringReplace($LogFileUpdateFileNameCsvFile,"\","\\")
 Sleep(500)
 _ReplaceStringInFile($LogFileUpdateFilenameI30SqlFile,"__PathToCsv__",$FixedPath)
 If $CheckUnicode = 1 Then _ReplaceStringInFile($LogFileUpdateFilenameI30SqlFile,"latin1", "utf8")
+
+;Fix the path to csv file inside the sql
+$FixedPath = StringReplace($LogFileIndxCsvfile,"\","\\")
+Sleep(500)
+_ReplaceStringInFile($LogFileINDXI30SqlFile,"__PathToCsv__",$FixedPath)
+If $CheckUnicode = 1 Then _ReplaceStringInFile($LogFileINDXI30SqlFile,"latin1", "utf8")
 
 ;Put output filenames into an array
 $FileOutputTesterArray[0] = $LogFileCsvFile
@@ -1984,7 +1990,7 @@ If $redo_length > 0 Then
 			If $redo_length <= 60 Then
 				$TextInformation &= ";Initializing empty record"
 			Else
-				_ParserCodeOldVersion($redo_chunk)
+				_ParserCodeOldVersion($redo_chunk,1)
 				If Not $FromRcrdSlack Then
 					_UpdateFileNameArray($PredictedRefNumber,$HDR_SequenceNo,$FN_Name,$this_lsn)
 				EndIf
@@ -2079,7 +2085,7 @@ If $redo_length > 0 Then
 				Else
 
 					$DecodeOk=0
-					$DecodeOk = _Decode_INDX($redo_chunk)
+					$DecodeOk = _Decode_INDX($redo_chunk,1)
 					If Not $DecodeOk Then ;Possibly $Secure:$SDH or $Secure:$SII
 ;						ConsoleWrite("_Decode_INDX() failed for $this_lsn: " & $this_lsn & @CRLF)
 ;						ConsoleWrite(_HexEncode("0x"&$redo_chunk) & @CRLF)
@@ -2506,7 +2512,14 @@ If $undo_length > 0 Then ; Not needed I guess
 			EndIf
 		Case $undo_operation_hex="0100" ;CompensationlogRecord
 		Case $undo_operation_hex="0200" ;InitializeFileRecordSegment
-;			_ParserCodeOldVersion($undo_chunk)
+			If $UndoChunkSize > 26 Then
+;				_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;				_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+;				_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+;				_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+;				MsgBox(0,"Info","Check this one out")
+				_ParserCodeOldVersion($undo_chunk,0)
+			EndIf
 		Case $undo_operation_hex="0300" ;DeallocateFileRecordSegment
 			;Just the FILE header from MFT records
 		Case $undo_operation_hex="0400" ; WriteEndOfFileRecordSegment
@@ -2523,7 +2536,14 @@ If $undo_length > 0 Then ; Not needed I guess
 		Case $undo_operation_hex="0900"
 ;			_Decode_UpdateMappingPairs($undo_chunk)
 		Case $undo_operation_hex="0800" ; UpdateNonResidentValue
-;			If StringLeft($undo_chunk,8) = "494e4458" Then _Decode_INDX($undo_chunk)
+			If StringLeft($undo_chunk,8) = "494e4458" Then
+				_Decode_INDX($undo_chunk,0)
+;				_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
+;				_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
+;				_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
+;				_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
+;				MsgBox(0,"Info","Check this one out")
+			EndIf
 		Case $undo_operation_hex="0b00"
 ;			_Decode_SetNewAttributeSize($undo_chunk)
 		Case $undo_operation_hex="0c00" Or $undo_operation_hex="0e00"
@@ -2615,7 +2635,7 @@ If $undo_length > 0 Then ; Not needed I guess
 					$TextInformation &= ";See LogFile_ReparseR.csv"
 				Case Not ($PredictedRefNumber = 9 Or $PredictedRefNumber = 24 Or $PredictedRefNumber = 25 Or $PredictedRefNumber = 26 Or $RealMftRef = 9 Or $RealMftRef = 24 Or $RealMftRef = 25 Or $RealMftRef = 26) And StringInStr($AttributeString,"$INDEX_ALLOCATION")
 					$DecodeOk=0
-					$DecodeOk = _Decode_UndoWipeINDX($undo_chunk)
+					$DecodeOk = _Decode_UndoWipeINDX($undo_chunk,0)
 					If Not $DecodeOk Then
 						_DumpOutput(@CRLF & "_Decode_UndoWipeINDX() failed for $this_lsn: " & $this_lsn & @CRLF)
 						_DumpOutput(_HexEncode("0x"&$undo_chunk) & @CRLF)
@@ -3069,7 +3089,7 @@ Func _HexEncode($bInput)
     Return SetError(0, 0, DllStructGetData($tOut, 1))
 EndFunc
 
-Func _ParserCodeOldVersion($MFTEntry)
+Func _ParserCodeOldVersion($MFTEntry,$IsRedo)
 	Local $UpdSeqArrOffset, $HDR_LSN, $HDR_HardLinkCount, $HDR_Flags, $HDR_RecRealSize, $HDR_RecAllocSize, $HDR_BaseRecSeqNo, $HDR_NextAttribID, $HDR_MFTREcordNumber, $NextAttributeOffset, $AttributeType, $AttributeSize, $RecordActive
 	Local $AttributeArray[17][2], $TestAttributeString
 	$AttributeArray[0][0] = "Attribute name"
@@ -3227,7 +3247,7 @@ Func _ParserCodeOldVersion($MFTEntry)
 				$CoreAttr = _GetAttributeEntry(StringMid($MFTEntry,$NextAttributeOffset,$AttributeSize*2))
 				$CoreAttrChunk = $CoreAttr[0]
 				$CoreAttrName = $CoreAttr[1]
-				_Get_Data($MFTEntry, $NextAttributeOffset, $AttributeSize, $AttributeArray[8][1])
+				_Get_Data($MFTEntry, $NextAttributeOffset, $AttributeSize, $AttributeArray[8][1],$IsRedo)
 				$TestAttributeString &= '$DATA?'&($NextAttributeOffset-1)/2&','
 			Case $AttributeType = $INDEX_ROOT
 				$AttributeKnown = 1
@@ -3236,7 +3256,7 @@ Func _ParserCodeOldVersion($MFTEntry)
 				$CoreAttrChunk = $CoreAttr[0]
 				$CoreAttrName = $CoreAttr[1]
 				If $CoreAttrChunk <> "" Then
-					If $CoreAttrName = "$I30" Then _Get_IndexRoot($CoreAttrChunk,$CoreAttrName)
+					If $CoreAttrName = "$I30" Then _Get_IndexRoot($CoreAttrChunk,$CoreAttrName,$IsRedo)
 				EndIf
 				$TestAttributeString &= '$INDEX_ROOT?'&($NextAttributeOffset-1)/2&','
 			Case $AttributeType = $INDEX_ALLOCATION
@@ -3314,7 +3334,9 @@ Func _ParserCodeOldVersion($MFTEntry)
 	Next
 	If $AttributeString <> "" Then $AttributeString = StringTrimRight($AttributeString,1)
 	_WriteOut_MFTrecord($HDR_MFTREcordNumber, $MFTEntry)
-	_UpdateSeveralOffsetOfAttribute($HDR_MFTREcordNumber, $TestAttributeString)
+	If $IsRedo Then
+		_UpdateSeveralOffsetOfAttribute($HDR_MFTREcordNumber, $TestAttributeString)
+	EndIf
 EndFunc
 
 Func _Get_StandardInformation($MFTEntry, $SI_Offset, $SI_Size)
@@ -3839,7 +3861,7 @@ Func _Get_FileName($MFTEntry, $FN_Offset, $FN_Size, $FN_Number)
 	EndIf
 EndFunc
 
-Func _Get_Data($MFTEntry, $DT_Offset, $DT_Size, $DT_Number)
+Func _Get_Data($MFTEntry, $DT_Offset, $DT_Size, $DT_Number, $IsRedo)
 	Local $DT_NameLength, $DT_NameRelativeOffset, $DT_VCNs, $DT_LengthOfAttribute, $DT_OffsetToAttribute, $DT_IndexedFlag
 	$DT_NonResidentFlag = StringMid($MFTEntry, $DT_Offset + 16, 2)
 	$DT_NameLength = Dec(StringMid($MFTEntry, $DT_Offset + 18, 2))
@@ -3907,7 +3929,9 @@ Func _Get_Data($MFTEntry, $DT_Offset, $DT_Size, $DT_Number)
 			_DumpOutput("$DT_IndexedFlag: " & $DT_IndexedFlag & @CRLF)
 		EndIf
 	EndIf
-	_WriteLogFileDataRunsCsv()
+	If $IsRedo Then
+		_WriteLogFileDataRunsCsv()
+	EndIf
 EndFunc
 
 Func _Decode_SetNewAttributeSize($input)
@@ -3943,7 +3967,7 @@ Func _Decode_UpdateMappingPairs($input)
 	_WriteLogFileDataRunsCsv()
 EndFunc
 
-Func _Decode_INDX($Entry)
+Func _Decode_INDX($Entry,$IsRedo)
 	If $VerboseOn Then _DumpOutput("_Decode_INDX():" & @CRLF)
 	Local $LocalAttributeOffset = 1,$NewLocalAttributeOffset,$IndxHdrMagic,$IndxHdrUpdateSeqArrOffset,$IndxHdrUpdateSeqArrSize,$IndxHdrLogFileSequenceNo,$IndxHdrVCNOfIndx,$IndxHdrOffsetToIndexEntries,$IndxHdrSizeOfIndexEntries,$IndxHdrAllocatedSizeOfIndexEntries
 	Local $IndxHdrFlag,$IndxHdrPadding,$IndxHdrUpdateSequence,$IndxHdrUpdSeqArr,$IndxHdrUpdSeqArrPart0,$IndxHdrUpdSeqArrPart1,$IndxHdrUpdSeqArrPart2,$IndxHdrUpdSeqArrPart3,$IndxRecordEnd4,$IndxRecordEnd1,$IndxRecordEnd2,$IndxRecordEnd3,$IndxRecordEnd4
@@ -4089,13 +4113,15 @@ Func _Decode_INDX($Entry)
 ;	FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
 	If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
 		$DecodeOk=True
-		FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
-		$RealMftRef = $PredictedRefNumber
-		$PredictedRefNumber = $MFTReferenceOfParent
-		$KeptRef = $MFTReferenceOfParent
-		$AttributeString = "$INDEX_ALLOCATION"
-		If Not $FromRcrdSlack Then
-			If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
+		FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $IsRedo & @crlf)
+		If $IsRedo Then
+			$RealMftRef = $PredictedRefNumber
+			$PredictedRefNumber = $MFTReferenceOfParent
+			$KeptRef = $MFTReferenceOfParent
+			$AttributeString = "$INDEX_ALLOCATION"
+			If Not $FromRcrdSlack Then
+				If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
+			EndIf
 		EndIf
 ;		If $PreviousRedoOp = "1c00" Then
 ;			$AttributeString = $PreviousAttribute
@@ -4248,13 +4274,15 @@ Func _Decode_INDX($Entry)
 ;		FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
 		If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
 			$DecodeOk=True
-			FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
-			$RealMftRef = $PredictedRefNumber
-			$PredictedRefNumber = $MFTReferenceOfParent
-			$KeptRef = $MFTReferenceOfParent
-			$AttributeString = "$INDEX_ALLOCATION"
-			If Not $FromRcrdSlack Then
-				If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
+			FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $IsRedo & @crlf)
+			If $IsRedo Then
+				$RealMftRef = $PredictedRefNumber
+				$PredictedRefNumber = $MFTReferenceOfParent
+				$KeptRef = $MFTReferenceOfParent
+				$AttributeString = "$INDEX_ALLOCATION"
+				If Not $FromRcrdSlack Then
+					If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
+				EndIf
 			EndIf
 ;			If $PreviousRedoOp = "1c00" Then
 ;				$AttributeString = $PreviousAttribute
@@ -4411,8 +4439,13 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 ;$FN_MTime & $de & $FN_RTime & $de & $FN_AllocSize & $de & $FN_RealSize & $de & $FN_Flags & $de & $DT_StartVCN & $de & $DT_LastVCN & $de & $DT_ComprUnitSize & $de & $DT_AllocSize & $de & $DT_RealSize & $de & $DT_InitStreamSize & $de & $DT_DataRuns & $de &
 ;$DT_Name & $de & $TextInformation & $de & $RedoChunkSize & $de & $UndoChunkSize & @crlf)
 	If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0 And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
+		FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $IsRedo & @crlf)
+		If Not $FromRcrdSlack Then
+			If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
+		EndIf
+#cs
 		if $IsRedo Then
-			FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
+			FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $IsRedo & @crlf)
 			If Not $FromRcrdSlack Then
 				If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
 			EndIf
@@ -4422,6 +4455,7 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 				If $Indx_NameSpace <> "DOS" Then _UpdateFileNameArray($MFTReference,$MFTReferenceSeqNo,$Indx_FileName,$this_lsn)
 			EndIf
 		EndIf
+#ce
 		$DecodeOk=True
 		$RealMftRef = $MFTReferenceOfParent
 		$PredictedRefNumber = $MFTReference
@@ -4464,7 +4498,7 @@ Func _Decode_IndexEntry($Entry,$AttrType,$IsRedo)
 	Return $DecodeOk
 EndFunc
 
-Func _Get_IndexRoot($Entry,$CurrentAttributeName)
+Func _Get_IndexRoot($Entry,$CurrentAttributeName,$IsRedo)
 	Local $LocalAttributeOffset = 1,$AttributeType,$CollationRule,$SizeOfIndexAllocationEntry,$ClustersPerIndexRoot,$IRPadding,$DecodeOk=False
 	$AttributeType = StringMid($Entry,$LocalAttributeOffset,8)
 ;	$AttributeType = _SwapEndian($AttributeType)
@@ -4506,7 +4540,7 @@ Func _Get_IndexRoot($Entry,$CurrentAttributeName)
 ;	If $ResidentIndx And $AttributeType=$FILE_NAME And $CurrentAttributeName="$I30" Then
 	If $ResidentIndx And $AttributeType=$FILE_NAME Then
 		$TheResidentIndexEntry = StringMid($Entry,$LocalAttributeOffset+64)
-		$DecodeOk = _Decode_INDX($TheResidentIndexEntry)
+		$DecodeOk = _Decode_INDX($TheResidentIndexEntry,$IsRedo)
 	EndIf
 	Return $DecodeOk
 EndFunc
@@ -4830,7 +4864,7 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				$CoreAttrChunk = $CoreAttr[0]
 				$CoreAttrName = $CoreAttr[1]
 				$CoreAttrNonResidentFlag = $CoreAttr[2]
-				_Get_Data($record, 1, $RecordSize, 1 )
+				_Get_Data($record, 1, $RecordSize, 1, $IsRedo)
 				If $DT_Name <> "" Then
 					$AttributeString = "$DATA:"&$DT_Name
 				Else
@@ -4842,7 +4876,7 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				$CoreAttrChunk = $CoreAttr[0]
 				$CoreAttrName = $CoreAttr[1]
 				$CoreAttrNonResidentFlag = $CoreAttr[2]
-				If $CoreAttrName = "$I30" Then $DecodeOk = _Get_IndexRoot($CoreAttrChunk,$CoreAttrName)
+				If $CoreAttrName = "$I30" Then $DecodeOk = _Get_IndexRoot($CoreAttrChunk,$CoreAttrName,$IsRedo)
 				$AttributeString = "$INDEX_ROOT"
 				$TextInformation &= ";NonResidentFlag="&$CoreAttrNonResidentFlag
 			Case $AttributeTypeCheck = "A000"
@@ -4851,7 +4885,7 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				$CoreAttrName = $CoreAttr[1]
 				$CoreAttrNonResidentFlag = $CoreAttr[2]
 				If $CoreAttrChunk <> "" Then ;Will never occur?
-					If $CoreAttrName = "$I30" Then $DecodeOk = _Decode_INDX($CoreAttrChunk)
+					If $CoreAttrName = "$I30" Then $DecodeOk = _Decode_INDX($CoreAttrChunk,$IsRedo)
 				EndIf
 				$AttributeString = "$INDEX_ALLOCATION"
 				$TextInformation &= ";NonResidentFlag="&$CoreAttrNonResidentFlag
@@ -4964,12 +4998,20 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
 				$CoreAttrChunk = $CoreAttr[0]
 				$CoreAttrName = $CoreAttr[1]
+				$CoreAttrNonResidentFlag = $CoreAttr[2]
+				If $CoreAttrName = "$I30" Then $DecodeOk = _Get_IndexRoot($CoreAttrChunk,$CoreAttrName,$IsRedo)
 				$AttributeString = "$INDEX_ROOT"
+				$TextInformation &= ";NonResidentFlag="&$CoreAttrNonResidentFlag
 			Case $AttributeTypeCheck = "A000"
 				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
 				$CoreAttrChunk = $CoreAttr[0]
 				$CoreAttrName = $CoreAttr[1]
+				$CoreAttrNonResidentFlag = $CoreAttr[2]
+				If $CoreAttrChunk <> "" Then ;Will never occur?
+					If $CoreAttrName = "$I30" Then $DecodeOk = _Decode_INDX($CoreAttrChunk,$IsRedo)
+				EndIf
 				$AttributeString = "$INDEX_ALLOCATION"
+				$TextInformation &= ";NonResidentFlag="&$CoreAttrNonResidentFlag
 			Case $AttributeTypeCheck = "B000"
 ;				ConsoleWrite("Bitmap:" & @CRLF)
 ;				ConsoleWrite(_HexEncode("0x"&$record) & @CRLF)
@@ -6042,9 +6084,13 @@ Func _PrepareOutput($OutputDir)
 	FileInstall("C:\temp\import-csv-logfile.sql", $LogFileSqlFile)
 	_DebugOut("Created output file: " & $LogFileSqlFile)
 
-	$LogFileUpdateFilenameI30SqlFile = $ParserOutDir & "\LogFile-UpdateFileName_I30.sql"
+	$LogFileUpdateFilenameI30SqlFile = $ParserOutDir & "\LogFile_UpdateFileName_I30.sql"
 	FileInstall("C:\temp\import-csv-logfile-updatefilename-I30.sql", $LogFileUpdateFilenameI30SqlFile)
 	_DebugOut("Created output file: " & $LogFileUpdateFilenameI30SqlFile)
+
+	$LogFileINDXI30SqlFile = $ParserOutDir & "\LogFile_INDX_I30.sql"
+	FileInstall("C:\temp\import-csv-logfile-INDX-I30.sql", $LogFileINDXI30SqlFile)
+	_DebugOut("Created output file: " & $LogFileINDXI30SqlFile)
 
 	$LogFileIndxCsvfile = $ParserOutDir & "\LogFile_INDX_I30.csv"
 	$LogFileIndxCsv = FileOpen($LogFileIndxCsvfile, $EncodingWhenOpen)
@@ -6053,6 +6099,7 @@ Func _PrepareOutput($OutputDir)
 		Exit
 	EndIf
 	_DebugOut("Created output file: " & $LogFileIndxCsvfile)
+	#cs
 	$LogFileUndoWipeIndxCsvfile = $ParserOutDir & "\LogFile_UndoWipe_INDX_I30.csv"
 	$LogFileUndoWipeIndxCsv = FileOpen($LogFileUndoWipeIndxCsvfile, $EncodingWhenOpen)
 	If @error Then
@@ -6060,6 +6107,7 @@ Func _PrepareOutput($OutputDir)
 		Exit
 	EndIf
 	_DebugOut("Created output file: " & $LogFileUndoWipeIndxCsvfile)
+	#ce
 	$LogFileUsnJrnlCsvFile = $ParserOutDir & "\LogFile_lfUsnJrnl.csv"
 	$LogFileUsnJrnlCsv = FileOpen($LogFileUsnJrnlCsvFile, $EncodingWhenOpen)
 	If @error Then
@@ -6278,10 +6326,10 @@ Func _WriteCSVHeader()
 ;	$LogFile_Csv_Header = "lf_Offset"&$de&"lf_MFTReference"&$de&"lf_RealMFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_LSN"&$de&"lf_LSNPrevious"&$de&"lf_RedoOperation"&$de&"lf_UndoOperation"&$de&"lf_OffsetInMft"&$de&"lf_FileName"&$de&"lf_CurrentAttribute"&$de&"lf_TextInformation"&$de&"lf_UsnJrnlFileName"&$de&"lf_UsnJrnlMFTReference"&$de&"lf_UsnJrnlMFTParentReference"&$de&"lf_UsnJrnlTimestamp"&$de&"lf_UsnJrnlReason"&$de&"lf_UsnJrnlUsn"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"&$de&"lf_FN_CTime"&$de&"lf_FN_ATime"&$de&"lf_FN_MTime"&$de&"lf_FN_RTime"&$de&"lf_FN_AllocSize"&$de&"lf_FN_RealSize"&$de&"lf_FN_Flags"&$de&"lf_FN_Namespace"&$de&"lf_DT_StartVCN"&$de&"lf_DT_LastVCN"&$de&"lf_DT_ComprUnitSize"&$de&"lf_DT_AllocSize"&$de&"lf_DT_RealSize"&$de&"lf_DT_InitStreamSize"&$de&"lf_DT_DataRuns"&$de&"lf_DT_Name"&$de&"lf_FileNameModified"&$de&"lf_RedoChunkSize"&$de&"lf_UndoChunkSize"
 	$LogFile_Csv_Header = "lf_Offset"&$de&"lf_MFTReference"&$de&"lf_RealMFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_LSN"&$de&"lf_LSNPrevious"&$de&"lf_RedoOperation"&$de&"lf_UndoOperation"&$de&"lf_OffsetInMft"&$de&"lf_FileName"&$de&"lf_CurrentAttribute"&$de&"lf_TextInformation"&$de&"lf_UsnJrnlFileName"&$de&"lf_UsnJrnlMFTReference"&$de&"lf_UsnJrnlMFTParentReference"&$de&"lf_UsnJrnlTimestamp"&$de&"lf_UsnJrnlReason"&$de&"lf_UsnJrnlUsn"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"&$de&"lf_FN_CTime"&$de&"lf_FN_ATime"&$de&"lf_FN_MTime"&$de&"lf_FN_RTime"&$de&"lf_FN_AllocSize"&$de&"lf_FN_RealSize"&$de&"lf_FN_Flags"&$de&"lf_FN_Namespace"&$de&"lf_DT_StartVCN"&$de&"lf_DT_LastVCN"&$de&"lf_DT_ComprUnitSize"&$de&"lf_DT_AllocSize"&$de&"lf_DT_RealSize"&$de&"lf_DT_InitStreamSize"&$de&"lf_DT_DataRuns"&$de&"lf_DT_Name"&$de&"lf_FileNameModified"&$de&"lf_RedoChunkSize"&$de&"lf_UndoChunkSize"&$de&"lf_client_index"&$de&"lf_record_type"&$de&"lf_transaction_id"&$de&"lf_flags"&$de&"lf_target_attribute"&$de&"lf_lcns_to_follow"&$de&"lf_attribute_offset"&$de&"lf_MftClusterIndex"&$de&"lf_target_vcn"&$de&"lf_target_lcn"&$de&"InOpenAttributeTable"&$de&"FromRcrdSlack"&$de&"IncompleteTransaction"
 	FileWriteLine($LogFileCsv, $LogFile_Csv_Header & @CRLF)
-	$LogFile_Indx_Csv_Header = "lf_Offset"&$de&"lf_LSN"&$de&"lf_EntryNumber"&$de&"lf_MFTReference"&$de&"lf_MFTReferenceSeqNo"&$de&"lf_IndexFlags"&$de&"lf_MFTParentReference"&$de&"lf_MFTParentReferenceSeqNo"&$de&"lf_CTime"&$de&"lf_ATime"&$de&"lf_MTime"&$de&"lf_RTime"&$de&"lf_AllocSize"&$de&"lf_RealSize"&$de&"lf_FileFlags"&$de&"lf_ReparseTag"&$de&"lf_FileName"&$de&"lf_FileNameModified"&$de&"lf_NameSpace"&$de&"lf_SubNodeVCN"
+	$LogFile_Indx_Csv_Header = "lf_Offset"&$de&"lf_LSN"&$de&"lf_EntryNumber"&$de&"lf_MFTReference"&$de&"lf_MFTReferenceSeqNo"&$de&"lf_IndexFlags"&$de&"lf_MFTParentReference"&$de&"lf_MFTParentReferenceSeqNo"&$de&"lf_CTime"&$de&"lf_ATime"&$de&"lf_MTime"&$de&"lf_RTime"&$de&"lf_AllocSize"&$de&"lf_RealSize"&$de&"lf_FileFlags"&$de&"lf_ReparseTag"&$de&"lf_FileName"&$de&"lf_FileNameModified"&$de&"lf_NameSpace"&$de&"lf_SubNodeVCN"&$de&"IsRedo"
 	FileWriteLine($LogFileIndxCsv, $LogFile_Indx_Csv_Header & @CRLF)
-	$LogFile_UndoWipe_Indx_Csv_Header = "lf_uw_Offset"&$de&"lf_uw_LSN"&$de&"lf_uw_EntryNumber"&$de&"lf_uw_MFTReference"&$de&"lf_uw_MFTReferenceSeqNo"&$de&"lf_uw_IndexFlags"&$de&"lf_uw_MFTParentReference"&$de&"lf_uw_MFTParentReferenceSeqNo"&$de&"lf_uw_CTime"&$de&"lf_uw_ATime"&$de&"lf_uw_MTime"&$de&"lf_uw_RTime"&$de&"lf_uw_AllocSize"&$de&"lf_uw_RealSize"&$de&"lf_uw_FileFlags"&$de&"lf_uw_ReparseTag"&$de&"lf_uw_FileName"&$de&"lf_uw_FileNameModified"&$de&"lf_uw_NameSpace"&$de&"lf_uw_SubNodeVCN"
-	FileWriteLine($LogFileUndoWipeIndxCsv, $LogFile_UndoWipe_Indx_Csv_Header & @CRLF)
+	;$LogFile_UndoWipe_Indx_Csv_Header = "lf_uw_Offset"&$de&"lf_uw_LSN"&$de&"lf_uw_EntryNumber"&$de&"lf_uw_MFTReference"&$de&"lf_uw_MFTReferenceSeqNo"&$de&"lf_uw_IndexFlags"&$de&"lf_uw_MFTParentReference"&$de&"lf_uw_MFTParentReferenceSeqNo"&$de&"lf_uw_CTime"&$de&"lf_uw_ATime"&$de&"lf_uw_MTime"&$de&"lf_uw_RTime"&$de&"lf_uw_AllocSize"&$de&"lf_uw_RealSize"&$de&"lf_uw_FileFlags"&$de&"lf_uw_ReparseTag"&$de&"lf_uw_FileName"&$de&"lf_uw_FileNameModified"&$de&"lf_uw_NameSpace"&$de&"lf_uw_SubNodeVCN"
+	;FileWriteLine($LogFileUndoWipeIndxCsv, $LogFile_UndoWipe_Indx_Csv_Header & @CRLF)
 	$LogFile_DataRuns_Csv_Header = "lf_Offset"&$de&"lf_MFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_FileName"&$de&"lf_LSN"&$de&"lf_RedoOperation"&$de&"lf_UndoOperation"&$de&"lf_OffsetInMft"&$de&"lf_AttributeOffset"&$de&"lf_SI_USN"&$de&"lf_DataName"&$de&"lf_Flags"&$de&"lf_NonResident"&$de&"lf_CompressionUnitSize"&$de&"lf_FileSize"&$de&"lf_InitializedStreamSize"&$de&"lf_OffsetToDataRuns"&$de&"lf_DataRuns"
 	FileWriteLine($LogFileDataRunsCsv, $LogFile_DataRuns_Csv_Header & @CRLF)
 	$LogFile_DataRunsResolved_Csv_Header = "lf_MFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_FileName"&$de&"lf_LSN"&$de&"lf_OffsetInMft"&$de&"lf_DataName"&$de&"lf_Flags"&$de&"lf_NonResident"&$de&"lf_FileSize"&$de&"lf_InitializedStreamSize"&$de&"lf_DataRuns"
@@ -6520,7 +6568,7 @@ Func _DebugOut($text, $var="")
    If $debuglogfile Then FileWrite($debuglogfile, $text)
 EndFunc
 
-Func _Decode_UndoWipeINDX($Entry)
+Func _Decode_UndoWipeINDX($Entry,$IsRedo)
 	If $VerboseOn Then _DumpOutput("_Decode_UndoWipeINDX()" & @CRLF)
 	Local $LocalAttributeOffset = 1,$NewLocalAttributeOffset,$IndxHdrMagic,$IndxHdrUpdateSeqArrOffset,$IndxHdrUpdateSeqArrSize,$IndxHdrLogFileSequenceNo,$IndxHdrVCNOfIndx,$IndxHdrOffsetToIndexEntries,$IndxHdrSizeOfIndexEntries,$IndxHdrAllocatedSizeOfIndexEntries
 	Local $IndxHdrFlag,$IndxHdrPadding,$IndxHdrUpdateSequence,$IndxHdrUpdSeqArr,$IndxHdrUpdSeqArrPart0,$IndxHdrUpdSeqArrPart1,$IndxHdrUpdSeqArrPart2,$IndxHdrUpdSeqArrPart3,$IndxRecordEnd4,$IndxRecordEnd1,$IndxRecordEnd2,$IndxRecordEnd3,$IndxRecordEnd4
@@ -6665,7 +6713,8 @@ Func _Decode_UndoWipeINDX($Entry)
 ;	FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
 	If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
 		$DecodeOk=True
-		FileWriteLine($LogFileUndoWipeIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
+		;FileWriteLine($LogFileUndoWipeIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
+		FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $IsRedo & @crlf)
 		$PredictedRefNumber = $MFTReferenceOfParent
 		$KeptRef = $MFTReferenceOfParent
 		$AttributeString = "$INDEX_ALLOCATION"
@@ -6817,7 +6866,8 @@ Func _Decode_UndoWipeINDX($Entry)
 ;		FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
 		If $MFTReference > 0 And $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
 			$DecodeOk=True
-			FileWriteLine($LogFileUndoWipeIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
+			;FileWriteLine($LogFileUndoWipeIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
+			FileWriteLine($LogFileIndxCsv, $RecordOffset & $de & $this_lsn & $de & $EntryCounter & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_FileName & $de & $FileNameModified & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $IsRedo & @crlf)
 			$PredictedRefNumber = $MFTReferenceOfParent
 			$KeptRef = $MFTReferenceOfParent
 			$AttributeString = "$INDEX_ALLOCATION"
