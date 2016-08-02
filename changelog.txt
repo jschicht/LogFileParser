@@ -1,5 +1,9 @@
 LogFileParser Changelog
 
+v2.0.0.36
+Added feature to optionally add a $LogFile fragment instead of a full $LogFile as input. On command line use /LogFileFragmentFile: with full path to the fragment.
+Synchronized 2 default setttings with gui vs commandline, where SkipSqlite and timestamp precission differed.
+Added exit of program with errorlevel set to 1, when no valid transactions could be decoded (empty output).
 
 v2.0.0.35
 Merged the two outputs, LogFile_INDX_I30.csv and LogFile_UndoWipe_INDX_I30.csv, into LogFile_INDX_I30.csv and added a column for IsRedo to be able to distinguish.
