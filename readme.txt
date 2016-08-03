@@ -303,7 +303,12 @@ Value for setting the minimum size in bytes for what to extract. Only used with 
 A comma separated list of lsn's that will trigger verbose mode. Verbose logging information is found in debug.log.
 /SkipSqlite3:
 Boolean value for specifying if parser should omit all sqlite3 operations. If the generated ntfs.db (reconstruct of dataruns, import of mft csv) are not used, this can safely be ignored/omitted. Default is 0. Can be 0 or 1.
-
+/VerifyFragment:
+Boolean value for activating a simple validation on a fragment only, and not full parser. Can be 0 or 1. Will by default write fixed fragment to OutFragment.bin unless otherwise specified in /OutFragmentName:
+/OutFragmentName:
+The output filename to write the fixed fragment to, if /VerifyFragment: is set to 1. If omitted, the default filename is OutFragment.bin.
+/SkipFixups:
+Boolean value to skip fixups. Used with reconstructed fragments. See examples. Default is 0. Can be 0 or 1.
 
 The available TimeZone's to use are:
 -12.00
@@ -351,6 +356,8 @@ Error levels
 The current exit (error) codes have been implemented in commandline mode, which makes it more suited for batch scripting.
 1. No valid transaction could be decoded. Empty output.
 2. A likely incorrect input parameters was detected. Most often this will SectorsPerCluster, and more rarely MftRecordSize. The default is SectorsPerCluster=8 and MftRecordSize=1024.
+3. Fragment failed validation.
+4. Failure in writing fixed fragment to output. Validation of fragment succeeded though.
 
 Thus if you get %ERRORLEVEL% == 1 it means nothing was decoded, and if you get %ERRORLEVEL% == 2 then most likely SectorsPerCluster param was set incorrect.
 
@@ -361,8 +368,11 @@ LogFileParser.exe /LogFileFile:c:\temp\$LogFile /TSFormat:3 /ReconstructDataruns
 LogFileParser.exe /LogFileFile:c:\temp\$LogFile /TimeZone:7.00 /MftRecordSize:1024 /TSFormat:2 /TSPrecision:None /SourceIs32bit:1
 LogFileParser.exe /LogFileFile:c:\temp\$LogFile /TimeZone:7.00 /MftRecordSize:1024 /TSFormat:2 /TSPrecision:None /SourceIs32bit:1 /SkipSqlite3:1
 LogFileParser.exe /LogFileFile:c:\temp\$LogFile /OutputPath:E:\LFP-Output
-LogFileParser.exe /LogFileFragmentFile:c:\temp\fragment.bin /OutputPath:E:\LFP-Output
 LogFileParser.exe /LogFileFile:c:\temp\$LogFile /MftCsvFile:c:\temp\$MFT
+LogFileParser.exe /LogFileFragmentFile:c:\temp\fragment.bin /OutputPath:E:\LFP-Output
+LogFileParser.exe /LogFileFragmentFile:c:\temp\fragment.bin /OutputPath:E:\LFP-Output /VerifyFragment:1
+LogFileParser.exe /LogFileFragmentFile:c:\temp\fragment.bin /OutputPath:E:\LFP-Output /VerifyFragment:1 /OutFragmentName:FragmentsRCRDCollection.bin
+LogFileParser.exe /LogFileFile:E:\LFP-Output\FragmentsRCRDCollection.bin /OutputPath:E:\LFP-Output /SkipFixups:1
 
 Last example is a basic that uses common defaults that work out just fine in many cases. Also compatible with MySql imports.
 

@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.36
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.37
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -56,7 +56,7 @@ Global $TimestampErrorVal = "0000-00-00 00:00:00"
 Global $IntegerErrorVal = -1
 Global $IntegerPartialValReplacement = -2 ;"PARTIAL VALUE"
 Global $MftRefReplacement = -2 ;Parent
-Global $FragmentMode=0,$RebuiltFragment, $LogFileFragmentFile
+Global $FragmentMode=0, $RebuiltFragment, $LogFileFragmentFile, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $SkipFixups=0, $checkFixups
 
 Global Const $GUI_EVENT_CLOSE = -3
 Global Const $GUI_CHECKED = 1
@@ -94,7 +94,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.36"
+$Progversion = "NTFS $LogFile Parser 2.0.0.37"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -190,10 +190,13 @@ Else
 	$MinSizeResidentExtraction = GUICtrlCreateInput("2",410,235,30,20)
 
 	$LabelVerboseLsns = GUICtrlCreateLabel("LSN's to trigger verbose output (comma separate):",20,260,240,20)
-	$InputVerboseLsns = GUICtrlCreateInput("",260,260,180,20)
+	$InputVerboseLsns = GUICtrlCreateInput("",260,260,90,20)
 
-	$CheckSkipSqlite3 = GUICtrlCreateCheckbox("skip sqlite3", 450, 260, 100, 20)
+	$CheckSkipSqlite3 = GUICtrlCreateCheckbox("skip sqlite3", 360, 260, 80, 20)
 	GUICtrlSetState($CheckSkipSqlite3, $GUI_UNCHECKED)
+
+	$checkFixups = GUICtrlCreateCheckbox("Skip Fixups", 450, 260, 80, 20)
+	GUICtrlSetState($checkFixups, $GUI_UNCHECKED)
 
 	$ButtonStart = GUICtrlCreateButton("Start", 450, 225, 50, 30)
 	GUICtrlSetBkColor($ButtonStart, $ButtonColor)
@@ -277,8 +280,32 @@ EndIf
 
 If $FragmentMode Then
 	_CheckFragment()
-	If @error Then Return
+	If @error Then
+		If Not $CommandlineMode Then
+			_DisplayInfo("Error: Fragment failed validation." & @CRLF)
+			Return SetError(1)
+		EndIf
+		If $CommandlineMode Then
+			_DumpOutput("Error: Fragment failed validation." & @CRLF)
+			Exit(3)
+		EndIf
+	EndIf
 	$InputLogFile = $LogFileFragmentFile
+	If $VerifyFragment Then
+		_WriteOutputFragment()
+		If @error Then
+			If Not $CommandlineMode Then
+				_DisplayInfo("Output fragment was verified but could not be written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
+				Return SetError(1)
+			Else
+				_DumpOutput("Output fragment was verified but could not be written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
+				Exit(4)
+			EndIf
+		Else
+			ConsoleWrite("Output fragment verified and written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
+		EndIf
+		Exit
+	EndIf
 EndIf
 
 If FileExists($InputLogFile)=0 Then
@@ -305,6 +332,15 @@ EndIf
 If $MFT_Record_Size <> 1024 And $MFT_Record_Size <> 4096 Then
 	If Not $CommandlineMode Then _DisplayInfo("Error: MFT record size should be an integer of either 1024 or 4096" & @CRLF)
 	Return
+EndIf
+
+If $CommandlineMode Then
+	$checkFixups = $checkFixups
+Else
+	$checkFixups = GUICtrlRead($checkFixups)
+EndIf
+If $checkFixups = 1 Then
+	$SkipFixups = True
 EndIf
 
 If Not $CommandlineMode Then
@@ -553,6 +589,7 @@ _DebugOut("32-bit: " & $Is32bit)
 _DebugOut("SkipSqlite3: " & $CheckSkipSqlite3)
 _DebugOut("DoExtractResidentUpdates: " & $DoExtractResidentUpdates)
 _DebugOut("FragmentMode: " & $FragmentMode)
+_DebugOut("SkipFixups: " & $SkipFixups)
 
 If Not $FragmentMode Then
 	$tBuffer = DllStructCreate("byte[" & $Record_Size & "]")
@@ -603,11 +640,15 @@ If Not $FragmentMode Then
 
 		$Magic = StringMid($LogFileRecord,3,8)
 		If $Magic = $RCRDsig Then
-			$RCRDRecord = _DoFixup($LogFileRecord)
-			If $RCRDRecord = "" then
-				_DebugOut("Error: Record corrupt. The fixup failed at: " & $CurrentFileOffset)
-				$Remainder = ""
-				ContinueLoop
+			If Not $SkipFixups Then
+				$RCRDRecord = _DoFixup($LogFileRecord)
+				If $RCRDRecord = "" then
+					_DebugOut("Error: Record corrupt. The fixup failed at: " & $CurrentFileOffset)
+					$Remainder = ""
+					ContinueLoop
+				EndIf
+			Else
+				$RCRDRecord = $LogFileRecord
 			EndIf
 
 			$last_lsn = StringMid($RCRDRecord,19,16)
@@ -2863,7 +2904,9 @@ EndFunc
 
 Func _DecodeRSTR($RSTRRecord)
 Local $Startpos=3
-$RSTRRecord = _DoFixup($RSTRRecord)
+If Not $SkipFixups Then
+	$RSTRRecord = _DoFixup($RSTRRecord)
+EndIf
 If $RSTRRecord = "" then Return ""  ;corrupt, failed fixup
 _DumpOutput("------------- RSTR -------------" & @CRLF)
 ;_DumpOutput(_HexEncode($RSTRRecord) & @CRLF)
@@ -11816,6 +11859,9 @@ Func _GetInputParams()
 		If StringLeft($cmdline[$i],24) = "/ExtractDataUpdatesSize:" Then $MinSizeResidentExtraction = StringMid($cmdline[$i],25)
 		If StringLeft($cmdline[$i],16) = "/VerboseLsnList:" Then $VerboseLsnList = StringMid($cmdline[$i],17)
 		If StringLeft($cmdline[$i],13) = "/SkipSqlite3:" Then $CheckSkipSqlite3 = StringMid($cmdline[$i],14)
+		If StringLeft($cmdline[$i],16) = "/VerifyFragment:" Then $VerifyFragment = StringMid($cmdline[$i],17)
+		If StringLeft($cmdline[$i],17) = "/OutFragmentName:" Then $OutFragmentName = StringMid($cmdline[$i],18)
+		If StringLeft($cmdline[$i],12) = "/SkipFixups:" Then $checkFixups = StringMid($cmdline[$i],13)
 	Next
 
 	If StringLen($ParserOutDir) > 0 Then
@@ -11977,6 +12023,19 @@ Func _GetInputParams()
 	If StringLen($InputLogFile) > 0 Then
 		If Not FileExists($InputLogFile) Then
 			ConsoleWrite("Error input $LogFile file does not exist." & @CRLF)
+			Exit
+		EndIf
+	EndIf
+
+	If StringLen($VerifyFragment) > 0 Then
+		If $VerifyFragment <> 1 Then
+			$VerifyFragment = 0
+		EndIf
+	EndIf
+
+	If StringLen($OutFragmentName) > 0 Then
+		If StringInStr($OutFragmentName,"\") Then
+			ConsoleWrite("Error: OutFragmentName must be a filename and not a path." & @CRLF)
 			Exit
 		EndIf
 	EndIf
@@ -12231,4 +12290,35 @@ Func _Decode_CheckpointRecord($InputData)
 	$LSN7 = Dec($LSN7,2)
 
 	FileWriteLine($LogFileCheckpointRecordCsv, $this_lsn&$de&$LSN_Checkpoint&$de&$LSN_OpenAttributeTableDump&$de&$LSN_AttributeNamesDump&$de&$LSN_DirtyPageTableDump&$de&$LSN_TransactionTableDump&$de&$Size_OpenAttributeTableDump&$de&$Size_AttributeNamesDump&$de&$Size_DirtyPageTableDump&$de&$Size_TransactionTableDump&$de&$UsnjrnlRealSize&$de&$Unknown6&$de&$LSN_FlushCache&$de&$Unknown7&$de&$Unknown8&$de&$UsnJrnlMftRef&$de&$UsnJrnlMftrefSeqNo&$de&$Unknown9&$de&$LSN7 & @CRLF)
+EndFunc
+
+Func _WriteOutputFragment()
+	Local $nBytes, $Offset
+
+	$Size = BinaryLen($RebuiltFragment)
+	If Mod($Size,0x1000) Then
+		ConsoleWrite("SizeOf $RebuiltFragment: " & $Size & @CRLF)
+		$Size2 = $Size
+		While 1
+			$RebuiltFragment &= "00"
+			$Size2 += 1
+			If Mod($Size2,0x1000) = 0 Then ExitLoop
+		WEnd
+		ConsoleWrite("Corrected SizeOf $RebuiltFragment: " & $Size2 & @CRLF)
+	EndIf
+
+	Local $tBuffer = DllStructCreate("byte[" & $Size2 & "]")
+	DllStructSetData($tBuffer,1,$RebuiltFragment)
+	If @error Then Return SetError(1)
+	Local $OutFile = $ParserOutDir & "\" & $OutFragmentName
+	If Not FileExists($OutFile) Then
+		$Offset = 0
+	Else
+		$Offset = FileGetSize($OutFile)
+	EndIf
+	Local $hFileOut = _WinAPI_CreateFile("\\.\" & $OutFile,3,6,7)
+	If Not $hFileOut Then Return SetError(1)
+	_WinAPI_SetFilePointerEx($hFileOut, $Offset, $FILE_BEGIN)
+	If Not _WinAPI_WriteFile($hFileOut, DllStructGetPtr($tBuffer), DllStructGetSize($tBuffer), $nBytes) Then Return SetError(1)
+	_WinAPI_CloseHandle($hFileOut)
 EndFunc

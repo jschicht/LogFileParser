@@ -1,5 +1,9 @@
 LogFileParser Changelog
 
+v2.0.0.37
+Added 3 new parameters. /VerifyFragment:, /OutFragmentName: and /SkipFixups:
+Better support for fragment handling.
+
 v2.0.0.36
 Added feature to optionally add a $LogFile fragment instead of a full $LogFile as input. On command line use /LogFileFragmentFile: with full path to the fragment.
 Synchronized 2 default setttings with gui vs commandline, where SkipSqlite and timestamp precission differed.
