@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.37
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.38
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -56,7 +56,7 @@ Global $TimestampErrorVal = "0000-00-00 00:00:00"
 Global $IntegerErrorVal = -1
 Global $IntegerPartialValReplacement = -2 ;"PARTIAL VALUE"
 Global $MftRefReplacement = -2 ;Parent
-Global $FragmentMode=0, $RebuiltFragment, $LogFileFragmentFile, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $SkipFixups=0, $checkFixups
+Global $FragmentMode=0, $RebuiltFragment, $LogFileFragmentFile, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $SkipFixups=0, $checkFixups, $CleanUp=0
 
 Global Const $GUI_EVENT_CLOSE = -3
 Global Const $GUI_CHECKED = 1
@@ -94,7 +94,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.37"
+$Progversion = "NTFS $LogFile Parser 2.0.0.38"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -11862,6 +11862,7 @@ Func _GetInputParams()
 		If StringLeft($cmdline[$i],16) = "/VerifyFragment:" Then $VerifyFragment = StringMid($cmdline[$i],17)
 		If StringLeft($cmdline[$i],17) = "/OutFragmentName:" Then $OutFragmentName = StringMid($cmdline[$i],18)
 		If StringLeft($cmdline[$i],12) = "/SkipFixups:" Then $checkFixups = StringMid($cmdline[$i],13)
+		If StringLeft($cmdline[$i],9) = "/CleanUp:" Then $CleanUp = StringMid($cmdline[$i],10)
 	Next
 
 	If StringLen($ParserOutDir) > 0 Then
@@ -12081,6 +12082,13 @@ Func _GetInputParams()
 	Else
 		$DateTimeFormat = 6
 	EndIf
+
+	If StringLen($CleanUp) > 0 Then
+		If $CleanUp <> 1 Then
+			$CleanUp = 0
+		EndIf
+	EndIf
+
 EndFunc
 
 Func _Decode_UpdateFileName($attribute,$IsRedo)
@@ -12296,9 +12304,9 @@ Func _WriteOutputFragment()
 	Local $nBytes, $Offset
 
 	$Size = BinaryLen($RebuiltFragment)
+	$Size2 = $Size
 	If Mod($Size,0x1000) Then
 		ConsoleWrite("SizeOf $RebuiltFragment: " & $Size & @CRLF)
-		$Size2 = $Size
 		While 1
 			$RebuiltFragment &= "00"
 			$Size2 += 1

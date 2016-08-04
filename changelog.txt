@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.38
+Fixed bug that crashed program when rebuilt fragments where exactly 0x1000 in size.
+
 v2.0.0.37
 Added 3 new parameters. /VerifyFragment:, /OutFragmentName: and /SkipFixups:
 Better support for fragment handling.
