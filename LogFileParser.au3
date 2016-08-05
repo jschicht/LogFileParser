@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.38
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.39
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -94,7 +94,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.38"
+$Progversion = "NTFS $LogFile Parser 2.0.0.39"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -278,41 +278,6 @@ If Not $CommandlineMode Then
 	EndIf
 EndIf
 
-If $FragmentMode Then
-	_CheckFragment()
-	If @error Then
-		If Not $CommandlineMode Then
-			_DisplayInfo("Error: Fragment failed validation." & @CRLF)
-			Return SetError(1)
-		EndIf
-		If $CommandlineMode Then
-			_DumpOutput("Error: Fragment failed validation." & @CRLF)
-			Exit(3)
-		EndIf
-	EndIf
-	$InputLogFile = $LogFileFragmentFile
-	If $VerifyFragment Then
-		_WriteOutputFragment()
-		If @error Then
-			If Not $CommandlineMode Then
-				_DisplayInfo("Output fragment was verified but could not be written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
-				Return SetError(1)
-			Else
-				_DumpOutput("Output fragment was verified but could not be written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
-				Exit(4)
-			EndIf
-		Else
-			ConsoleWrite("Output fragment verified and written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
-		EndIf
-		Exit
-	EndIf
-EndIf
-
-If FileExists($InputLogFile)=0 Then
-	If Not $CommandlineMode Then _DisplayInfo("Error: LogFile could not be found." & @CRLF)
-	Return
-EndIf
-
 If Not $CommandlineMode Then
 	$SectorsPerCluster = GUICtrlRead($InputSectorPerCluster)
 Else
@@ -376,11 +341,6 @@ Else
 EndIf
 If $CheckReconstruct = 1 Then
 	$DoReconstructDataRuns = 1
-;	If $EncodingWhenOpen=34 Then
-;		MsgBox(0,"Warning","Reconstruct of dataruns is not supported with UNICODE. Continuing with ANSI")
-;		GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
-;		$EncodingWhenOpen = 2
-;	EndIf
 	If $ReconstructDone Then
 		MsgBox(0,"Error","Reconstruct of dataruns requires a restart of the program")
 		Return
@@ -407,20 +367,7 @@ EndIf
 If $CheckBrokenHeaderRebuild = 1 Then
 	$DoRebuildBrokenHeader = True
 EndIf
-#cs
-If $TargetMftCsvFile And FileGetEncoding($TargetMftCsvFile,2)>0 Then
-	MsgBox(0,"Warning","Skipping import of $MFT csv because it is unicode")
-	$TargetMftCsvFile = ""
-	_DisplayInfo("Warning: Skipping import of $MFT csv because it is unicode" & @CRLF)
-EndIf
 
-$tDelta = _GetUTCRegion()-$tDelta
-If @error Then
-	_DisplayInfo("Error: Timezone configuration failed." & @CRLF)
-	Return
-EndIf
-$tDelta = $tDelta*-1 ;Since delta is substracted from timestamp later on
-#ce
 If Not $CommandlineMode Then
 	$tDelta = _GetUTCRegion(GUICtrlRead($Combo2))-$tDelta
 	If @error Then
@@ -433,6 +380,41 @@ EndIf
 ;If $LsnValidationLevel = 0 Then
 If Not StringIsFloat($LsnValidationLevel) Or Not ($LsnValidationLevel > 0 Or $LsnValidationLevel < 1) Then
 	If Not $CommandlineMode Then _DisplayInfo("Error: LsnValidationLevel: " & $LsnValidationLevel & @CRLF)
+	Return
+EndIf
+
+If $FragmentMode Then
+	_CheckFragment()
+	If @error Then
+		If Not $CommandlineMode Then
+			_DisplayInfo("Error: Fragment failed validation." & @CRLF)
+			Return SetError(1)
+		EndIf
+		If $CommandlineMode Then
+			_DumpOutput("Error: Fragment failed validation." & @CRLF)
+			Exit(3)
+		EndIf
+	EndIf
+	$InputLogFile = $LogFileFragmentFile
+	If $VerifyFragment Then
+		_WriteOutputFragment()
+		If @error Then
+			If Not $CommandlineMode Then
+				_DisplayInfo("Output fragment was verified but could not be written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
+				Return SetError(1)
+			Else
+				_DumpOutput("Output fragment was verified but could not be written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
+				Exit(4)
+			EndIf
+		Else
+			ConsoleWrite("Output fragment verified and written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
+		EndIf
+		Exit
+	EndIf
+EndIf
+
+If FileExists($InputLogFile)=0 Then
+	If Not $CommandlineMode Then _DisplayInfo("Error: LogFile could not be found." & @CRLF)
 	Return
 EndIf
 
@@ -12015,9 +11997,9 @@ Func _GetInputParams()
 
 	$tDelta = _GetUTCRegion($TimeZone)-$tDelta
 	If @error Then
-		_DisplayInfo("Error: Timezone configuration failed." & @CRLF)
+		ConsoleWrite("Error: Timezone configuration failed." & @CRLF)
 	Else
-		_DisplayInfo("Timestamps presented in UTC: " & $UTCconfig & @CRLF)
+		ConsoleWrite("Timestamps presented in UTC: " & $UTCconfig & @CRLF)
 	EndIf
 	$tDelta = $tDelta*-1
 

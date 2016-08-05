@@ -1,5 +1,9 @@
 LogFileParser Changelog
 
+v2.0.0.39
+Fixed bug with /LogFileFragmentFile: that caused timestamps not to be adjusted properly to/from UTC 0.
+Fixed general issue with resolving certain parameters in fragment mode (/LogFileFragmentFile:).
+
 v2.0.0.38
 Fixed bug that crashed program when rebuilt fragments where exactly 0x1000 in size.
 
