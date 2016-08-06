@@ -1,5 +1,10 @@
 LogFileParser Changelog
 
+v2.0.0.40
+Added a BrokenLogFile switch to both gui and commandline (/BrokenLogFile:). Only to be used with reconstructed RCRD's.
+Added filter for reconstructed transactions containing only zero's after header.
+Fixed bug in identification of empty csv files.
+
 v2.0.0.39
 Fixed bug with /LogFileFragmentFile: that caused timestamps not to be adjusted properly to/from UTC 0.
 Fixed general issue with resolving certain parameters in fragment mode (/LogFileFragmentFile:).

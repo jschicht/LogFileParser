@@ -309,6 +309,9 @@ Boolean value for activating a simple validation on a fragment only, and not ful
 The output filename to write the fixed fragment to, if /VerifyFragment: is set to 1. If omitted, the default filename is OutFragment.bin.
 /SkipFixups:
 Boolean value to skip fixups. Used with reconstructed fragments. See examples. Default is 0. Can be 0 or 1.
+/BrokenLogFile:
+Boolean value to treat $LogFile as broken. Used with reconstructed RCRD's and will bypass several validation checks. Default is 0. Can be 0 or 1.
+
 
 The available TimeZone's to use are:
 -12.00
@@ -372,7 +375,7 @@ LogFileParser.exe /LogFileFile:c:\temp\$LogFile /MftCsvFile:c:\temp\$MFT
 LogFileParser.exe /LogFileFragmentFile:c:\temp\fragment.bin /OutputPath:E:\LFP-Output
 LogFileParser.exe /LogFileFragmentFile:c:\temp\fragment.bin /OutputPath:E:\LFP-Output /VerifyFragment:1
 LogFileParser.exe /LogFileFragmentFile:c:\temp\fragment.bin /OutputPath:E:\LFP-Output /VerifyFragment:1 /OutFragmentName:FragmentsRCRDCollection.bin
-LogFileParser.exe /LogFileFile:E:\LFP-Output\FragmentsRCRDCollection.bin /OutputPath:E:\LFP-Output /SkipFixups:1
+LogFileParser.exe /LogFileFile:E:\LFP-Output\FragmentsRCRDCollection.bin /OutputPath:E:\LFP-Output /SkipFixups:1 /BrokenLogFile:1
 
 Last example is a basic that uses common defaults that work out just fine in many cases. Also compatible with MySql imports.
 

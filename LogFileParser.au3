@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.39
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.40
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -56,7 +56,7 @@ Global $TimestampErrorVal = "0000-00-00 00:00:00"
 Global $IntegerErrorVal = -1
 Global $IntegerPartialValReplacement = -2 ;"PARTIAL VALUE"
 Global $MftRefReplacement = -2 ;Parent
-Global $FragmentMode=0, $RebuiltFragment, $LogFileFragmentFile, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $SkipFixups=0, $checkFixups, $CleanUp=0
+Global $FragmentMode=0, $RebuiltFragment, $LogFileFragmentFile, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $SkipFixups=0, $checkFixups, $CleanUp=0, $checkBrokenLogFile, $BrokenLogFile=0, $RegExPatternHexNotNull = "[1-9a-fA-F]"
 
 Global Const $GUI_EVENT_CLOSE = -3
 Global Const $GUI_CHECKED = 1
@@ -94,7 +94,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.39"
+$Progversion = "NTFS $LogFile Parser 2.0.0.40"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -105,7 +105,7 @@ Else
 	$CommandlineMode = 0
 	Opt("GUICloseOnESC", 1)
 	$ButtonColor=0xD0D0D0
-	$Form = GUICreate($Progversion, 540, 580, -1, -1)
+	$Form = GUICreate($Progversion, 600, 580, -1, -1)
 ;	HotKeySet("{ESC}", "ExitPgm")
 
 	$Menu_help = GUICtrlCreateMenu("&Help")
@@ -152,10 +152,19 @@ Else
 	$LabelPrecisionSeparator2 = GUICtrlCreateLabel("Precision separator2:",350,110,100,20)
 	$PrecisionSeparatorInput2 = GUICtrlCreateInput($PrecisionSeparator2,450,110,15,20)
 
+	$CheckSkipSqlite3 = GUICtrlCreateCheckbox("skip sqlite3", 500, 110, 80, 20)
+	GUICtrlSetState($CheckSkipSqlite3, $GUI_UNCHECKED)
+
+	$checkFixups = GUICtrlCreateCheckbox("Skip Fixups", 500, 140, 80, 20)
+	GUICtrlSetState($checkFixups, $GUI_UNCHECKED)
+
+	$checkBrokenLogFile = GUICtrlCreateCheckbox("Broken $LogFile", 500, 165, 100, 20)
+	GUICtrlSetState($checkBrokenLogFile, $GUI_UNCHECKED)
+
 	$LabelTimestampError = GUICtrlCreateLabel("Timestamp ErrorVal:",20,140,100,20)
 	$TimestampErrorInput = GUICtrlCreateInput($TimestampErrorVal,120,140,130,20)
 
-	$InputExampleTimestamp = GUICtrlCreateInput("",340,140,190,20)
+	$InputExampleTimestamp = GUICtrlCreateInput("",260,140,190,20)
 	GUICtrlSetState($InputExampleTimestamp, $GUI_DISABLE)
 
 	$LabelSeparator = GUICtrlCreateLabel("Set separator:",20,165,70,20)
@@ -190,21 +199,15 @@ Else
 	$MinSizeResidentExtraction = GUICtrlCreateInput("2",410,235,30,20)
 
 	$LabelVerboseLsns = GUICtrlCreateLabel("LSN's to trigger verbose output (comma separate):",20,260,240,20)
-	$InputVerboseLsns = GUICtrlCreateInput("",260,260,90,20)
+	$InputVerboseLsns = GUICtrlCreateInput("",260,260,200,20)
 
-	$CheckSkipSqlite3 = GUICtrlCreateCheckbox("skip sqlite3", 360, 260, 80, 20)
-	GUICtrlSetState($CheckSkipSqlite3, $GUI_UNCHECKED)
-
-	$checkFixups = GUICtrlCreateCheckbox("Skip Fixups", 450, 260, 80, 20)
-	GUICtrlSetState($checkFixups, $GUI_UNCHECKED)
-
-	$ButtonStart = GUICtrlCreateButton("Start", 450, 225, 50, 30)
+	$ButtonStart = GUICtrlCreateButton("Start", 480, 250, 50, 30)
 	GUICtrlSetBkColor($ButtonStart, $ButtonColor)
-	$ButtonExit = GUICtrlCreateButton("Exit", 505, 225, 30, 30)
+	$ButtonExit = GUICtrlCreateButton("Exit", 540, 250, 30, 30)
 	GUICtrlSetBkColor($ButtonExit, $ButtonColor)
 	GUICtrlSetTip($ButtonExit, "Press ESC to exit")
 
-	$myctredit = GUICtrlCreateEdit("", 0, 290, 540, 85, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
+	$myctredit = GUICtrlCreateEdit("", 0, 290, 600, 85, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
 	_GUICtrlEdit_SetLimitText($myctredit, 128000)
 
 	_InjectTimeZoneInfo()
@@ -322,6 +325,15 @@ If Not $CommandlineMode Then
 	$CheckSkipSqlite3 = GUICtrlRead($CheckSkipSqlite3)
 EndIf
 If Not $CheckSkipSqlite3 = 1 Then $CheckSkipSqlite3 = 0
+
+If $CommandlineMode Then
+	$checkBrokenLogFile = $checkBrokenLogFile
+Else
+	$checkBrokenLogFile = GUICtrlRead($checkBrokenLogFile)
+EndIf
+If $checkBrokenLogFile = 1 Then
+	$BrokenLogFile = 1
+EndIf
 
 If Not $CommandlineMode Then
 	$Check32bit = GUICtrlRead($Check32bit)
@@ -572,6 +584,7 @@ _DebugOut("SkipSqlite3: " & $CheckSkipSqlite3)
 _DebugOut("DoExtractResidentUpdates: " & $DoExtractResidentUpdates)
 _DebugOut("FragmentMode: " & $FragmentMode)
 _DebugOut("SkipFixups: " & $SkipFixups)
+_DebugOut("BrokenLogFile: " & $BrokenLogFile)
 
 If Not $FragmentMode Then
 	$tBuffer = DllStructCreate("byte[" & $Record_Size & "]")
@@ -594,11 +607,11 @@ If Not $CommandlineMode Then
 	;$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 280,540,20)
 	$Progress = GUICtrlCreateLabel("Decoding $LogFile data and writing to csv", 10, 380,540,20)
 	GUICtrlSetFont($Progress, 12)
-	$ProgressStatus = GUICtrlCreateLabel("", 10, 410, 520, 20)
-	$ElapsedTime = GUICtrlCreateLabel("", 10, 425, 520, 20)
-	$ProgressLogFile = GUICtrlCreateProgress(10, 450, 520, 30)
-	$ProgressUsnJrnl = GUICtrlCreateProgress(10,  485, 520, 30)
-	$ProgressReconstruct = GUICtrlCreateProgress(10, 520, 520, 30)
+	$ProgressStatus = GUICtrlCreateLabel("", 10, 410, 580, 20)
+	$ElapsedTime = GUICtrlCreateLabel("", 10, 425, 580, 20)
+	$ProgressLogFile = GUICtrlCreateProgress(10, 450, 580, 30)
+	$ProgressUsnJrnl = GUICtrlCreateProgress(10,  485, 580, 30)
+	$ProgressReconstruct = GUICtrlCreateProgress(10, 520, 580, 30)
 	AdlibRegister("_LogFileProgress", 500)
 EndIf
 
@@ -682,7 +695,7 @@ If Not $FragmentMode Then
 			$rule7 = ($page_count - $page_position <> 0) And ($next_page_position - $page_position = 0) And ($page_count <> $next_page_count)
 			If $rule7 Then $RulesString&="rule7;"
 	;		If ($last_lsn = $last_end_lsn) Or ($last_lsn > $next_last_lsn) Or ($last_end_lsn > $next_last_end_lsn And $next_last_end_lsn <> 0) Or (($page_count - $page_position = 0) And ($next_page_position > 1)) Or (($page_count - $page_position <> 0) And ($next_page_position - $page_position <> 1)) Or (($page_count - $page_position <> 0) And ($next_page_position - $page_position = 0) And ($page_count <> $next_page_count)) Then
-			If $rule1 Or $rule2 Or $rule3 Or $rule5 Or $rule6 Or $rule7 Then
+			If $rule1 Or $rule2 Or $rule3 Or $rule5 Or $rule6 Or $rule7 Or $BrokenLogFile Then
 				$NoMoreData=1
 			Else
 				$NoMoreData=0
@@ -773,6 +786,29 @@ _DumpOutput("$LogFileUpdateFileNameCsv: " & $LogFileUpdateFileNameCsv & @CRLF)
 #ce
 If Not $FragmentMode Then _WinAPI_CloseHandle($hFile)
 _WinAPI_CloseHandle($hOutFileMFT)
+FileFlush($LogFileCsv)
+FileFlush($LogFileIndxCsv)
+FileFlush($LogFileDataRunsCsv)
+FileFlush($LogFileSecureSDSCsv)
+FileFlush($LogFileSecureSDHCsv)
+FileFlush($LogFileSecureSIICsv)
+FileFlush($LogFileOpenAttributeTableCsv)
+FileFlush($LogFileDirtyPageTable32bitCsv)
+FileFlush($LogFileDirtyPageTable64bitCsv)
+FileFlush($LogFileBitsInNonresidentBitMapCsv)
+FileFlush($UsnJrnlCsv)
+FileFlush($LogFileReparseRCsv)
+FileFlush($LogFileQuotaQCsv)
+FileFlush($LogFileQuotaOCsv)
+FileFlush($LogFileObjIdOCsv)
+FileFlush($LogFileTransactionTableCsv)
+FileFlush($LogFileSlackOpenAttributeTableCsv)
+FileFlush($LogFileSlackAttributeNamesDumpCsv)
+FileFlush($LogFileAttributeListCsv)
+FileFlush($LogFileFileNamesCsv)
+FileFlush($LogFileUpdateFileNameCsv)
+FileFlush($LogFileCheckpointRecordCsv)
+
 FileClose($LogFileCsv)
 FileClose($LogFileIndxCsv)
 FileClose($LogFileDataRunsCsv)
@@ -783,7 +819,7 @@ FileClose($LogFileOpenAttributeTableCsv)
 FileClose($LogFileDirtyPageTable32bitCsv)
 FileClose($LogFileDirtyPageTable64bitCsv)
 FileClose($LogFileBitsInNonresidentBitMapCsv)
-;FileClose($UsnJrnlCsv)
+FileClose($UsnJrnlCsv)
 FileClose($LogFileReparseRCsv)
 FileClose($LogFileQuotaQCsv)
 FileClose($LogFileQuotaOCsv)
@@ -1329,7 +1365,7 @@ RCRD
 Func _DecodeRCRD($RCRDRecord, $RCRDOffset, $OffsetAdjustment, $DoNotReturnData)
 Local $DataPart = 0, $NextOffset = 131, $TotalSizeOfRCRD = StringLen($RCRDRecord), $LsnSignatureLength=10, $CharsToMove=0, $ZeroSample="0000000000000000", $LsnSignatureFound=0, $last_lsn_tmp_refup, $last_lsn_tmp_refdown, $RebuiltLsn
 Global $PredictedRefNumber = "", $FromRcrdSlack=0, $SlackPerRCRDCounter=0
-
+If $BrokenLogFile Then $FromRcrdSlack=1
 ;_DumpOutput("<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>" & @CRLF)
 ;_DumpOutput("$RCRDOffset: 0x" & Hex($RCRDOffset,8) & @CRLF)
 ;ConsoleWrite(_HexEncode(StringMid($RCRDRecord,1,130)) & @CRLF)
@@ -1794,15 +1830,30 @@ If $ValidationTest1 Or ($ValidationTest2 And $ValidationTest3) Or ($ValidationTe
 	Return
 EndIf
 
+;With broken format $LogFile, as from reconstructed RCRD's, chances are that we might hit transactions with mostly 00's, which can't be decoded. But we need to filter.
+If $BrokenLogFile Then
+	If Not (($redo_operation = "ForgetTransaction" And $undo_operation = "CompensationlogRecord") Or ($redo_operation = "Noop" And $undo_operation = "Noop")) Then
+		If Not StringRegExp(StringMid($InputData,145),$RegExPatternHexNotNull) Then
+			_DumpOutput("Error at offset 0x" & $RecordOffset & @CRLF)
+			_DumpOutput("There was only zero's after the transaction header, which means it was too corrupted to process properly" & @CRLF)
+			_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+			_DumpOutput(_HexEncode("0x"&StringMid($InputData,1)) & @CRLF)
+			Return
+		EndIf
+	EndIf
+EndIf
+
 ;Test for incomplete records grabbed from slack space
-If ((48 + $client_data_length) > (StringLen($InputData)/2)) Then
+Local $BytesMissing = Int((48 + $client_data_length) - (StringLen($InputData)/2))
+If $BytesMissing > 0 Then
 	_DumpOutput("Error: Incomplete record recovered at offset: " & $RecordOffset & @CRLF)
+	_DumpOutput("From internal transaction offset: 0x" & Hex(Int(StringLen($InputData)/2)) & " there is 0x" & Hex($BytesMissing) & " bytes missing" & @CRLF)
 	_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
 ;	_DumpOutput("Part 1: " & 48 + $client_data_length & " 0x" & Hex(Int(48 + $client_data_length)) & @CRLF)
 ;	_DumpOutput("Part 2: " & StringLen($InputData)/2 & " 0x" & Hex(Int(StringLen($InputData)/2)) & @CRLF)
 	_DumpOutput(_HexEncode("0x"&StringMid($InputData,1)) & @CRLF)
 ;	MsgBox(0,"Info","Check output")
-	$TextInformation &= ";Incomplete record recovered"
+	$TextInformation &= ";Incomplete record recovered. " & "0x" & Hex($BytesMissing,4) & " bytes missing from internal offset 0x" & Hex(Int(StringLen($InputData)/2),4)
 	$IncompleteTransaction = 1
 EndIf
 If Not $FromRcrdSlack Then
@@ -9528,6 +9579,7 @@ EndFunc
 
 Func _Decode_SlackOpenAttributeTableDump64bit($InputData,$IsFirst)
 	Local $StartOffset = 1,$EntryCounter=1, $InputDataSize = StringLen($InputData), $LocalIs32bit=0
+	If $BrokenLogFile Then Return
 	;Header
 	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
 	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
@@ -9672,6 +9724,7 @@ EndFunc
 
 Func _Decode_SlackOpenAttributeTableDump32bit($InputData,$IsFirst)
 	Local $StartOffset = 1,$EntryCounter=1, $InputDataSize = StringLen($InputData), $LocalIs32bit=0
+	If $BrokenLogFile Then Return
 	;Header
 	$TableEntrySize = StringMid($InputData, $StartOffset, 4)
 	$TableEntrySize = Dec(_SwapEndian($TableEntrySize),2)
@@ -10726,11 +10779,11 @@ Func _CheckAndRepairTransactionHeader($InputData)
 
 	_DumpOutput("Repaired transaction:" & @CRLF)
 	If $LocalCounter < 4 Then
-		_DumpOutput(_HexEncode("0x"&StringMid($ReturnData,$StartOffset,96 + ($FragmentClientDataLength*2))) & @CRLF)
+;		_DumpOutput(_HexEncode("0x"&StringMid($ReturnData,$StartOffset,96 + ($FragmentClientDataLength*2))) & @CRLF)
 		;Return StringMid($ReturnData,$StartOffset,96 + ($FragmentClientDataLength*2))
 		Return StringMid($ReturnData,$StartOffset)
 	Else
-		_DumpOutput(_HexEncode("0x"&$ReturnData) & @CRLF)
+;		_DumpOutput(_HexEncode("0x"&$ReturnData) & @CRLF)
 		Return $ReturnData
 	EndIf
 EndFunc
@@ -11088,7 +11141,7 @@ Func _SelectFragment()
 EndFunc
 
 Func _CheckFragment()
-	Local $HeaderSuccess=0, $InputDataTest
+	Local $HeaderSuccess=0, $InputDataTest, $FragmentFakeLsnA = "3146616b654c736e", $FragmentFakeLsnB = "3246616b654c736e"
 	If Not FileExists($LogFileFragmentFile) Then
 		_DumpOutput("Error: Fragment file not found: " & $LogFileFragmentFile & @CRLF)
 		Return SetError(1)
@@ -11102,7 +11155,7 @@ Func _CheckFragment()
 
 	If StringLeft($InputData,8) = "52435244" Or StringLeft($InputData,8) = "52535452" Then ;RCRD/RSTR
 ;		Global $RebuiltFragment = "0x" & $InputData
-		_DumpOutput("The RCRD/RSTR header structure seemed fine. No need to fix anything there. Please load the file as $LogFile input instead." & @CRLF)
+		_DumpOutput("The RCRD/RSTR header structure seemed fine. No don't need to fix anything there. Please load the file as $LogFile input instead." & @CRLF)
 		Return
 	EndIf
 
@@ -11113,7 +11166,8 @@ Func _CheckFragment()
 	For $i = 0 To $InputSize-1
 		$InputDataTest = StringMid($InputData,1+($i*2))
 		$result = _CheckAndRepairTransactionHeader($InputDataTest)
-		If @error Then
+		;If @error Then
+		If @error Or (StringMid($result,1,16) = $FragmentFakeLsnA) Or (StringMid($result,1,16) = $FragmentFakeLsnB) Then
 			_DumpOutput("Error in sanity check of data with " & $i & " bytes removed from start." & @CRLF)
 			ContinueLoop
 		Else
@@ -11126,24 +11180,40 @@ Func _CheckFragment()
 		Return
 	Else
 		_DumpOutput("Success verifying data with " & $i & " bytes removed from start." & @CRLF)
-;		_DumpOutput(_HexEncode("0x"&$result) & @CRLF)
 	EndIf
+
 	If StringLeft($result,2) = "0x" Then $result = StringTrimLeft($result,2)
+
+	If $VerboseOn Then
+		_DumpOutput("Fixed transaction(s):" & @CRLF)
+		_DumpOutput(_HexEncode("0x"&$result) & @CRLF)
+	EndIf
+
+	$InputSizeNew = 0x30 + BinaryLen("0x"&$result)
+
 	$last_lsn_tmp = StringMid($result,1,16)
 	$last_lsn_tmp = Dec(_SwapEndian($last_lsn_tmp),2)
-	;---- Reconstruct RCRC header
-	$header = "5243524428000900"
-	$last_lsn = _SwapEndian(Hex($last_lsn_tmp,16))
-	$page_flags = "00000001"
-	$page_count = _SwapEndian(Hex(1,4))
-	$page_position = _SwapEndian(Hex(1,4))
-	$next_record_offset = _SwapEndian(Hex(4096,4))
-	$page_unknown = _SwapEndian(Hex(0,12))
-	$last_end_lsn = _SwapEndian(Hex(Int($last_lsn_tmp*1.1),16))
-	$LastPart = "0000000000000000"
-	$RebuiltRCRDHeader = $header & $last_lsn & $page_flags & $page_count & $page_position & $next_record_offset & $page_unknown & $last_end_lsn & $LastPart
+	;---- Reconstruct RCRD header
+	$header = "52435244" ;4b
+	$UsaOffsetAndSize = "28000900" ;4b
+	$last_lsn = _SwapEndian(Hex($last_lsn_tmp,16)) ;8b
+	$page_flags = _SwapEndian(Hex(1,8)) ;4b
+	$page_count = _SwapEndian(Hex(1,4)) ;2b
+	$page_position = _SwapEndian(Hex(1,4)) ;2b
+	$next_record_offset = _SwapEndian(Hex($InputSizeNew,4)) ;2b
+	$page_unknown = _SwapEndian(Hex(0,12)) ;6b
+	$last_end_lsn = _SwapEndian(Hex(Int($last_lsn_tmp*1.1),16)) ;8b
+	$UpdateSequenceArray = "000000000000000000000000000000000000" ;18b
+	$LastPartPadding = "000000000000" ;6b
+	$RebuiltRCRDHeader = $header & $UsaOffsetAndSize & $last_lsn & $page_flags & $page_count & $page_position & $next_record_offset & $page_unknown & $last_end_lsn & $UpdateSequenceArray & $LastPartPadding
 	$RebuildRCRD = "0x" & $RebuiltRCRDHeader & $result
+
 	Global $RebuiltFragment = $RebuildRCRD
+
+	If $VerboseOn Then
+		_DumpOutput("Fixed RCRD:" & @CRLF)
+		_DumpOutput(_HexEncode($RebuiltFragment) & @CRLF)
+	EndIf
 EndFunc
 
 Func _Decode_Attribute_List($InputData)
@@ -11845,6 +11915,7 @@ Func _GetInputParams()
 		If StringLeft($cmdline[$i],17) = "/OutFragmentName:" Then $OutFragmentName = StringMid($cmdline[$i],18)
 		If StringLeft($cmdline[$i],12) = "/SkipFixups:" Then $checkFixups = StringMid($cmdline[$i],13)
 		If StringLeft($cmdline[$i],9) = "/CleanUp:" Then $CleanUp = StringMid($cmdline[$i],10)
+		If StringLeft($cmdline[$i],15) = "/BrokenLogFile:" Then $BrokenLogFile = StringMid($cmdline[$i],16)
 	Next
 
 	If StringLen($ParserOutDir) > 0 Then
@@ -12068,6 +12139,12 @@ Func _GetInputParams()
 	If StringLen($CleanUp) > 0 Then
 		If $CleanUp <> 1 Then
 			$CleanUp = 0
+		EndIf
+	EndIf
+
+	If StringLen($BrokenLogFile) > 0 Then
+		If $BrokenLogFile <> 1 Then
+			$BrokenLogFile = 0
 		EndIf
 	EndIf
 
