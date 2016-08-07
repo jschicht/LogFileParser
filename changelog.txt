@@ -1,5 +1,9 @@
 LogFileParser Changelog
 
+v2.0.0.41
+Improved validation check on detected MFT records.
+Added fixups applied (if applicable) to records regenerated from fragments (for use with /VerifyFragment:).
+
 v2.0.0.40
 Added a BrokenLogFile switch to both gui and commandline (/BrokenLogFile:). Only to be used with reconstructed RCRD's.
 Added filter for reconstructed transactions containing only zero's after header.

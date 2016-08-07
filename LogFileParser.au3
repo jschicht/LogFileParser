@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.40
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.41
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -94,7 +94,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.40"
+$Progversion = "NTFS $LogFile Parser 2.0.0.41"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -2093,8 +2093,10 @@ If $redo_length > 0 Then
 				$TextInformation &= ";Initializing empty record"
 			Else
 				_ParserCodeOldVersion($redo_chunk,1)
-				If Not $FromRcrdSlack Then
-					_UpdateFileNameArray($PredictedRefNumber,$HDR_SequenceNo,$FN_Name,$this_lsn)
+				If Not @error Then
+					If Not $FromRcrdSlack Then
+						_UpdateFileNameArray($PredictedRefNumber,$HDR_SequenceNo,$FN_Name,$this_lsn)
+					EndIf
 				EndIf
 			EndIf
 		Case $redo_operation_hex="0300" ;DeallocateFileRecordSegment
@@ -2254,7 +2256,7 @@ If $redo_length > 0 Then
 								EndIf
 								$TextInformation &= ";$UsnJrnl"
 							Else
-								_DumpOutput("_UsnDecodeRecord2() failed and probably not Filling of zeros to page boundary for $this_lsn: " & $this_lsn & @CRLF)
+								_DumpOutput("_UsnDecodeRecord2() failed and probably not Filling of zeros to page boundary for $this_lsn: " & $this_lsn & " at offset " & $RecordOffset & @CRLF)
 								_DumpOutput(_HexEncode("0x"&$redo_chunk) & @CRLF)
 							EndIf
 						Case $AttributeString = "$LOGGED_UTILITY_STREAM:$TXF_DATA" ;may only be resident..
@@ -3248,6 +3250,16 @@ Func _ParserCodeOldVersion($MFTEntry,$IsRedo)
 	EndSelect
 	$HDR_RecRealSize = StringMid($MFTEntry, 49, 8)
 	$HDR_RecRealSize = Dec(_SwapEndian($HDR_RecRealSize),2)
+
+	If StringLen($MFTEntry) < 98 Then
+		;The critical offset is where the mft record number is located.
+		_DumpOutput("Error in _ParserCodeOldVersion()" & @CRLF)
+		_DumpOutput("$MFT record was too damaged to process properly." & @CRLF)
+		_DumpOutput("The size of record was expected to be " & $HDR_RecAllocSize & " bytes, but was only " & StringLen($MFTEntry)/2 & " bytes" & @CRLF)
+		_DumpOutput(_HexEncode("0x" & $MFTEntry) & @CRLF)
+		Return SetError(1)
+	EndIf
+
 	$HDR_RecAllocSize = StringMid($MFTEntry, 57, 8)
 	$HDR_RecAllocSize = Dec(_SwapEndian($HDR_RecAllocSize),2)
 	$HDR_BaseRecord = StringMid($MFTEntry, 65, 12)
@@ -11149,9 +11161,18 @@ Func _CheckFragment()
 	$FragmentMode=1
 	$hFragment = FileOpen($LogFileFragmentFile,16)
 	$InputData = FileRead($hFragment)
+
 	$InputSize = BinaryLen($InputData)
 	_DumpOutput("Size of fragment: " & $InputSize & @CRLF)
 	If StringLeft($InputData,2) = "0x" Then $InputData = StringTrimLeft($InputData,2)
+
+	;_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
+	$FixupTest = _TestApplyFixups($InputData)
+	If Not @error Then
+		_DumpOutput("Fixups was applied to the fragment" &  @CRLF)
+		$InputData = $FixupTest
+	EndIf
+	;_DumpOutput(_HexEncode("0x"&$InputData) & @CRLF)
 
 	If StringLeft($InputData,8) = "52435244" Or StringLeft($InputData,8) = "52535452" Then ;RCRD/RSTR
 ;		Global $RebuiltFragment = "0x" & $InputData
@@ -11214,6 +11235,43 @@ Func _CheckFragment()
 		_DumpOutput("Fixed RCRD:" & @CRLF)
 		_DumpOutput(_HexEncode($RebuiltFragment) & @CRLF)
 	EndIf
+EndFunc
+
+Func _TestApplyFixups($InputData)
+	Local $Counter=0, $FixupSuccess=0
+	If StringLeft($InputData,2) = "0x" Then $InputData = StringTrimLeft($InputData,2)
+	$DataLength = BinaryLen("0x"&$InputData)
+	ConsoleWrite("_TestApplyFixups2 - $DataLength: " & $DataLength & @CRLF)
+	If $DataLength <> 4080 Then
+		;We don't have enough data to apply any fixup
+		Return SetError(1)
+	EndIf
+	$adjust=34
+	$adjust2=0
+	$UpdSeqArr = StringMid($InputData,49,9*2*2)
+	$UpdSeqArrPart0 = StringMid($UpdSeqArr,1,4)
+	$UpdSeqArrPart1 = StringMid($UpdSeqArr,5,4)
+	$UpdSeqArrPart2 = StringMid($UpdSeqArr,9,4)
+	$UpdSeqArrPart3 = StringMid($UpdSeqArr,13,4)
+	$UpdSeqArrPart4 = StringMid($UpdSeqArr,17,4)
+	$UpdSeqArrPart5 = StringMid($UpdSeqArr,21,4)
+	$UpdSeqArrPart6 = StringMid($UpdSeqArr,25,4)
+	$UpdSeqArrPart7 = StringMid($UpdSeqArr,29,4)
+	$UpdSeqArrPart8 = StringMid($UpdSeqArr,33,4)
+	$RecordEnd1 = StringMid($InputData,1023-$adjust,4)
+	$RecordEnd2 = StringMid($InputData,2047-$adjust,4)
+	$RecordEnd3 = StringMid($InputData,3071-$adjust,4)
+	$RecordEnd4 = StringMid($InputData,4095-$adjust,4)
+	$RecordEnd5 = StringMid($InputData,5119-$adjust,4)
+	$RecordEnd6 = StringMid($InputData,6143-$adjust,4)
+	$RecordEnd7 = StringMid($InputData,7167-$adjust,4)
+	$RecordEnd8 = StringMid($InputData,8191-$adjust,4)
+	If $UpdSeqArrPart0 <> $RecordEnd1 OR $UpdSeqArrPart0 <> $RecordEnd2  OR $UpdSeqArrPart0 <> $RecordEnd3 OR $UpdSeqArrPart0 <> $RecordEnd4 OR $UpdSeqArrPart0 <> $RecordEnd5 OR $UpdSeqArrPart0 <> $RecordEnd6 OR $UpdSeqArrPart0 <> $RecordEnd7 OR $UpdSeqArrPart0 <> $RecordEnd8 Then
+		ConsoleWrite("Error: Fixup failed at: 0x" & Hex($CurrentFileOffset) & @CRLF)
+		Return SetError(1)
+	EndIf
+	$InputData = StringMid($InputData,1,1022-$adjust) & $UpdSeqArrPart1 & StringMid($InputData,1027-$adjust,1020) & $UpdSeqArrPart2 & StringMid($InputData,2051-$adjust,1020) & $UpdSeqArrPart3 & StringMid($InputData,3075-$adjust,1020) & $UpdSeqArrPart4 & StringMid($InputData,4099-$adjust,1020) & $UpdSeqArrPart5 & StringMid($InputData,5123-$adjust,1020) & $UpdSeqArrPart6 & StringMid($InputData,6147-$adjust,1020) & $UpdSeqArrPart7 & StringMid($InputData,7171-$adjust,1020) & $UpdSeqArrPart8
+	Return $InputData
 EndFunc
 
 Func _Decode_Attribute_List($InputData)
