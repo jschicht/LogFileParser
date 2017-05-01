@@ -1,5 +1,12 @@
 LogFileParser Changelog
 
+v2.0.0.43
+Added separate csv for $ObjectId attribute decodes.
+Added break down of GUID/UUID as found in $ObjectId attribute and $O index of $ObjId, according to RFC 4122 (https://www.ietf.org/rfc/rfc4122.txt). That among other things includes timestamp.
+
+v2.0.0.42
+Recompiled with AutoIt version 3.3.14.2, which fixes certain Windows 10 ui issues.
+
 v2.0.0.41
 Improved validation check on detected MFT records.
 Added fixups applied (if applicable) to records regenerated from fragments (for use with /VerifyFragment:).

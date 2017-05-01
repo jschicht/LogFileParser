@@ -113,6 +113,9 @@ All decoded SetBitsInNonresidentBitMap operations.
 LogFile_DirtyPageTable32bit.csv and LogFile_DirtyPageTable64bit.csv
 All entries in every decoded DirtyPageTableDump operation for both 32bit and 64bit OS.
 
+LogFile_Mft_ObjectId_Entries.csv
+Decoded $ObjectId attributes.
+
 LogFile_ObjIdO.csv
 All decodes from system file $ObjId:$O.
 

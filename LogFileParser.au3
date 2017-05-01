@@ -1,10 +1,9 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
-#AutoIt3Wrapper_Icon=..\..\..\Program Files (x86)\autoit-v3.3.14.2\Icons\au3.ico
-#AutoIt3Wrapper_UseUpx=y
+#AutoIt3Wrapper_Icon=C:\Program Files (x86)\AutoIt3\Icons\au3.ico
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.41
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.43
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -40,7 +39,7 @@ Global $SDHArray[1][1],$SIIArray[1][1],$de2=":",$LogFileSecureSDSCsv,$LogFileSec
 Global $TargetSDSOffsetHex,$SecurityDescriptorHash,$SecurityId,$ControlText,$SidOwner,$SidGroup
 Global $SAclRevision,$SAceCount,$SAceTypeText,$SAceFlagsText,$SAceMask,$SAceObjectType,$SAceInheritedObjectType,$SAceSIDString,$SAceObjectFlagsText
 Global $DAclRevision,$DAceCount,$DAceTypeText,$DAceFlagsText,$DAceMask,$DAceObjectType,$DAceInheritedObjectType,$DAceSIDString,$DAceObjectFlagsText
-Global $OpenAttributesArray[1][14],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray32bit[1][10],$DirtyPageTableDumpArray64bit[1][15],$lsn_openattributestable=0,$FileOutputTesterArray[25],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][14],$SlackAttributeNamesDumpArray[1][4]
+Global $OpenAttributesArray[1][14],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray32bit[1][10],$DirtyPageTableDumpArray64bit[1][15],$lsn_openattributestable=0,$FileOutputTesterArray[26],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][14],$SlackAttributeNamesDumpArray[1][4]
 Global $LogFileOpenAttributeTableCsv,$LogFileOpenAttributeTableCsvFile,$LogFileDirtyPageTable32bitCsv,$LogFileDirtyPageTable32bitCsvFile,$LogFileDirtyPageTable64bitCsv,$LogFileDirtyPageTable64bitCsvFile,$LogFileBitsInNonresidentBitMapCsv,$LogFileBitsInNonresidentBitMapCsvFile,$LogFileTransactionTableCsv,$LogFileTransactionTableCsvFile
 Global $LogFileReparseRCsv,$LogFileQuotaQCsv,$LogFileQuotaOCsv,$LogFileObjIdOCsv,$LogFileReparseRCsvFile,$LogFileQuotaQCsvFile,$LogFileQuotaOCsvFile,$LogFileObjIdOCsvFile,$LogFileRCRDCsv,$LogFileRCRDCsvFile
 Global $client_index,$record_type,$transaction_id,$lf_flags,$target_attribute,$lcns_to_follow,$record_offset_in_mft,$attribute_offset,$MftClusterIndex,$target_vcn,$target_lcn,$InOpenAttributeTable=-1,$LsnValidationLevel
@@ -57,6 +56,7 @@ Global $IntegerErrorVal = -1
 Global $IntegerPartialValReplacement = -2 ;"PARTIAL VALUE"
 Global $MftRefReplacement = -2 ;Parent
 Global $FragmentMode=0, $RebuiltFragment, $LogFileFragmentFile, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $SkipFixups=0, $checkFixups, $CleanUp=0, $checkBrokenLogFile, $BrokenLogFile=0, $RegExPatternHexNotNull = "[1-9a-fA-F]"
+Global $LogFileEntriesObjectIdCsvFile, $LogFileEntriesObjectIdCsv, $HDR_MFTREcordNumber ,$HDR_SequenceNo
 
 Global Const $GUI_EVENT_CLOSE = -3
 Global Const $GUI_CHECKED = 1
@@ -85,6 +85,7 @@ Global Const $LOGGED_UTILITY_STREAM = '00010000'
 Global Const $ATTRIBUTE_END_MARKER = 'FFFFFFFF'
 
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
+Global $TimeDiff = 5748192000000000
 Global $DateTimeFormat,$ExampleTimestampVal = "01CD74B3150770B8",$TimestampPrecision=3, $UTCconfig, $ParserOutDir
 Global $myctredit, $CheckUnicode, $MinSizeResidentExtraction, $SeparatorInput, $SeparatorInput2, $Check32bit, $CheckReconstruct, $CheckExtractResident, $CheckBrokenHeaderRebuild, $VerboseLsnList, $CheckCsvSplit
 Global $InputSectorPerCluster, $InputMFTRecordSize
@@ -94,7 +95,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.41"
+$Progversion = "NTFS $LogFile Parser 2.0.0.43"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -489,6 +490,7 @@ $FileOutputTesterArray[21] = $LogFileUpdateFileNameCsvFile
 $FileOutputTesterArray[22] = $LogFileCheckpointRecordCsvFile
 $FileOutputTesterArray[23] = $LogFileDirtyPageTable64bitCsvFile
 $FileOutputTesterArray[24] = $LogFileTransactionHeaderCsvFile
+$FileOutputTesterArray[25] = $LogFileEntriesObjectIdCsvFile
 
 
 _WriteCSVHeader()
@@ -517,6 +519,7 @@ _WriteCSVHeaderAttributeList()
 _WriteCSVHeaderFileNames()
 _WriteCSVHeaderTxfData()
 _WriteCSVHeaderCheckpointRecord()
+_WriteObjectIdCsvHeader()
 
 $FileNamesArray[0][0] = "Ref"
 $FileNamesArray[0][1] = "FileName"
@@ -808,6 +811,7 @@ FileFlush($LogFileAttributeListCsv)
 FileFlush($LogFileFileNamesCsv)
 FileFlush($LogFileUpdateFileNameCsv)
 FileFlush($LogFileCheckpointRecordCsv)
+FileFlush($LogFileEntriesObjectIdCsv)
 
 FileClose($LogFileCsv)
 FileClose($LogFileIndxCsv)
@@ -831,6 +835,7 @@ FileClose($LogFileAttributeListCsv)
 FileClose($LogFileFileNamesCsv)
 FileClose($LogFileUpdateFileNameCsv)
 FileClose($LogFileCheckpointRecordCsv)
+FileClose($LogFileEntriesObjectIdCsv)
 
 If Not $CommandlineMode Then
 	AdlibUnRegister("_LogFileProgress")
@@ -1005,7 +1010,7 @@ If $TargetMftCsvFile Then
 		& "FN_AllocSize INTEGER,FN_RealSize INTEGER,FN_EaSize INTEGER,SI_USN INTEGER,DATA_Name TEXT,DATA_Flags TEXT,DATA_LengthOfAttribute TEXT,DATA_IndexedFlag TEXT,DATA_VCNs INTEGER,DATA_NonResidentFlag INTEGER,DATA_CompressionUnitSize INTEGER,HEADER_LSN INTEGER,HEADER_RecordRealSize INTEGER," _
 		& "HEADER_RecordAllocSize INTEGER,HEADER_BaseRecord INTEGER,HEADER_BaseRecSeqNo INTEGER,HEADER_NextAttribID TEXT,DATA_AllocatedSize INTEGER,DATA_RealSize INTEGER,DATA_InitializedStreamSize INTEGER,SI_HEADER_Flags TEXT,SI_MaxVersions INTEGER,SI_VersionNumber INTEGER," _
 		& "SI_ClassID INTEGER,SI_OwnerID INTEGER,SI_SecurityID INTEGER,SI_Quota INTEGER,FN_CTime_2 TEXT,FN_ATime_2 TEXT,FN_MTime_2 TEXT,FN_RTime_2 TEXT,FN_AllocSize_2 INTEGER,FN_RealSize_2 INTEGER,FN_EaSize_2 INTEGER,FN_Flags_2 TEXT,FN_NameLength_2 INTEGER,FN_NameType_2 TEXT,FN_FileName_2 TEXT," _
-		& "GUID_ObjectID TEXT,GUID_BirthVolumeID TEXT,GUID_BirthObjectID TEXT,GUID_BirthDomainID TEXT,VOLUME_NAME_NAME TEXT,VOL_INFO_NTFS_VERSION TEXT,VOL_INFO_FLAGS TEXT,FN_CTime_3 TEXT,FN_ATime_3 TEXT,FN_MTime_3 TEXT,FN_RTime_3 TEXT,FN_AllocSize_3 INTEGER," _
+		& "GUID_ObjectID TEXT,GUID_BirthVolumeID TEXT,GUID_BirthObjectID TEXT,GUID_DomainID TEXT,VOLUME_NAME_NAME TEXT,VOL_INFO_NTFS_VERSION TEXT,VOL_INFO_FLAGS TEXT,FN_CTime_3 TEXT,FN_ATime_3 TEXT,FN_MTime_3 TEXT,FN_RTime_3 TEXT,FN_AllocSize_3 INTEGER," _
 		& "FN_RealSize_3 INTEGER,FN_EaSize_3 INTEGER,FN_Flags_3 TEXT,FN_NameLength_3 INTEGER,FN_NameType_3 TEXT,FN_FileName_3 TEXT,DATA_Name_2 TEXT,DATA_NonResidentFlag_2 INTEGER,DATA_Flags_2 TEXT,DATA_LengthOfAttribute_2 INTEGER,DATA_IndexedFlag_2 INTEGER,DATA_StartVCN_2 INTEGER," _
 		& "DATA_LastVCN_2 INTEGER,DATA_VCNs_2 INTEGER,DATA_CompressionUnitSize_2 INTEGER,DATA_AllocatedSize_2 INTEGER,DATA_RealSize_2 INTEGER,DATA_InitializedStreamSize_2 INTEGER,DATA_Name_3 TEXT,DATA_NonResidentFlag_3 INTEGER,DATA_Flags_3 TEXT,DATA_LengthOfAttribute_3 INTEGER," _
 		& "DATA_IndexedFlag_3 INTEGER,DATA_StartVCN_3 INTEGER,DATA_LastVCN_3 INTEGER,DATA_VCNs_3 INTEGER,DATA_CompressionUnitSize_3 INTEGER,DATA_AllocatedSize_3 INTEGER,DATA_RealSize_3 INTEGER,DATA_InitializedStreamSize_3 INTEGER,STANDARD_INFORMATION_ON INTEGER," _
@@ -1938,7 +1943,7 @@ $target_vcn = "0x"&$target_vcn
 $MftClusterIndex = "0x"&$MftClusterIndex
 
 
-If Not $FromRcrdSlack Then
+If Not $FromRcrdSlack Or $BrokenLogFile Then
 	$ExcessDataSize = $client_data_length - ($redo_length_tmp + $undo_length_tmp) - $redo_offset
 	FileWriteLine($LogFileTransactionHeaderCsv, $RecordOffset & $de & $this_lsn & $de & $client_previous_lsn & $de & $client_undo_next_lsn & $de & $client_index & $de & $record_type & $de & $transaction_id & $de & $lf_flags & $de & $redo_operation & $de & $undo_operation & $de & $redo_offset & $de & $redo_length_tmp & $de & $undo_offset & $de & $undo_length_tmp & $de & $client_data_length & $de & $target_attribute & $de & $lcns_to_follow & $de & $record_offset_in_mft & $de & $attribute_offset & $de & $MftClusterIndex & $de & $target_vcn & $de & $target_lcn & $de & $ExcessDataSize & @crlf)
 EndIf
@@ -3196,7 +3201,7 @@ Func _HexEncode($bInput)
 EndFunc
 
 Func _ParserCodeOldVersion($MFTEntry,$IsRedo)
-	Local $UpdSeqArrOffset, $HDR_LSN, $HDR_HardLinkCount, $HDR_Flags, $HDR_RecRealSize, $HDR_RecAllocSize, $HDR_BaseRecSeqNo, $HDR_NextAttribID, $HDR_MFTREcordNumber, $NextAttributeOffset, $AttributeType, $AttributeSize, $RecordActive
+	Local $UpdSeqArrOffset, $HDR_LSN, $HDR_HardLinkCount, $HDR_Flags, $HDR_RecRealSize, $HDR_RecAllocSize, $HDR_BaseRecSeqNo, $HDR_NextAttribID, $NextAttributeOffset, $AttributeType, $AttributeSize, $RecordActive
 	Local $AttributeArray[17][2], $TestAttributeString
 	$AttributeArray[0][0] = "Attribute name"
 	$AttributeArray[0][1] = "Number"
@@ -3328,7 +3333,7 @@ Func _ParserCodeOldVersion($MFTEntry,$IsRedo)
 			Case $AttributeType = $OBJECT_ID
 				$AttributeKnown = 1
 				$AttributeArray[4][1] += 1
-				_Get_ObjectID($MFTEntry, $NextAttributeOffset, $AttributeSize)
+				_Get_ObjectID($MFTEntry, $NextAttributeOffset, $AttributeSize, 1)
 				$TestAttributeString &= '$OBJECT_ID?'&($NextAttributeOffset-1)/2&','
 			Case $AttributeType = $SECURITY_DESCRIPTOR
 				$AttributeKnown = 1
@@ -3770,47 +3775,144 @@ Func _WinTime_FormatTime($iYear,$iMonth,$iDay,$iHour,$iMin,$iSec,$iMilSec,$iDayO
 EndFunc
 ; end: by Ascend4nt ----------------------------
 
-Func _Get_ObjectID($MFTEntry,$OBJECTID_Offset,$OBJECTID_Size)
-	Local $GUID_ObjectID, $GUID_BirthVolumeID, $GUID_BirthObjectID, $GUID_BirthDomainID
+Func _Get_ObjectID($MFTEntry,$OBJECTID_Offset,$OBJECTID_Size,$IsRedo)
+	;FILE_OBJECTID_BUFFER structure
+	;https://msdn.microsoft.com/en-us/library/aa364393(v=vs.85).aspx
+	Local $GUID_ObjectID,$GUID_ObjectID_Version,$GUID_ObjectID_Timestamp,$GUID_ObjectID_TimestampDec,$GUID_ObjectID_ClockSeq,$GUID_ObjectID_Node
+	Local $GUID_BirthVolumeID,$GUID_BirthVolumeID_Version,$GUID_BirthVolumeID_Timestamp,$GUID_BirthVolumeID_TimestampDec,$GUID_BirthVolumeID_ClockSeq,$GUID_BirthVolumeID_Node
+	Local $GUID_BirthObjectID,$GUID_BirthObjectID_Version,$GUID_BirthObjectID_Timestamp,$GUID_BirthObjectID_TimestampDec,$GUID_BirthObjectID_ClockSeq,$GUID_BirthObjectID_Node
+	Local $GUID_DomainID,$GUID_DomainID_Version,$GUID_DomainID_Timestamp,$GUID_DomainID_TimestampDec,$GUID_DomainID_ClockSeq,$GUID_DomainID_Node
+	$OBJECTID_Size = $OBJECTID_Size/2
+	;ObjectID
 	$GUID_ObjectID = StringMid($MFTEntry,$OBJECTID_Offset+48,32)
+	;Decode guid
+	$GUID_ObjectID_Version = Dec(StringMid($GUID_ObjectID,15,1))
+	$GUID_ObjectID_Timestamp = StringMid($GUID_ObjectID,1,14) & "0" & StringMid($GUID_ObjectID,16,1)
+	$GUID_ObjectID_TimestampDec = Dec(_SwapEndian($GUID_ObjectID_Timestamp),2)
+	$GUID_ObjectID_Timestamp = _DecodeTimestampFromGuid($GUID_ObjectID_Timestamp)
+	$GUID_ObjectID_ClockSeq = StringMid($GUID_ObjectID,17,4)
+	$GUID_ObjectID_ClockSeq = Dec($GUID_ObjectID_ClockSeq)
+	$GUID_ObjectID_Node = StringMid($GUID_ObjectID,21,12)
+	$GUID_ObjectID_Node = _DecodeMacFromGuid($GUID_ObjectID_Node)
 	$GUID_ObjectID = _HexToGuidStr($GUID_ObjectID,1)
 	Select
-		Case ($OBJECTID_Size/2) - 24 = 16
+		Case $OBJECTID_Size - 24 = 16
 			$GUID_BirthVolumeID = "NOT PRESENT"
 			$GUID_BirthObjectID = "NOT PRESENT"
-			$GUID_BirthDomainID = "NOT PRESENT"
-		Case ($OBJECTID_Size/2) - 24 = 32
+			$GUID_DomainID = "NOT PRESENT"
+		Case $OBJECTID_Size - 24 = 32
 			$GUID_BirthVolumeID = StringMid($MFTEntry,$OBJECTID_Offset+80,32)
+			;Decode guid
+			$GUID_BirthVolumeID_Version = Dec(StringMid($GUID_BirthVolumeID,15,1))
+			$GUID_BirthVolumeID_Timestamp = StringMid($GUID_BirthVolumeID,1,14) & "0" & StringMid($GUID_BirthVolumeID,16,1)
+			$GUID_BirthVolumeID_TimestampDec = Dec(_SwapEndian($GUID_BirthVolumeID_Timestamp),2)
+			$GUID_BirthVolumeID_Timestamp = _DecodeTimestampFromGuid($GUID_BirthVolumeID_Timestamp)
+			$GUID_BirthVolumeID_ClockSeq = StringMid($GUID_BirthVolumeID,17,4)
+			$GUID_BirthVolumeID_ClockSeq = Dec($GUID_BirthVolumeID_ClockSeq)
+			$GUID_BirthVolumeID_Node = StringMid($GUID_BirthVolumeID,21,12)
+			$GUID_BirthVolumeID_Node = _DecodeMacFromGuid($GUID_BirthVolumeID_Node)
 			$GUID_BirthVolumeID = _HexToGuidStr($GUID_BirthVolumeID,1)
 			$GUID_BirthObjectID = "NOT PRESENT"
-			$GUID_BirthDomainID = "NOT PRESENT"
-		Case ($OBJECTID_Size/2) - 24 = 48
+			$GUID_DomainID = "NOT PRESENT"
+		Case $OBJECTID_Size - 24 = 48
+			;BirthVolumeID
 			$GUID_BirthVolumeID = StringMid($MFTEntry,$OBJECTID_Offset+80,32)
+			;Decode guid
+			$GUID_BirthVolumeID_Version = Dec(StringMid($GUID_BirthVolumeID,15,1))
+			$GUID_BirthVolumeID_Timestamp = StringMid($GUID_BirthVolumeID,1,14) & "0" & StringMid($GUID_BirthVolumeID,16,1)
+			$GUID_BirthVolumeID_TimestampDec = Dec(_SwapEndian($GUID_BirthVolumeID_Timestamp),2)
+			$GUID_BirthVolumeID_Timestamp = _DecodeTimestampFromGuid($GUID_BirthVolumeID_Timestamp)
+			$GUID_BirthVolumeID_ClockSeq = StringMid($GUID_BirthVolumeID,17,4)
+			$GUID_BirthVolumeID_ClockSeq = Dec($GUID_BirthVolumeID_ClockSeq)
+			$GUID_BirthVolumeID_Node = StringMid($GUID_BirthVolumeID,21,12)
+			$GUID_BirthVolumeID_Node = _DecodeMacFromGuid($GUID_BirthVolumeID_Node)
 			$GUID_BirthVolumeID = _HexToGuidStr($GUID_BirthVolumeID,1)
+			;BirthObjectID
 			$GUID_BirthObjectID = StringMid($MFTEntry,$OBJECTID_Offset+112,32)
+			;Decode guid
+			$GUID_BirthObjectID_Version = Dec(StringMid($GUID_BirthObjectID,15,1))
+			$GUID_BirthObjectID_Timestamp = StringMid($GUID_BirthObjectID,1,14) & "0" & StringMid($GUID_BirthObjectID,16,1)
+			$GUID_BirthObjectID_TimestampDec = Dec(_SwapEndian($GUID_BirthObjectID_Timestamp),2)
+			$GUID_BirthObjectID_Timestamp = _DecodeTimestampFromGuid($GUID_BirthObjectID_Timestamp)
+			$GUID_BirthObjectID_ClockSeq = StringMid($GUID_BirthObjectID,17,4)
+			$GUID_BirthObjectID_ClockSeq = Dec($GUID_BirthObjectID_ClockSeq)
+			$GUID_BirthObjectID_Node = StringMid($GUID_BirthObjectID,21,12)
+			$GUID_BirthObjectID_Node = _DecodeMacFromGuid($GUID_BirthObjectID_Node)
 			$GUID_BirthObjectID = _HexToGuidStr($GUID_BirthObjectID,1)
-			$GUID_BirthDomainID = "NOT PRESENT"
-		Case ($OBJECTID_Size/2) - 24 = 64
+			$GUID_DomainID = "NOT PRESENT"
+		Case $OBJECTID_Size - 24 = 64
+			;BirthVolumeID
 			$GUID_BirthVolumeID = StringMid($MFTEntry,$OBJECTID_Offset+80,32)
+			;Decode guid
+			$GUID_BirthVolumeID_Version = Dec(StringMid($GUID_BirthVolumeID,15,1))
+			$GUID_BirthVolumeID_Timestamp = StringMid($GUID_BirthVolumeID,1,14) & "0" & StringMid($GUID_BirthVolumeID,16,1)
+			$GUID_BirthVolumeID_TimestampDec = Dec(_SwapEndian($GUID_BirthVolumeID_Timestamp),2)
+			$GUID_BirthVolumeID_Timestamp = _DecodeTimestampFromGuid($GUID_BirthVolumeID_Timestamp)
+			$GUID_BirthVolumeID_ClockSeq = StringMid($GUID_BirthVolumeID,17,4)
+			$GUID_BirthVolumeID_ClockSeq = Dec($GUID_BirthVolumeID_ClockSeq)
+			$GUID_BirthVolumeID_Node = StringMid($GUID_BirthVolumeID,21,12)
+			$GUID_BirthVolumeID_Node = _DecodeMacFromGuid($GUID_BirthVolumeID_Node)
 			$GUID_BirthVolumeID = _HexToGuidStr($GUID_BirthVolumeID,1)
+			;BirthObjectID
 			$GUID_BirthObjectID = StringMid($MFTEntry,$OBJECTID_Offset+112,32)
+			;Decode guid
+			$GUID_BirthObjectID_Version = Dec(StringMid($GUID_BirthObjectID,15,1))
+			$GUID_BirthObjectID_Timestamp = StringMid($GUID_BirthObjectID,1,14) & "0" & StringMid($GUID_BirthObjectID,16,1)
+			$GUID_BirthObjectID_TimestampDec = Dec(_SwapEndian($GUID_BirthObjectID_Timestamp),2)
+			$GUID_BirthObjectID_Timestamp = _DecodeTimestampFromGuid($GUID_BirthObjectID_Timestamp)
+			$GUID_BirthObjectID_ClockSeq = StringMid($GUID_BirthObjectID,17,4)
+			$GUID_BirthObjectID_ClockSeq = Dec($GUID_BirthObjectID_ClockSeq)
+			$GUID_BirthObjectID_Node = StringMid($GUID_BirthObjectID,21,12)
+			$GUID_BirthObjectID_Node = _DecodeMacFromGuid($GUID_BirthObjectID_Node)
 			$GUID_BirthObjectID = _HexToGuidStr($GUID_BirthObjectID,1)
-			$GUID_BirthDomainID = StringMid($MFTEntry,$OBJECTID_Offset+144,32)
-			$GUID_BirthDomainID = _HexToGuidStr($GUID_BirthDomainID,1)
+			;DomainID
+			$GUID_DomainID = StringMid($MFTEntry,$OBJECTID_Offset+144,32)
+			;Decode guid
+			$GUID_DomainID_Version = Dec(StringMid($GUID_DomainID,15,1))
+			$GUID_DomainID_Timestamp = StringMid($GUID_DomainID,1,14) & "0" & StringMid($GUID_DomainID,16,1)
+			$GUID_DomainID_TimestampDec = Dec(_SwapEndian($GUID_DomainID_Timestamp),2)
+			$GUID_DomainID_Timestamp = _DecodeTimestampFromGuid($GUID_DomainID_Timestamp)
+			$GUID_DomainID_ClockSeq = StringMid($GUID_DomainID,17,4)
+			$GUID_DomainID_ClockSeq = Dec($GUID_DomainID_ClockSeq)
+			$GUID_DomainID_Node = StringMid($GUID_DomainID,21,12)
+			$GUID_DomainID_Node = _DecodeMacFromGuid($GUID_DomainID_Node)
+			$GUID_DomainID = _HexToGuidStr($GUID_DomainID,1)
 		Case Else
-			_DumpOutput("Error: The $OBJECT_ID size was unexpected for lsn " & $this_lsn & @crlf)
-			_DumpOutput("$OBJECTID_Size - 24: " & $OBJECTID_Size - 24 & @CRLF)
-			_DumpOutput("$GUID_ObjectID: " & $GUID_ObjectID & @CRLF)
+			;ExtendedInfo instead of DomainId?
+			_DumpOutput("Error: The $OBJECT_ID size (" & $OBJECTID_Size - 24 & ") was unexpected for lsn " & $this_lsn & @crlf)
 			_DumpOutput(_HexEncode("0x"&StringMid($MFTEntry,$OBJECTID_Offset,$OBJECTID_Size*2)) & @crlf)
 	EndSelect
-	$TextInformation &= ";GUID_ObjectID="&$GUID_ObjectID&";GUID_BirthVolumeID="&$GUID_BirthVolumeID&";GUID_BirthObjectID="&$GUID_BirthObjectID&";GUID_BirthDomainID="&$GUID_BirthDomainID
+	;$TextInformation &= ";GUID_ObjectID="&$GUID_ObjectID&";GUID_BirthVolumeID="&$GUID_BirthVolumeID&";GUID_BirthObjectID="&$GUID_BirthObjectID&";GUID_DomainID="&$GUID_DomainID
+	$TextInformation &= ";See LogFile_Mft_ObjectId_Entries.csv"
 	If $VerboseOn Then
 		_DumpOutput("### $OBJECT_ID ATTRIBUTE ###" & @CRLF)
 		_DumpOutput("$GUID_ObjectID: " & $GUID_ObjectID & @CRLF)
+		_DumpOutput("$GUID_ObjectID_Version: " & $GUID_ObjectID_Version & @CRLF)
+		_DumpOutput("$GUID_ObjectID_Timestamp: " & $GUID_ObjectID_Timestamp & @CRLF)
+		_DumpOutput("$GUID_ObjectID_TimestampDec: " & $GUID_ObjectID_TimestampDec & @CRLF)
+		_DumpOutput("$GUID_ObjectID_ClockSeq: " & $GUID_ObjectID_ClockSeq & @CRLF)
+		_DumpOutput("$GUID_ObjectID_Node: " & $GUID_ObjectID_Node & @CRLF)
 		_DumpOutput("$GUID_BirthVolumeID: " & $GUID_BirthVolumeID & @CRLF)
+		_DumpOutput("$GUID_BirthVolumeID_Version: " & $GUID_BirthVolumeID_Version & @CRLF)
+		_DumpOutput("$GUID_BirthVolumeID_Timestamp: " & $GUID_BirthVolumeID_Timestamp & @CRLF)
+		_DumpOutput("$GUID_BirthVolumeID_TimestampDec: " & $GUID_BirthVolumeID_TimestampDec & @CRLF)
+		_DumpOutput("$GUID_BirthVolumeID_ClockSeq: " & $GUID_BirthVolumeID_ClockSeq & @CRLF)
+		_DumpOutput("$GUID_BirthVolumeID_Node: " & $GUID_BirthVolumeID_Node & @CRLF)
 		_DumpOutput("$GUID_BirthObjectID: " & $GUID_BirthObjectID & @CRLF)
-		_DumpOutput("$GUID_BirthDomainID: " & $GUID_BirthDomainID & @CRLF)
+		_DumpOutput("$GUID_BirthObjectID_Version: " & $GUID_BirthObjectID_Version & @CRLF)
+		_DumpOutput("$GUID_BirthObjectID_Timestamp: " & $GUID_BirthObjectID_Timestamp & @CRLF)
+		_DumpOutput("$GUID_BirthObjectID_TimestampDec: " & $GUID_BirthObjectID_TimestampDec & @CRLF)
+		_DumpOutput("$GUID_BirthObjectID_ClockSeq: " & $GUID_BirthObjectID_ClockSeq & @CRLF)
+		_DumpOutput("$GUID_BirthObjectID_Node: " & $GUID_BirthObjectID_Node & @CRLF)
+		_DumpOutput("$GUID_DomainID: " & $GUID_DomainID & @CRLF)
+		_DumpOutput("$GUID_DomainID_Version: " & $GUID_DomainID_Version & @CRLF)
+		_DumpOutput("$GUID_DomainID_Timestamp: " & $GUID_DomainID_Timestamp & @CRLF)
+		_DumpOutput("$GUID_DomainID_TimestampDec: " & $GUID_DomainID_TimestampDec & @CRLF)
+		_DumpOutput("$GUID_DomainID_ClockSeq: " & $GUID_DomainID_ClockSeq & @CRLF)
+		_DumpOutput("$GUID_DomainID_Node: " & $GUID_DomainID_Node & @CRLF)
 	EndIf
+	;Write the decoded guid info to a separate file
+	FileWriteLine($LogFileEntriesObjectIdCsvFile, $HDR_MFTREcordNumber & $de & $HDR_SequenceNo & $de & $GUID_ObjectID & $de & $GUID_ObjectID_Version & $de & $GUID_ObjectID_Timestamp & $de & $GUID_ObjectID_TimestampDec & $de & $GUID_ObjectID_ClockSeq & $de & $GUID_ObjectID_Node & $de & $GUID_BirthVolumeID & $de & $GUID_BirthVolumeID_Version & $de & $GUID_BirthVolumeID_Timestamp & $de & $GUID_BirthVolumeID_TimestampDec & $de & $GUID_BirthVolumeID_ClockSeq & $de & $GUID_BirthVolumeID_Node & $de & $GUID_BirthObjectID & $de & $GUID_BirthObjectID_Version & $de & $GUID_BirthObjectID_Timestamp & $de & $GUID_BirthObjectID_TimestampDec & $de & $GUID_BirthObjectID_ClockSeq & $de & $GUID_BirthObjectID_Node & $de & $GUID_DomainID & $de & $GUID_DomainID_Version & $de & $GUID_DomainID_Timestamp & $de & $GUID_DomainID_TimestampDec & $de & $GUID_DomainID_ClockSeq & $de & $GUID_DomainID_Node & $de & $IsRedo & @crlf)
 EndFunc
 
 Func _Get_VolumeName($MFTEntry, $VOLUME_NAME_Offset, $VOLUME_NAME_Size)
@@ -4952,7 +5054,7 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				$AttributeString = "$FILE_NAME"
 				If $FN_NameType <> "DOS" Then _UpdateFileNameArray($PredictedRefNumber,"",$FN_Name,$this_lsn)
 			Case $AttributeTypeCheck = "4000"
-				_Get_ObjectID($record, 1, $RecordSize)
+				_Get_ObjectID($record, 1, $RecordSize, 1)
 				$AttributeString = "$OBJECT_ID"
 			Case $AttributeTypeCheck = "5000"
 				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
@@ -5080,7 +5182,7 @@ Func _Decode_CreateAttribute($record,$IsRedo)
 				_Get_FileName($record, 1, $RecordSize, 1)
 				$AttributeString = "$FILE_NAME"
 			Case $AttributeTypeCheck = "4000"
-				_Get_ObjectID($record, 1, $RecordSize)
+				_Get_ObjectID($record, 1, $RecordSize, 0)
 				$AttributeString = "$OBJECT_ID"
 			Case $AttributeTypeCheck = "5000"
 				$CoreAttr = _GetAttributeEntry(StringMid($record,1,$RecordSize))
@@ -6430,6 +6532,14 @@ Func _PrepareOutput($OutputDir)
 		Exit
 	EndIf
 	_DebugOut("Created output file: " & $LogFileCheckpointRecordCsvFile)
+
+	$LogFileEntriesObjectIdCsvFile = $ParserOutDir & "\LogFile_Mft_ObjectId_Entries.csv"
+	$LogFileEntriesObjectIdCsv = FileOpen($LogFileEntriesObjectIdCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileEntriesObjectIdCsvFile)
+		Exit
+	EndIf
+	_DebugOut("Created output file: " & $LogFileEntriesObjectIdCsvFile)
 EndFunc
 
 Func _WriteCSVExtraHeader()
@@ -8475,6 +8585,11 @@ EndFunc
 
 Func _Decode_ObjId_O($InputData,$IsRedo)
 	Local $Counter=1
+	Local $GUID_ObjectID_Version,$GUID_ObjectID_Timestamp,$GUID_ObjectID_TimestampDec,$GUID_ObjectID_ClockSeq,$GUID_ObjectID_Node
+	Local $GUID_BirthVolumeID_Version,$GUID_BirthVolumeID_Timestamp,$GUID_BirthVolumeID_TimestampDec,$GUID_BirthVolumeID_ClockSeq,$GUID_BirthVolumeID_Node
+	Local $GUID_BirthObjectID_Version,$GUID_BirthObjectID_Timestamp,$GUID_BirthObjectID_TimestampDec,$GUID_BirthObjectID_ClockSeq,$GUID_BirthObjectID_Node
+	Local $GUID_DomainID_Version,$GUID_DomainID_Timestamp,$GUID_DomainID_TimestampDec,$GUID_DomainID_ClockSeq,$GUID_DomainID_Node
+
 	;88 bytes
 	$StartOffset = 1
 	$InputDataSize = StringLen($InputData)
@@ -8506,8 +8621,19 @@ Func _Decode_ObjId_O($InputData,$IsRedo)
 		$Flags = "0x" & _SwapEndian($Flags)
 
 		;Padding 2 bytes
-		$GUIDObjectId = StringMid($InputData, $StartOffset + 32, 32)
-		$GUIDObjectId = _HexToGuidStr($GUIDObjectId,0)
+
+		;ObjectId
+		$GUID_ObjectId = StringMid($InputData, $StartOffset + 32, 32)
+		;Decode guid
+		$GUID_ObjectID_Version = Dec(StringMid($GUID_ObjectID,15,1))
+		$GUID_ObjectID_Timestamp = StringMid($GUID_ObjectID,1,14) & "0" & StringMid($GUID_ObjectID,16,1)
+		$GUID_ObjectID_TimestampDec = Dec(_SwapEndian($GUID_ObjectID_Timestamp),2)
+		$GUID_ObjectID_Timestamp = _DecodeTimestampFromGuid($GUID_ObjectID_Timestamp)
+		$GUID_ObjectID_ClockSeq = StringMid($GUID_ObjectID,17,4)
+		$GUID_ObjectID_ClockSeq = Dec($GUID_ObjectID_ClockSeq)
+		$GUID_ObjectID_Node = StringMid($GUID_ObjectID,21,12)
+		$GUID_ObjectID_Node = _DecodeMacFromGuid($GUID_ObjectID_Node)
+		$GUID_ObjectID = _HexToGuidStr($GUID_ObjectID,0)
 
 		$MftRef = StringMid($InputData, $StartOffset + 64, 12)
 		$MftRef = Dec(_SwapEndian($MftRef),2)
@@ -8515,14 +8641,44 @@ Func _Decode_ObjId_O($InputData,$IsRedo)
 		$MftSeqNo = StringMid($InputData, $StartOffset + 76, 4)
 		$MftSeqNo = Dec(_SwapEndian($MftSeqNo),2)
 
-		$GUIDBirthVolumeId = StringMid($InputData, $StartOffset + 80, 32)
-		$GUIDBirthVolumeId = _HexToGuidStr($GUIDBirthVolumeId,0)
+		;BirthVolumeId
+		$GUID_BirthVolumeId = StringMid($InputData, $StartOffset + 80, 32)
+		;Decode guid
+		$GUID_BirthVolumeID_Version = Dec(StringMid($GUID_BirthVolumeID,15,1))
+		$GUID_BirthVolumeID_Timestamp = StringMid($GUID_BirthVolumeID,1,14) & "0" & StringMid($GUID_BirthVolumeID,16,1)
+		$GUID_BirthVolumeID_TimestampDec = Dec(_SwapEndian($GUID_BirthVolumeID_Timestamp),2)
+		$GUID_BirthVolumeID_Timestamp = _DecodeTimestampFromGuid($GUID_BirthVolumeID_Timestamp)
+		$GUID_BirthVolumeID_ClockSeq = StringMid($GUID_BirthVolumeID,17,4)
+		$GUID_BirthVolumeID_ClockSeq = Dec($GUID_BirthVolumeID_ClockSeq)
+		$GUID_BirthVolumeID_Node = StringMid($GUID_BirthVolumeID,21,12)
+		$GUID_BirthVolumeID_Node = _DecodeMacFromGuid($GUID_BirthVolumeID_Node)
+		$GUID_BirthVolumeID = _HexToGuidStr($GUID_BirthVolumeID,0)
 
-		$GUIDBirthObjectId = StringMid($InputData, $StartOffset + 112, 32)
-		$GUIDBirthObjectId = _HexToGuidStr($GUIDBirthObjectId,0)
+		;BirthObjectId
+		$GUID_BirthObjectId = StringMid($InputData, $StartOffset + 112, 32)
+		;Decode guid
+		$GUID_BirthObjectID_Version = Dec(StringMid($GUID_BirthObjectID,15,1))
+		$GUID_BirthObjectID_Timestamp = StringMid($GUID_BirthObjectID,1,14) & "0" & StringMid($GUID_BirthObjectID,16,1)
+		$GUID_BirthObjectID_TimestampDec = Dec(_SwapEndian($GUID_BirthObjectID_Timestamp),2)
+		$GUID_BirthObjectID_Timestamp = _DecodeTimestampFromGuid($GUID_BirthObjectID_Timestamp)
+		$GUID_BirthObjectID_ClockSeq = StringMid($GUID_BirthObjectID,17,4)
+		$GUID_BirthObjectID_ClockSeq = Dec($GUID_BirthObjectID_ClockSeq)
+		$GUID_BirthObjectID_Node = StringMid($GUID_BirthObjectID,21,12)
+		$GUID_BirthObjectID_Node = _DecodeMacFromGuid($GUID_BirthObjectID_Node)
+		$GUID_BirthObjectID = _HexToGuidStr($GUID_BirthObjectID,0)
 
-		$GUIDDomainId = StringMid($InputData, $StartOffset + 144, 32)
-		$GUIDDomainId = _HexToGuidStr($GUIDDomainId,0)
+		;DomainId
+		$GUID_DomainId = StringMid($InputData, $StartOffset + 144, 32)
+		;Decode guid
+		$GUID_DomainID_Version = Dec(StringMid($GUID_DomainID,15,1))
+		$GUID_DomainID_Timestamp = StringMid($GUID_DomainID,1,14) & "0" & StringMid($GUID_DomainID,16,1)
+		$GUID_DomainID_TimestampDec = Dec(_SwapEndian($GUID_DomainID_Timestamp),2)
+		$GUID_DomainID_Timestamp = _DecodeTimestampFromGuid($GUID_DomainID_Timestamp)
+		$GUID_DomainID_ClockSeq = StringMid($GUID_DomainID,17,4)
+		$GUID_DomainID_ClockSeq = Dec($GUID_DomainID_ClockSeq)
+		$GUID_DomainID_Node = StringMid($GUID_DomainID,21,12)
+		$GUID_DomainID_Node = _DecodeMacFromGuid($GUID_DomainID_Node)
+		$GUID_DomainID = _HexToGuidStr($GUID_DomainID,0)
 
 		If $VerboseOn Then
 			_DumpOutput(@CRLF)
@@ -8533,16 +8689,37 @@ Func _Decode_ObjId_O($InputData,$IsRedo)
 			_DumpOutput("$IndexEntrySize: " & $IndexEntrySize & @CRLF)
 			_DumpOutput("$IndexKeySize: " & $IndexKeySize & @CRLF)
 			_DumpOutput("$Flags: " & $Flags & @CRLF)
-			_DumpOutput("$GUIDObjectId: " & $GUIDObjectId & @CRLF)
 			_DumpOutput("$MftRef: " & $MftRef & @CRLF)
 			_DumpOutput("$MftSeqNo: " & $MftSeqNo & @CRLF)
-			_DumpOutput("$GUIDBirthVolumeId: " & $GUIDBirthVolumeId & @CRLF)
-			_DumpOutput("$GUIDBirthObjectId: " & $GUIDBirthObjectId & @CRLF)
-			_DumpOutput("$GUIDDomainId: " & $GUIDDomainId & @CRLF)
+			_DumpOutput("$GUID_ObjectID: " & $GUID_ObjectID & @CRLF)
+			_DumpOutput("$GUID_ObjectID_Version: " & $GUID_ObjectID_Version & @CRLF)
+			_DumpOutput("$GUID_ObjectID_Timestamp: " & $GUID_ObjectID_Timestamp & @CRLF)
+			_DumpOutput("$GUID_ObjectID_TimestampDec: " & $GUID_ObjectID_TimestampDec & @CRLF)
+			_DumpOutput("$GUID_ObjectID_ClockSeq: " & $GUID_ObjectID_ClockSeq & @CRLF)
+			_DumpOutput("$GUID_ObjectID_Node: " & $GUID_ObjectID_Node & @CRLF)
+			_DumpOutput("$GUID_BirthVolumeID: " & $GUID_BirthVolumeID & @CRLF)
+			_DumpOutput("$GUID_BirthVolumeID_Version: " & $GUID_BirthVolumeID_Version & @CRLF)
+			_DumpOutput("$GUID_BirthVolumeID_Timestamp: " & $GUID_BirthVolumeID_Timestamp & @CRLF)
+			_DumpOutput("$GUID_BirthVolumeID_TimestampDec: " & $GUID_BirthVolumeID_TimestampDec & @CRLF)
+			_DumpOutput("$GUID_BirthVolumeID_ClockSeq: " & $GUID_BirthVolumeID_ClockSeq & @CRLF)
+			_DumpOutput("$GUID_BirthVolumeID_Node: " & $GUID_BirthVolumeID_Node & @CRLF)
+			_DumpOutput("$GUID_BirthObjectID: " & $GUID_BirthObjectID & @CRLF)
+			_DumpOutput("$GUID_BirthObjectID_Version: " & $GUID_BirthObjectID_Version & @CRLF)
+			_DumpOutput("$GUID_BirthObjectID_Timestamp: " & $GUID_BirthObjectID_Timestamp & @CRLF)
+			_DumpOutput("$GUID_BirthObjectID_TimestampDec: " & $GUID_BirthObjectID_TimestampDec & @CRLF)
+			_DumpOutput("$GUID_BirthObjectID_ClockSeq: " & $GUID_BirthObjectID_ClockSeq & @CRLF)
+			_DumpOutput("$GUID_BirthObjectID_Node: " & $GUID_BirthObjectID_Node & @CRLF)
+			_DumpOutput("$GUID_DomainID: " & $GUID_DomainID & @CRLF)
+			_DumpOutput("$GUID_DomainID_Version: " & $GUID_DomainID_Version & @CRLF)
+			_DumpOutput("$GUID_DomainID_Timestamp: " & $GUID_DomainID_Timestamp & @CRLF)
+			_DumpOutput("$GUID_DomainID_TimestampDec: " & $GUID_DomainID_TimestampDec & @CRLF)
+			_DumpOutput("$GUID_DomainID_ClockSeq: " & $GUID_DomainID_ClockSeq & @CRLF)
+			_DumpOutput("$GUID_DomainID_Node: " & $GUID_DomainID_Node & @CRLF)
 		EndIf
 
-		$TextInformation &= ";MftRef="&$MftRef&";MftSeqNo="&$MftSeqNo
-		FileWriteLine($LogFileObjIdOCsv, $RecordOffset&$de&$this_lsn&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$GUIDObjectId&$de&$MftRef&$de&$MftSeqNo&$de&$GUIDBirthVolumeId&$de&$GUIDBirthObjectId&$de&$GUIDDomainId&$de&$IsRedo&@crlf)
+		;$TextInformation &= ";MftRef="&$MftRef&";MftSeqNo="&$MftSeqNo
+
+		FileWriteLine($LogFileObjIdOCsv, $RecordOffset & $de & $this_lsn & $de & $IndexEntrySize & $de & $IndexKeySize & $de & $Flags & $de & $MftRef & $de & $MftSeqNo & $de & $GUID_ObjectID & $de & $GUID_ObjectID_Version & $de & $GUID_ObjectID_Timestamp & $de & $GUID_ObjectID_TimestampDec & $de & $GUID_ObjectID_ClockSeq & $de & $GUID_ObjectID_Node & $de & $GUID_BirthVolumeID & $de & $GUID_BirthVolumeID_Version & $de & $GUID_BirthVolumeID_Timestamp & $de & $GUID_BirthVolumeID_TimestampDec & $de & $GUID_BirthVolumeID_ClockSeq & $de & $GUID_BirthVolumeID_Node & $de & $GUID_BirthObjectID & $de & $GUID_BirthObjectID_Version & $de & $GUID_BirthObjectID_Timestamp & $de & $GUID_BirthObjectID_TimestampDec & $de & $GUID_BirthObjectID_ClockSeq & $de & $GUID_BirthObjectID_Node & $de & $GUID_DomainID & $de & $GUID_DomainID_Version & $de & $GUID_DomainID_Timestamp & $de & $GUID_DomainID_TimestampDec & $de & $GUID_DomainID_ClockSeq & $de & $GUID_DomainID_Node & $de & $IsRedo & @crlf)
 		$StartOffset += $IndexEntrySize*2
 		$Counter+=1
 	Until $StartOffset >= $InputDataSize
@@ -10286,7 +10463,7 @@ Func _DumpOutput($text)
 EndFunc
 
 Func _WriteCSVHeaderObjIdO()
-	$ObjIdO_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"GUIDObjectId"&$de&"MftRef"&$de&"MftSeqNo"&$de&"GUIDBirthVolumeId"&$de&"GUIDBirthObjectId"&$de&"GUIDDomainId"&$de&"IsRedo"
+	$ObjIdO_Csv_Header = "Offset"&$de&"lf_LSN"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"ObjectId"&$de&"ObjectId_Version"&$de&"ObjectId_Timestamp"&$de&"ObjectId_TimestampDec"&$de&"ObjectId_ClockSeq"&$de&"ObjectId_Node"&$de&"BirthVolumeId"&$de&"BirthVolumeId_Version"&$de&"BirthVolumeId_Timestamp"&$de&"BirthVolumeId_TimestampDec"&$de&"BirthVolumeId_ClockSeq"&$de&"BirthVolumeId_Node"&$de&"BirthObjectId"&$de&"BirthObjectId_Version"&$de&"BirthObjectId_Timestamp"&$de&"BirthObjectId_TimestampDec"&$de&"BirthObjectId_ClockSeq"&$de&"BirthObjectId_Node"&$de&"DomainId"&$de&"DomainId_Version"&$de&"DomainId_Timestamp"&$de&"DomainId_TimestampDec"&$de&"DomainId_ClockSeq"&$de&"DomainId_Node"&$de&"IsRedo"
 	FileWriteLine($LogFileObjIdOCsv, $ObjIdO_Csv_Header & @CRLF)
 EndFunc
 
@@ -11177,7 +11354,7 @@ Func _CheckFragment()
 	If StringLeft($InputData,8) = "52435244" Or StringLeft($InputData,8) = "52535452" Then ;RCRD/RSTR
 ;		Global $RebuiltFragment = "0x" & $InputData
 		_DumpOutput("The RCRD/RSTR header structure seemed fine. No don't need to fix anything there. Please load the file as $LogFile input instead." & @CRLF)
-		Return
+;		Return
 	EndIf
 
 	If $InputSize > 4096 Then
@@ -12446,4 +12623,27 @@ Func _WriteOutputFragment()
 	_WinAPI_SetFilePointerEx($hFileOut, $Offset, $FILE_BEGIN)
 	If Not _WinAPI_WriteFile($hFileOut, DllStructGetPtr($tBuffer), DllStructGetSize($tBuffer), $nBytes) Then Return SetError(1)
 	_WinAPI_CloseHandle($hFileOut)
+EndFunc
+
+Func _WriteObjectIdCsvHeader()
+	$ObjectId_Csv_Header = "MftRef"&$de&"MftRefSeqNo"&$de&"ObjectId"&$de&"ObjectId_Version"&$de&"ObjectId_Timestamp"&$de&"ObjectId_TimestampDec"&$de&"ObjectId_ClockSeq"&$de&"ObjectId_Node"&$de&"BirthVolumeId"&$de&"BirthVolumeId_Version"&$de&"BirthVolumeId_Timestamp"&$de&"BirthVolumeId_TimestampDec"&$de&"BirthVolumeId_ClockSeq"&$de&"BirthVolumeId_Node"&$de&"BirthObjectId"&$de&"BirthObjectId_Version"&$de&"BirthObjectId_Timestamp"&$de&"BirthObjectId_TimestampDec"&$de&"BirthObjectId_ClockSeq"&$de&"BirthObjectId_Node"&$de&"DomainId"&$de&"DomainId_Version"&$de&"DomainId_Timestamp"&$de&"DomainId_TimestampDec"&$de&"DomainId_ClockSeq"&$de&"DomainId_Node"
+	FileWriteLine($LogFileEntriesObjectIdCsvFile, $ObjectId_Csv_Header & @CRLF)
+EndFunc
+
+Func _DecodeMacFromGuid($Input)
+	If StringLen($Input) <> 12 Then Return SetError(1)
+	Local $Mac = StringMid($Input,1,2) & "-" & StringMid($Input,3,2) & "-" & StringMid($Input,5,2) & "-" & StringMid($Input,7,2) & "-" & StringMid($Input,9,2) & "-" & StringMid($Input,11,2)
+	Return $Mac
+EndFunc
+
+Func _DecodeTimestampFromGuid($StampDecode)
+	$StampDecode = _SwapEndian($StampDecode)
+	$StampDecode_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $StampDecode)
+	$StampDecode = _WinTime_UTCFileTimeFormat(Dec($StampDecode,2) - $tDelta - $TimeDiff, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$StampDecode = $TimestampErrorVal
+	ElseIf $TimestampPrecision = 3 Then
+		$StampDecode = $StampDecode & $PrecisionSeparator2 & _FillZero(StringRight($StampDecode_tmp, 4))
+	EndIf
+	Return $StampDecode
 EndFunc
