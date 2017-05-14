@@ -1,9 +1,10 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Icon=C:\Program Files (x86)\AutoIt3\Icons\au3.ico
+#AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.43
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.44
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -95,7 +96,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.43"
+$Progversion = "NTFS $LogFile Parser 2.0.0.44"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -6300,15 +6301,15 @@ Func _PrepareOutput($OutputDir)
 	_DebugOut("Created output file: " & $LogFileCsvFile)
 
 	$LogFileSqlFile = $ParserOutDir & "\LogFile.sql"
-	FileInstall("C:\temp\import-csv-logfile.sql", $LogFileSqlFile)
+	FileInstall(".\import-sql\import-csv-logfile.sql", $LogFileSqlFile)
 	_DebugOut("Created output file: " & $LogFileSqlFile)
 
 	$LogFileUpdateFilenameI30SqlFile = $ParserOutDir & "\LogFile_UpdateFileName_I30.sql"
-	FileInstall("C:\temp\import-csv-logfile-updatefilename-I30.sql", $LogFileUpdateFilenameI30SqlFile)
+	FileInstall(".\import-sql\import-csv-logfile-updatefilename-I30.sql", $LogFileUpdateFilenameI30SqlFile)
 	_DebugOut("Created output file: " & $LogFileUpdateFilenameI30SqlFile)
 
 	$LogFileINDXI30SqlFile = $ParserOutDir & "\LogFile_INDX_I30.sql"
-	FileInstall("C:\temp\import-csv-logfile-INDX-I30.sql", $LogFileINDXI30SqlFile)
+	FileInstall(".\import-sql\import-csv-logfile-INDX-I30.sql", $LogFileINDXI30SqlFile)
 	_DebugOut("Created output file: " & $LogFileINDXI30SqlFile)
 
 	$LogFileIndxCsvfile = $ParserOutDir & "\LogFile_INDX_I30.csv"
