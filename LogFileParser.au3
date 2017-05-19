@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.44
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.45
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -96,7 +96,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.44"
+$Progversion = "NTFS $LogFile Parser 2.0.0.45"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -11668,11 +11668,15 @@ Func _Decode_Quota_Q_SingleEntry($InputData,$IsRedo)
 EndFunc
 
 Func _GetReparseType($ReparseType)
-	;http://msdn.microsoft.com/en-us/library/dd541667(v=prot.10).aspx
-	;http://msdn.microsoft.com/en-us/library/windows/desktop/aa365740(v=vs.85).aspx
+	;winnt.h
+	;ntifs.h
 	Select
 		Case $ReparseType = '0x00000000'
-			Return 'ZERO'
+			Return 'RESERVED_ZERO'
+		Case $ReparseType = '0x00000001'
+			Return 'RESERVED_ONE'
+		Case $ReparseType = '0x00000002'
+			Return 'RESERVED_TWO'
 		Case $ReparseType = '0x80000005'
 			Return 'DRIVER_EXTENDER'
 		Case $ReparseType = '0x80000006'
@@ -11693,16 +11697,32 @@ Func _GetReparseType($ReparseType)
 			Return 'DEDUP'
 		Case $ReparseType = '0x80000014'
 			Return 'NFS'
-		Case $ReparseType = '0xA0000003'
-			Return 'MOUNT_POINT'
-		Case $ReparseType = '0xA000000C'
-			Return 'SYMLINK'
-		Case $ReparseType = '0xC0000004'
-			Return 'HSM'
 		Case $ReparseType = '0x80000015'
 			Return 'FILE_PLACEHOLDER'
 		Case $ReparseType = '0x80000017'
 			Return 'WOF'
+		Case $ReparseType = '0x80000018'
+			Return 'WCI'
+		Case $ReparseType = '0x80000019'
+			Return 'GLOBAL_REPARSE'
+		Case $ReparseType = '0x8000001B'
+			Return 'APPEXECLINK'
+		Case $ReparseType = '0x9000001A'
+			Return 'CLOUD'
+		Case $ReparseType = '0x9000001C'
+			Return 'GVFS'
+		Case $ReparseType = '0xA0000003'
+			Return 'MOUNT_POINT'
+		Case $ReparseType = '0xA000000C'
+			Return 'SYMLINK'
+		Case $ReparseType = '0xA0000010'
+			Return 'IIS_CACHE'
+		Case $ReparseType = '0xA000001D'
+			Return 'LX_SYMLINK'
+		Case $ReparseType = '0xC0000004'
+			Return 'HSM'
+		Case $ReparseType = '0xC0000014'
+			Return 'APPXSTRM'
 		Case Else
 			Return 'UNKNOWN(' & $ReparseType & ')'
 	EndSelect

@@ -1,5 +1,8 @@
 LogFileParser Changelog
 
+v2.0.0.45
+Added missing reparse tags.
+
 v2.0.0.44
 Moved the import sql files into the new import-sql sub directory so that compilation works with the project as is.
 
