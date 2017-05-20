@@ -1,5 +1,11 @@
 LogFileParser Changelog
 
+v2.0.0.46
+Added mimssing usn reason and source codes.
+Added missing reparse tags.
+Fix bug in decode of $REPARSE_POINT attribute with type WCI.
+Fixed bug in $EA attribute handling.
+
 v2.0.0.45
 Added missing reparse tags.
 
