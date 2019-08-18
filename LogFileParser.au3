@@ -1,10 +1,13 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Icon=C:\Program Files (x86)\AutoIt3\Icons\au3.ico
-#AutoIt3Wrapper_UseUpx=y
+#AutoIt3Wrapper_Outfile=LogFileParser.exe
+#AutoIt3Wrapper_Outfile_x64=LogFileParser64.exe
+#AutoIt3Wrapper_Compile_Both=y
+#AutoIt3Wrapper_UseX64=y
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.46
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.47
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -25,7 +28,7 @@ Global $ProgressLogFile, $ProgressReconstruct, $CurrentProgress=-1, $ProgressSta
 Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $SectorSize=512, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile;$LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,
 Global $RecordOffset, $PredictedRefNumber, $this_lsn, $client_previous_lsn, $redo_operation, $undo_operation, $record_offset_in_mft, $attribute_offset, $hOutFileMFT, $tBuffer, $nBytes2, $HDR_BaseRecord, $FilePath, $HDR_SequenceNo
 Global $nBytes, $rFile, $DataRunArr[2][18], $NewDataRunArr[1][18], $RowsProcessed, $MaxRows, $hQuery, $aRow, $aRow2, $iRows, $iColumns, $aRes, $sOutputFile
-Global $RSTRsig = "52535452", $RCRDsig = "52435244", $BAADsig = "42414144", $CHKDsig = "43484d44", $Emptysig = "ffffffff"
+Global $RSTRsig = "52535452", $RCRDsig = "52435244", $BAADsig = "42414144", $CHKDsig = "43484d44", $Emptysig = "ffffffff", $ZEROsig = "00000000"
 Global $SI_CTime, $SI_ATime, $SI_MTime, $SI_RTime, $SI_FilePermission, $SI_MaxVersions, $SI_VersionNumber, $SI_ClassID, $SI_SecurityID, $SI_QuotaCharged, $SI_USN, $SI_PartialValue
 Global $SI_CTime_Core,$SI_ATime_Core,$SI_MTime_Core,$SI_RTime_Core,$SI_CTime_Precision,$SI_ATime_Precision,$SI_MTime_Precision,$SI_RTime_Precision
 Global $FN_CTime, $FN_ATime, $FN_MTime, $FN_RTime, $FN_AllocSize, $FN_RealSize, $FN_Flags, $FN_Name, $FN_NameType
@@ -45,11 +48,10 @@ Global $LogFileOpenAttributeTableCsv,$LogFileOpenAttributeTableCsvFile,$LogFileD
 Global $LogFileReparseRCsv,$LogFileQuotaQCsv,$LogFileQuotaOCsv,$LogFileObjIdOCsv,$LogFileReparseRCsvFile,$LogFileQuotaQCsvFile,$LogFileQuotaOCsvFile,$LogFileObjIdOCsvFile,$LogFileRCRDCsv,$LogFileRCRDCsvFile
 Global $client_index,$record_type,$transaction_id,$lf_flags,$target_attribute,$lcns_to_follow,$record_offset_in_mft,$attribute_offset,$MftClusterIndex,$target_vcn,$target_lcn,$InOpenAttributeTable=-1,$LsnValidationLevel
 Global $LogFileTransactionHeaderCsv,$LogFileTransactionHeaderCsvFile,$LogFileSlackOpenAttributeTableCsv,$LogFileSlackOpenAttributeTableCsvFile,$LogFileSlackAttributeNamesDumpCsv,$LogFileSlackAttributeNamesDumpCsvFile,$LogFileAttributeListCsv,$LogFileAttributeListCsvFile
-Global $GlobalDataKeepCounter=0,$GlobalRecordSpreadCounter=0,$GlobalRecordSpreadReset=0,$GlobalRecordSpreadReset2=0,$DoRebuildBrokenHeader=False,$MinSizeBrokenTransaction = 80, $Is32bit=0, $DoExtractResidentUpdates=0
-Global $RUN_VCN[1], $RUN_Clusters[1], $MFT_RUN_Clusters[1], $MFT_RUN_VCN[1], $DataQ[1], $AttrQ[1], $BytesPerCluster
-Global $IsCompressed = False, $IsSparse = False
-Global $hDisk, $sBuffer, $DataRun, $DATA_InitSize, $DATA_RealSize, $ImageOffset = 0, $ADS_Name
-Global $TargetImageFile, $Entries, $IsImage=False, $IsPhysicalDrive=False, $ComboPhysicalDrives, $Combo, $MFT_Record_Size
+Global $NoMoreData=0,$GlobalDataKeepCounter=0,$GlobalDataKeepCounter2=0,$GlobalRecordSpreadCounter=0,$GlobalRecordSpreadReset=0,$GlobalRecordSpreadReset2=0,$DoRebuildBrokenHeader=False,$MinSizeBrokenTransaction = 80, $Is32bit=0, $DoExtractResidentUpdates=0
+Global $BytesPerCluster
+Global $DataRun
+Global $MFT_Record_Size
 Global $EaNonResidentArray[1][9], $VerboseArr, $LogFileSqlFile, $LogFileUpdateFilenameI30SqlFile, $LogFileINDXI30SqlFile, $LogFileUpdateFileNameCsv,$LogFileUpdateFileNameCsvFile,$CheckSkipSqlite3=0,$LogFileCheckpointRecordCsvFile,$LogFileCheckpointRecordCsv
 Global $SQLite3Exe = @ScriptDir & "\sqlite3.exe"
 Global $TimestampErrorVal = "0000-00-00 00:00:00"
@@ -96,7 +98,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.46"
+Global $Progversion = "NTFS $LogFile Parser 2.0.0.47"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -397,6 +399,8 @@ If Not StringIsFloat($LsnValidationLevel) Or Not ($LsnValidationLevel > 0 Or $Ls
 	Return
 EndIf
 
+_DumpOutput($Progversion & @CRLF)
+
 If $FragmentMode Then
 	_CheckFragment()
 	If @error Then
@@ -616,7 +620,7 @@ If Not $CommandlineMode Then
 	$ProgressLogFile = GUICtrlCreateProgress(10, 450, 580, 30)
 	$ProgressUsnJrnl = GUICtrlCreateProgress(10,  485, 580, 30)
 	$ProgressReconstruct = GUICtrlCreateProgress(10, 520, 580, 30)
-	AdlibRegister("_LogFileProgress", 500)
+	AdlibRegister("_LogFileProgress", 3000)
 EndIf
 
 If Not $FragmentMode Then
@@ -650,6 +654,7 @@ If Not $FragmentMode Then
 				$RCRDRecord = $LogFileRecord
 			EndIf
 
+
 			$last_lsn = StringMid($RCRDRecord,19,16)
 			$last_lsn = Dec(_SwapEndian($last_lsn),2)
 			$page_flags = "0x" & _SwapEndian(StringMid($RCRDRecord,35,8))
@@ -682,10 +687,19 @@ If Not $FragmentMode Then
 			EndIf
 			;End - Get values from next record
 
+			If $BrokenLogFile Then
+				Global $EaNonResidentArray[1][9],$lsn_openattributestable=0
+				Global $OpenAttributesArray[1][14],$AttributeNamesDumpArray[1][4],$DirtyPageTableDumpArray32bit[1][10],$DirtyPageTableDumpArray64bit[1][15],$FileNamesArray[1][3],$SlackOpenAttributesArray[1][14],$SlackAttributeNamesDumpArray[1][4]
+			EndIf
+
+			$GlobalDataKeepCounter2 = 0
+
 			$RulesString=""
 			;Rules that determine if data flow will continue into next record
 			$rule1 = ($last_lsn = $last_end_lsn)
-			If $rule1 Then $RulesString&="rule1;"
+			If $rule1 Then
+				$RulesString&="rule1;"
+			EndIf
 			$rule2 = ($last_lsn > $next_last_lsn)
 			If $rule2 Then $RulesString&="rule2;"
 			$rule3 = ($last_end_lsn > $next_last_end_lsn And $next_last_end_lsn <> 0)
@@ -698,12 +712,19 @@ If Not $FragmentMode Then
 			If $rule6 Then $RulesString&="rule6;"
 			$rule7 = ($page_count - $page_position <> 0) And ($next_page_position - $page_position = 0) And ($page_count <> $next_page_count)
 			If $rule7 Then $RulesString&="rule7;"
-	;		If ($last_lsn = $last_end_lsn) Or ($last_lsn > $next_last_lsn) Or ($last_end_lsn > $next_last_end_lsn And $next_last_end_lsn <> 0) Or (($page_count - $page_position = 0) And ($next_page_position > 1)) Or (($page_count - $page_position <> 0) And ($next_page_position - $page_position <> 1)) Or (($page_count - $page_position <> 0) And ($next_page_position - $page_position = 0) And ($page_count <> $next_page_count)) Then
-			If $rule1 Or $rule2 Or $rule3 Or $rule5 Or $rule6 Or $rule7 Or $BrokenLogFile Then
+
+			If $RulesString Or $BrokenLogFile Then
 				$NoMoreData=1
 			Else
 				$NoMoreData=0
 			EndIf
+
+			If $RulesString Then
+				If $GlobalDataKeepCounter Then
+					$GlobalDataKeepCounter2 = 1
+				EndIf
+			EndIf
+
 
 			If $i = $MaxRecords-1 Then $NoMoreData=1
 
@@ -714,9 +735,6 @@ If Not $FragmentMode Then
 			If $NoMoreData Then
 				$Remainder = ""
 				$GlobalDataKeepCounter=0
-	;			If Not ($last_lsn = $last_end_lsn) Then _DumpOutput("------------- Skipping returned data -----------------Offset: 0x" & Hex($CurrentFileOffset,8) & @CRLF)
-	;			_DumpOutput("------------- Skipping returned data -----------------Offset: 0x" & Hex($CurrentFileOffset,8) & @CRLF)
-	;			ConsoleWrite("Offset: 0x" & Hex($CurrentFileOffset,8) & @CRLF)
 			Else
 				$Remainder = $DataUnprocessed
 				$GlobalDataKeepCounter+=1
@@ -724,7 +742,7 @@ If Not $FragmentMode Then
 
 			$GlobalRecordSpreadReset2 = $GlobalRecordSpreadReset
 
-			If $last_lsn = $next_last_lsn And $GlobalDataKeepCounter Then
+			If $rule1 And $NoMoreData=0 Then
 				$GlobalRecordSpreadCounter += 1
 				$GlobalRecordSpreadReset = 0
 			Else
@@ -753,6 +771,14 @@ If Not $FragmentMode Then
 			ContinueLoop
 		ElseIf $Magic = $Emptysig Then
 			_DumpOutput("PageVerbose: Overwritten or unitialized page at 0x" & Hex($CurrentFileOffset,8) & @CRLF)
+			ContinueLoop
+		ElseIf $Magic = $ZEROsig Then
+			_DumpOutput("PageVerbose: Corrupt ZERO page at 0x" & Hex($CurrentFileOffset,8) & @CRLF)
+			If Not $BrokenLogFile Then
+				_DumpOutput("Switching from healthy mode to broken $LogFile mode because of a corrupt page." & @CRLF)
+			EndIf
+			;$BrokenLogFile = 1
+			$Remainder = ""
 			ContinueLoop
 		ElseIf $Magic <> $RSTRsig And $Magic <> $RCRDsig And $Magic <> $Emptysig Then
 			_DumpOutput("PageVerbose: Invalid page signature at 0x" & Hex($CurrentFileOffset,8) & @CRLF)
@@ -1503,9 +1529,8 @@ If Not $DoNotReturnData Then
 EndIf
 
 Do
-	If $DataPart And $GlobalRecordSpreadReset Then
-		$RecordOffset = $RCRDOffset+(($NextOffset-$OffsetAdjustment-3+(128*$GlobalRecordSpreadReset))/2)
-;		$RecordOffset = $RCRDOffset+(($NextOffset-$OffsetAdjustment-3)/2)
+	If $DataPart=0 And $GlobalDataKeepCounter2 Then
+		$RecordOffset = $RCRDOffset+(($NextOffset-$OffsetAdjustment-3-(128))/2)
 		$RecordOffset = "0x"&Hex(Int($RecordOffset))
 	ElseIf $DataPart Then
 		$RecordOffset = $RCRDOffset+(($NextOffset-$OffsetAdjustment-3)/2)
@@ -1812,7 +1837,7 @@ If Mod($undo_length_tmp,8) Then
 	WEnd
 EndIf
 ;Validation check of header values
-Local $ValidationTest1 = $redo_operation = "SetNewAttributeSizes" And $client_data_length < $undo_offset+$undo_length_tmp
+Local $ValidationTest1 = $redo_operation = "SetNewAttributeSizes" And $undo_operation = "SetNewAttributeSizes" And $client_data_length < ($undo_offset+$undo_length_tmp)
 Local $ValidationTest2 = $client_data_length <> $undo_offset+$undo_length_tmp And $redo_operation <> "CompensationlogRecord" And $redo_operation <> "SetNewAttributeSizes" And $redo_operation <> "ForgetTransaction" And ($redo_operation <> "Noop" And $undo_operation <> "Noop")
 Local $ValidationTest3 = $client_data_length <> $redo_offset+$redo_length_tmp And $redo_operation <> "CompensationlogRecord" And $redo_operation <> "SetNewAttributeSizes" And $redo_operation <> "ForgetTransaction" And ($redo_operation <> "Noop" And $undo_operation <> "Noop")
 Local $ValidationTest4 = $redo_operation = "UNKNOWN"
@@ -1944,10 +1969,10 @@ $target_vcn = "0x"&$target_vcn
 $MftClusterIndex = "0x"&$MftClusterIndex
 
 
-If Not $FromRcrdSlack Or $BrokenLogFile Then
+;If Not $FromRcrdSlack Or $BrokenLogFile Then
 	$ExcessDataSize = $client_data_length - ($redo_length_tmp + $undo_length_tmp) - $redo_offset
 	FileWriteLine($LogFileTransactionHeaderCsv, $RecordOffset & $de & $this_lsn & $de & $client_previous_lsn & $de & $client_undo_next_lsn & $de & $client_index & $de & $record_type & $de & $transaction_id & $de & $lf_flags & $de & $redo_operation & $de & $undo_operation & $de & $redo_offset & $de & $redo_length_tmp & $de & $undo_offset & $de & $undo_length_tmp & $de & $client_data_length & $de & $target_attribute & $de & $lcns_to_follow & $de & $record_offset_in_mft & $de & $attribute_offset & $de & $MftClusterIndex & $de & $target_vcn & $de & $target_lcn & $de & $ExcessDataSize & @crlf)
-EndIf
+;EndIf
 
 If Not $FromRcrdSlack Then
 	If $FoundInTable > 0 Then
@@ -3256,6 +3281,8 @@ Func _ParserCodeOldVersion($MFTEntry,$IsRedo)
 	EndSelect
 	$HDR_RecRealSize = StringMid($MFTEntry, 49, 8)
 	$HDR_RecRealSize = Dec(_SwapEndian($HDR_RecRealSize),2)
+	$HDR_RecAllocSize = StringMid($MFTEntry, 57, 8)
+	$HDR_RecAllocSize = Dec(_SwapEndian($HDR_RecAllocSize),2)
 
 	If StringLen($MFTEntry) < 98 Then
 		;The critical offset is where the mft record number is located.
@@ -3266,8 +3293,7 @@ Func _ParserCodeOldVersion($MFTEntry,$IsRedo)
 		Return SetError(1)
 	EndIf
 
-	$HDR_RecAllocSize = StringMid($MFTEntry, 57, 8)
-	$HDR_RecAllocSize = Dec(_SwapEndian($HDR_RecAllocSize),2)
+
 	$HDR_BaseRecord = StringMid($MFTEntry, 65, 12)
 	$HDR_BaseRecord = Dec(_SwapEndian($HDR_BaseRecord),2)
 	$HDR_BaseRecSeqNo = StringMid($MFTEntry, 77, 4)
@@ -6308,6 +6334,7 @@ Func _PrepareOutput($OutputDir)
 		MsgBox(0,"Error","Could not create debug.log")
 		Exit
 	EndIf
+	_DebugOut($Progversion)
 	$LogFileCsvFile = $ParserOutDir & "\LogFile.csv"
 	$LogFileCsv = FileOpen($LogFileCsvFile, $EncodingWhenOpen)
 	If @error Then
@@ -8044,43 +8071,7 @@ EndFunc
 
 Func _DecodeSidIdentifierAuthority($InputData)
 ;	ConsoleWrite("_DecodeSidIdentifierAuthority() " & @CRLF)
-	Select
-		Case $InputData = "000000000000"
-			Return Dec($InputData)
-;			Return "0"
-		Case $InputData = "000000000001"
-			Return Dec($InputData)
-;			Return "1"
-		Case $InputData = "000000000002"
-			Return Dec($InputData)
-;			Return "2"
-		Case $InputData = "000000000003"
-			Return Dec($InputData)
-;			Return "3"
-		Case $InputData = "000000000004"
-			Return Dec($InputData)
-;			Return "4"
-		Case $InputData = "000000000005"
-			Return Dec($InputData)
-;			Return "5"
-		Case $InputData = "00000000000F"
-			Return Dec($InputData)
-;			Return "F"
-		Case $InputData = "000000000010"
-			Return Dec($InputData)
-;			Return "10"
-		Case $InputData = "000000000011"
-			Return Dec($InputData)
-;			Return "11"
-		Case $InputData = "000000000012"
-			Return Dec($InputData)
-;			Return "12"
-		Case $InputData = "000000000013"
-			Return Dec($InputData)
-;			Return "13"
-		Case Else
-			Return "UNKNOWN"
-	EndSelect
+	Return Dec($InputData)
 EndFunc
 
 Func _DecodeSidIdentifierAuthorityString($InputData)

@@ -1,5 +1,10 @@
 LogFileParser Changelog
 
+v2.0.0.47
+Multiple bugfixes, including one memory leak, related to handling of corrupt pages.
+Fixed bug that caused some offsets reported to be slightly incorrect.
+Fixed a bug that caused undocumented IdentifierAuthority values to not display the correct decimal value in the SID.
+
 v2.0.0.46
 Added mimssing usn reason and source codes.
 Added missing reparse tags.

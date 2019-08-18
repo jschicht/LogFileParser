@@ -17,7 +17,8 @@ Configurable UNICODE or ANSI output. Option "Unicode".
 Configurable MFT record size (1024 or 4096). Option "MFT record size".
 Optionally decode individual transactions or partial transactions (fragment).
 Option to reconstruct RCRD's from single or multiple transactions (fragments).
-Option to skip fixups (for broken $LogFile).
+Option to configure broken $LogFile. Useful with carved RCRD's as input.
+Option to skip fixups (for broken $LogFile, typically carved from memory).
 Detailed verbose output into debug.log.
 Configurable comma separated list of lsn's to trigger ultra verbose information about specific transactions into debug.log.
 Configuration for 32-bit OS.
