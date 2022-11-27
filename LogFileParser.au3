@@ -3,15 +3,14 @@
 #AutoIt3Wrapper_Outfile=LogFileParser.exe
 #AutoIt3Wrapper_Outfile_x64=LogFileParser64.exe
 #AutoIt3Wrapper_Compile_Both=y
+#AutoIt3Wrapper_UseX64=y
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.48
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.49
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #AutoIt3Wrapper_AU3Check_Parameters=-w 3 -w 5
-#AutoIt3Wrapper_Run_Au3Stripper=y
-#Au3Stripper_Parameters=/mo
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 
 #include <GuiEdit.au3>
@@ -19,7 +18,6 @@
 #include <Array.au3>
 #Include <String.au3>
 #include <SQLite.au3>
-;#include <SQLite.dll.au3>
 #include <File.au3>
 #include <Math.au3>
 #include "SecureConstants.au3"
@@ -101,7 +99,7 @@ If Not FileExists($SQLite3Exe) Then
 	Exit
 EndIf
 
-$Progversion = "NTFS $LogFile Parser 2.0.0.48"
+$Progversion = "NTFS $LogFile Parser 2.0.0.49"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -214,8 +212,8 @@ Else
 	GUICtrlSetBkColor($ButtonExit, $ButtonColor)
 	GUICtrlSetTip($ButtonExit, "Press ESC to exit")
 
-	$myctredit = GUICtrlCreateEdit("", 0, 290, 600, 85, BitOr($ES_AUTOVSCROLL,$WS_VSCROLL))
-	_GUICtrlEdit_SetLimitText($myctredit, 128000)
+	$myctredit = GUICtrlCreateEdit("", 0, 290, 600, 85, BitOR($ES_AUTOVSCROLL, $WS_VSCROLL, $ES_READONLY))
+	GUICtrlSetBkColor($myctredit, 0xFFFFFF)
 
 	_InjectTimeZoneInfo()
 	_InjectTimestampFormat()
@@ -1024,7 +1022,7 @@ If $TargetMftCsvFile Then
 		& "DATA_LastVCN_2 INTEGER,DATA_VCNs_2 INTEGER,DATA_CompressionUnitSize_2 INTEGER,DATA_AllocatedSize_2 INTEGER,DATA_RealSize_2 INTEGER,DATA_InitializedStreamSize_2 INTEGER,DATA_Name_3 TEXT,DATA_NonResidentFlag_3 INTEGER,DATA_Flags_3 TEXT,DATA_LengthOfAttribute_3 INTEGER," _
 		& "DATA_IndexedFlag_3 INTEGER,DATA_StartVCN_3 INTEGER,DATA_LastVCN_3 INTEGER,DATA_VCNs_3 INTEGER,DATA_CompressionUnitSize_3 INTEGER,DATA_AllocatedSize_3 INTEGER,DATA_RealSize_3 INTEGER,DATA_InitializedStreamSize_3 INTEGER,STANDARD_INFORMATION_ON INTEGER," _
 		& "ATTRIBUTE_LIST_ON INTEGER,FILE_NAME_ON INTEGER,OBJECT_ID_ON INTEGER,SECURITY_DESCRIPTOR_ON INTEGER,VOLUME_NAME_ON INTEGER,VOLUME_INFORMATION_ON INTEGER,DATA_ON INTEGER,INDEX_ROOT_ON INTEGER,INDEX_ALLOCATION_ON INTEGER,BITMAP_ON INTEGER,REPARSE_POINT_ON INTEGER," _
-		& "EA_INFORMATION_ON INTEGER,EA_ON INTEGER,PROPERTY_SET_ON INTEGER,LOGGED_UTILITY_STREAM_ON INTEGER" _
+		& "EA_INFORMATION_ON INTEGER,EA_ON INTEGER,PROPERTY_SET_ON INTEGER,LOGGED_UTILITY_STREAM_ON INTEGER,DT_DataRun TEXT" _
 		& ");", $sOutputFile, $SQLite3Exe)
 	If $SQLiteExecution <> 0 Then
 		MsgBox(0,"Error","Could not create table Mft in database: " & @error)
@@ -7054,7 +7052,7 @@ Func _TranslateErrorLevel()
 EndFunc
 
 Func _DisplayInfo($DebugInfo)
-	GUICtrlSetData($myctredit, $DebugInfo, 1)
+	_GUICtrlEdit_AppendText($myctredit, $DebugInfo)
 EndFunc
 
 Func _SelectLogFile()

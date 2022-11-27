@@ -1,5 +1,12 @@
 LogFileParser Changelog
 
+v2.0.0.49
+Changed license to MIT.
+Fixed GUI bug.
+Updated schema for mft to be compatible with latest mft2csv.
+Now compiled with current autoit 3.3.16.1.
+Verified and included updated sqlite binaries v 3.40.0.0.
+
 v2.0.0.48
 Removed lots of unused code.
 
