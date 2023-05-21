@@ -11,6 +11,7 @@ CREATE TABLE LogFile_UpdateFilename_I30(
 	,lf_RealSize		BIGINT NOT NULL
 	,lf_FileFlags		VARCHAR(128) NOT NULL
 	,lf_ReparseTag		VARCHAR(32) NOT NULL
+	,lf_EaSize			INT(8)
 	,lf_IsRedo          TINYINT(1) NOT NULL
 	,PRIMARY KEY (Id)
 );

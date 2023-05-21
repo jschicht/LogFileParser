@@ -17,6 +17,7 @@ CREATE TABLE LogFile_INDX_I30(
 	,lf_RealSize				BIGINT NOT NULL
 	,lf_FileFlags				VARCHAR(128) NOT NULL
 	,lf_ReparseTag				VARCHAR(32) NOT NULL
+	,lf_EaSize					INT(8)
 	,lf_FileName				VARCHAR(255) NOT NULL
 	,lf_FileNameModified		INT(3) NOT NULL
 	,lf_NameSpace				VARCHAR(9) NOT NULL

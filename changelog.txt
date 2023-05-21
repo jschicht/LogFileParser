@@ -1,5 +1,17 @@
 LogFileParser Changelog
 
+v2.0.0.50
+Performance improvements cutting the processing time in half.
+Several minor bugfixes related to the sqlite handling.
+Relocated libraries into Lib folder.
+Updated sqlite binaries to latest 3.42.
+Bugfixes related to UpdateFileName
+Updates to reparse tags.
+Improvements in the attribute identification and association.
+Extended the indx i30 schema to incorporate EaSize.
+Various improvements in name association.
+Better $I30 handling.
+
 v2.0.0.49
 Changed license to MIT.
 Fixed GUI bug.
