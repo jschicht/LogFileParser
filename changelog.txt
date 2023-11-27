@@ -1,5 +1,19 @@
 LogFileParser Changelog
 
+v2.0.0.51
+Improved support for decoding of single index entry updates for $Secure:$SDH and $Secure:$SII.
+Improved support for decoding of single index entry updates (both redo and undo) for $Reparse:$R and $ObjId:$O.
+Fixed a bug that could cause an app crash with partial security data from $Secure:$SDS.
+Fixed a bug that could cause an infinite loop with partial security data from $Secure:$SDS.
+Improved error handling in $UsnJrnl records parsing which eliminates some corrupt entries and improves detection of "filling to page boundary" entries.
+Improved error handling in $Secure:$SDS handling which eliminates some corrupt entries and leading to more accurate debug logs as well as some minor improvements to accuracy in LogFile.csv.
+Fixed incorrect references in lf_TextInformation form LogFile_UndoWipe_INDX_I30.csv to LogFile_INDX_I30.csv.
+Minor improvement to filename association.
+Improved performance yielding roughly a 20% decrease in processing time.
+Improved decoding of DeleteAttribute through better handling of CreateAttribute in the undo operation.
+Fixed a small bug in the handling of INDEX_ROOT attributes with type $I30.
+Added support for dumping of previous $DATA with DeleteAttribute operations and resident content.
+
 v2.0.0.50
 Performance improvements cutting the processing time in half.
 Several minor bugfixes related to the sqlite handling.
