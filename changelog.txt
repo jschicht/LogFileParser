@@ -1,5 +1,11 @@
 LogFileParser Changelog
 
+v2.0.0.52
+Changed output structure for UpdateFileNameAllocation in LogFile_UpdateFileName_I30.csv.
+New output for UpdateResidentValue for STANDARD_INFORMATION, as LogFile_Mft_StandardInformation.csv.
+Fixed several bugs in the handling of partial STANDARD_INFORMATION updates.
+Fixed bugs relating to older NT style records.
+
 v2.0.0.51
 Improved support for decoding of single index entry updates for $Secure:$SDH and $Secure:$SII.
 Improved support for decoding of single index entry updates (both redo and undo) for $Reparse:$R and $ObjId:$O.

@@ -7,7 +7,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.51
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.52
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #AutoIt3Wrapper_AU3Check_Parameters=-w 3 -w 5
@@ -47,7 +47,7 @@ Global $de2=":",$LogFileSecureSDSCsv,$LogFileSecureSDHCsv,$LogFileSecureSIICsv,$
 Global $TargetSDSOffsetHex,$SecurityDescriptorHash,$SecurityId,$ControlText,$SidOwner,$SidGroup
 Global $SAclRevision,$SAceCount,$SAceTypeText,$SAceFlagsText,$SAceMask,$SAceObjectType,$SAceInheritedObjectType,$SAceSIDString,$SAceObjectFlagsText
 Global $DAclRevision,$DAceCount,$DAceTypeText,$DAceFlagsText,$DAceMask,$DAceObjectType,$DAceInheritedObjectType,$DAceSIDString,$DAceObjectFlagsText
-Global $OpenAttributesArray[0][14],$AttributeNamesDumpArray[0][4],$DirtyPageTableDumpArray32bit[0][10],$DirtyPageTableDumpArray64bit[0][15],$lsn_openattributestable=0,$FileOutputTesterArray[26],$SlackOpenAttributesArray[0][14],$SlackAttributeNamesDumpArray[0][4]
+Global $OpenAttributesArray[0][14],$AttributeNamesDumpArray[0][4],$DirtyPageTableDumpArray32bit[0][10],$DirtyPageTableDumpArray64bit[0][15],$lsn_openattributestable=0,$FileOutputTesterArray[27],$SlackOpenAttributesArray[0][14],$SlackAttributeNamesDumpArray[0][4]
 Global $GlobalFileNamesCounter = 0, $FileNamesArray[0][3]
 Global $GlobalAttrCounter, $AttrArray[0][2]
 Global $LogFileOpenAttributeTableCsv,$LogFileOpenAttributeTableCsvFile,$LogFileDirtyPageTable32bitCsv,$LogFileDirtyPageTable32bitCsvFile,$LogFileDirtyPageTable64bitCsv,$LogFileDirtyPageTable64bitCsvFile,$LogFileBitsInNonresidentBitMapCsv,$LogFileBitsInNonresidentBitMapCsvFile,$LogFileTransactionTableCsv,$LogFileTransactionTableCsvFile
@@ -66,7 +66,7 @@ Global $IntegerErrorVal = -1
 Global $IntegerPartialValReplacement = -2 ;"PARTIAL VALUE"
 Global $MftRefReplacement = -2 ;Parent
 Global $FragmentMode=0, $RebuiltFragment, $LogFileFragmentFile, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $SkipFixups=0, $checkFixups, $CleanUp=0, $checkBrokenLogFile, $BrokenLogFile=0, $RegExPatternHexNotNull = "[1-9a-fA-F]"
-Global $LogFileEntriesObjectIdCsvFile, $LogFileEntriesObjectIdCsv, $HDR_MFTREcordNumber
+Global $LogFileEntriesObjectIdCsvFile, $LogFileEntriesObjectIdCsv, $HDR_MFTREcordNumber, $LogFileStandardInformationCsvFile, $LogFileStandardInformationCsv
 
 Global Const $GUI_EVENT_CLOSE = -3
 Global Const $GUI_CHECKED = 1
@@ -109,7 +109,7 @@ If Not FileExists($sSqlite3_exe) Then
 	Exit
 EndIf
 
-Global $Progversion = "NTFS $LogFile Parser 2.0.0.51"
+Global $Progversion = "NTFS $LogFile Parser 2.0.0.52"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -506,6 +506,7 @@ $FileOutputTesterArray[22] = $LogFileCheckpointRecordCsvFile
 $FileOutputTesterArray[23] = $LogFileDirtyPageTable64bitCsvFile
 $FileOutputTesterArray[24] = $LogFileTransactionHeaderCsvFile
 $FileOutputTesterArray[25] = $LogFileEntriesObjectIdCsvFile
+$FileOutputTesterArray[26] = $LogFileStandardInformationCsvFile
 
 
 _WriteCSVHeader()
@@ -5187,8 +5188,8 @@ Func _Decode_UpdateResidentValue($record,$IsRedo)
 	If $VerboseOn Then _DumpOutput("_Decode_UpdateResidentValue():" & @CRLF)
 	If $IsRedo Then
 		Select
-			Case $record_offset_in_mft = 56 Or $AttributeString = "$STANDARD_INFORMATION"
-				_Decode_StandardInformation($record)
+			Case $record_offset_in_mft = 48 Or $record_offset_in_mft = 56 Or $AttributeString = "$STANDARD_INFORMATION"
+				_Decode_StandardInformation($record, $IsRedo)
 				$AttributeString = "$STANDARD_INFORMATION"
 
 			Case $AttributeString = "$LOGGED_UTILITY_STREAM" And $undo_length > 0
@@ -5211,13 +5212,17 @@ Func _Decode_UpdateResidentValue($record,$IsRedo)
 			Case Else
 				_DumpOutput("Error in _Decode_UpdateResidentValue():" & @CRLF)
 				_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
+				_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
+				_DumpOutput("$record_offset_in_mft: " & $record_offset_in_mft & @CRLF)
+				_DumpOutput("$undo_length: " & $undo_length & @CRLF)
 				_DumpOutput(_HexEncode("0x"&$record) & @CRLF)
 ;				MsgBox(0,"Error","This indicates an unexpected situation at LSN: " & $this_lsn)
 
 		EndSelect
 	Else
 		Select
-			Case $record_offset_in_mft = 56 Or $AttributeString = "$STANDARD_INFORMATION"
+			Case $record_offset_in_mft = 48 Or $record_offset_in_mft = 56 Or $AttributeString = "$STANDARD_INFORMATION"
+				_Decode_StandardInformation($record, $IsRedo)
 
 			Case $AttributeString = "$LOGGED_UTILITY_STREAM"
 
@@ -5589,46 +5594,54 @@ Func _UpdateDataRunInformation($TargetRedoOperation, $TargetAttributeOffset, $Ta
 	Return $ReassembledDatarun
 EndFunc
 
-Func _Decode_StandardInformation($Attribute)
-	Local $SI_Offset = 1-48, $Add="", $f=0, $SI_Size, $SI_CTime_tmp, $SI_ATime_tmp, $SI_MTime_tmp, $SI_RTime_tmp, $SI_OwnerID
+Func _Decode_StandardInformation($Attribute, $IsRedo)
+	Local $__SI_CTime, $__SI_ATime, $__SI_MTime, $__SI_RTime, $__SI_FilePermission, $__SI_MaxVersions, $__SI_VersionNumber, $__SI_ClassID, $__SI_OwnerID, $__SI_SecurityID, $__SI_QuotaCharged, $__SI_USN, $__SI_PartialValue
+	Local $__SI_CTime_Core, $__SI_ATime_Core, $__SI_MTime_Core, $__SI_RTime_Core, $__SI_CTime_Precision, $__SI_ATime_Precision, $__SI_MTime_Precision, $__SI_RTime_Precision
+	Local $SI_Offset = 1-48, $Add="", $f=0, $SI_Size, $__SI_CTime_tmp, $__SI_ATime_tmp, $__SI_MTime_tmp, $__SI_RTime_tmp
 	If $attribute_offset < 24 Then $Attribute = StringTrimLeft($Attribute,24-$attribute_offset) ;For now just strip the attribute header.
 	$SI_Size = StringLen($Attribute)
 
+	If $VerboseOn Then
+		_DumpOutput("_Decode_StandardInformation(): " & @CRLF)
+		_DumpOutput("$attribute_offset: " & $attribute_offset & @CRLF)
+		_DumpOutput("$SI_Size: " & $SI_Size & @CRLF)
+	EndIf
+
 	Select
 		Case $attribute_offset <= 48
-			Local $LoopCounter = 0
+			Local $LoopCounter = 0, $stop = ($attribute_offset - 24)
 			Do
-				If StringLen($Attribute) >= 144 Then ExitLoop
+				If $LoopCounter = $stop Then ExitLoop
 				$LoopCounter += 1
 				$Attribute = "00"&$Attribute
-			Until StringLen($Attribute) >= 144
+			Until $LoopCounter = $stop
 
 			Local $SI_XTime_Fragment = ""
 			Select
 				Case $LoopCounter > 0 And $LoopCounter < 8
-					$TextInformation &= ";CTime in $SI is incomplete. Search debug.log for " & $this_lsn
-					$BytesMissing = 8-$LoopCounter
+					If $IsRedo = 1 Then $TextInformation &= ";CTime in $SI is incomplete. Search debug.log for " & $this_lsn
+;					$BytesMissing = 8-$LoopCounter
 					$BytesMissing = $LoopCounter
 					_DumpOutput("Error in UpdateResidentValue for lsn " & $this_lsn & @CRLF)
 					_DumpOutput("CTime in $SI was incomplete as " & $BytesMissing & " bytes was missing." & @CRLF)
 					$SI_XTime_Fragment = StringMid($Attribute, $SI_Offset + 48 + ($BytesMissing*2), 16 - ($BytesMissing*2))
 				Case $LoopCounter > 8 And $LoopCounter < 16
-					$TextInformation &= ";ATime in $SI is incomplete. Search debug.log for " & $this_lsn
-					$BytesMissing = 16-$LoopCounter ;9
+					If $IsRedo = 1 Then $TextInformation &= ";ATime in $SI is incomplete. Search debug.log for " & $this_lsn
+;					$BytesMissing = 16-$LoopCounter ;9
 					$BytesMissing = $LoopCounter-8
 					_DumpOutput("Error in UpdateResidentValue for lsn " & $this_lsn & @CRLF)
 					_DumpOutput("ATime in $SI was incomplete as " & $BytesMissing & " bytes was missing." & @CRLF)
 					$SI_XTime_Fragment = StringMid($Attribute, $SI_Offset + 64 + ($BytesMissing*2), 16 - ($BytesMissing*2))
 				Case $LoopCounter > 16 And $LoopCounter < 24
-					$TextInformation &= ";MTime in $SI is incomplete. Search debug.log for " & $this_lsn
-					$BytesMissing = 24-$LoopCounter ;17
+					If $IsRedo = 1 Then $TextInformation &= ";MTime in $SI is incomplete. Search debug.log for " & $this_lsn
+;					$BytesMissing = 24-$LoopCounter ;17
 					$BytesMissing = $LoopCounter-16
 					_DumpOutput("Error in UpdateResidentValue for lsn " & $this_lsn & @CRLF)
 					_DumpOutput("MTime in $SI was incomplete as " & $BytesMissing & " bytes was missing." & @CRLF)
 					$SI_XTime_Fragment = StringMid($Attribute, $SI_Offset + 80 + ($BytesMissing*2), 16 - ($BytesMissing*2))
 				Case $LoopCounter > 24 And $LoopCounter < 32
-					$TextInformation &= ";RTime in $SI is incomplete. Search debug.log for " & $this_lsn
-					$BytesMissing = 32-$LoopCounter
+					If $IsRedo = 1 Then $TextInformation &= ";RTime in $SI is incomplete. Search debug.log for " & $this_lsn
+;					$BytesMissing = 32-$LoopCounter
 					$BytesMissing = $LoopCounter-24
 					_DumpOutput("Error in UpdateResidentValue for lsn " & $this_lsn & @CRLF)
 					_DumpOutput("RTime in $SI was incomplete as " & $BytesMissing & " bytes was missing." & @CRLF)
@@ -5671,173 +5684,173 @@ Func _Decode_StandardInformation($Attribute)
 				_DumpOutput("If there is an earlier UpdateResidentValue for this MFT ref, you may be able to resolve the missing byte(s)." & @CRLF & @CRLF)
 			EndIf
 
-			$SI_CTime = StringMid($Attribute, $SI_Offset + 48, 16)
-;			$SI_CTime = _SwapEndian($SI_CTime)
-;			$SI_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_CTime)
-;			$SI_CTime = _WinTime_UTCFileTimeFormat(Dec($SI_CTime,2) - $tDelta, $DateTimeFormat, 2)
+			$__SI_CTime = StringMid($Attribute, $SI_Offset + 48, 16)
+;			$__SI_CTime = _SwapEndian($__SI_CTime)
+;			$__SI_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $__SI_CTime)
+;			$__SI_CTime = _WinTime_UTCFileTimeFormat(Dec($__SI_CTime,2) - $tDelta, $DateTimeFormat, 2)
 ;			If @error Then
-;				$SI_CTime = "-"
+;				$__SI_CTime = "-"
 ;			Else
-;				$SI_CTime = $SI_CTime & ":" & _FillZero(StringRight($SI_CTime_tmp, 4))
+;				$__SI_CTime = $__SI_CTime & ":" & _FillZero(StringRight($__SI_CTime_tmp, 4))
 ;			EndIf
 			;
-			$SI_CTime = _SwapEndian($SI_CTime)
-			$SI_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_CTime)
-			$SI_CTime = _WinTime_UTCFileTimeFormat(Dec($SI_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+			$__SI_CTime = _SwapEndian($__SI_CTime)
+			$__SI_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $__SI_CTime)
+			$__SI_CTime = _WinTime_UTCFileTimeFormat(Dec($__SI_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$SI_CTime = $TimestampErrorVal
+				$__SI_CTime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
-				$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-4)
-				$SI_CTime_Precision = StringRight($SI_CTime,3)
+				$__SI_CTime_Core = StringMid($__SI_CTime,1,StringLen($__SI_CTime)-4)
+				$__SI_CTime_Precision = StringRight($__SI_CTime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$SI_CTime = $SI_CTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_CTime_tmp, 4))
-				$SI_CTime_Core = StringMid($SI_CTime,1,StringLen($SI_CTime)-9)
-				$SI_CTime_Precision = StringRight($SI_CTime,8)
+				$__SI_CTime = $__SI_CTime & $PrecisionSeparator2 & _FillZero(StringRight($__SI_CTime_tmp, 4))
+				$__SI_CTime_Core = StringMid($__SI_CTime,1,StringLen($__SI_CTime)-9)
+				$__SI_CTime_Precision = StringRight($__SI_CTime,8)
 			Else
-				$SI_CTime_Core = $SI_CTime
+				$__SI_CTime_Core = $__SI_CTime
 			EndIf
 			;
-			$SI_ATime = StringMid($Attribute, $SI_Offset + 64, 16)
-;			$SI_ATime = _SwapEndian($SI_ATime)
-;			$SI_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_ATime)
-;			$SI_ATime = _WinTime_UTCFileTimeFormat(Dec($SI_ATime,2) - $tDelta, $DateTimeFormat, 2)
+			$__SI_ATime = StringMid($Attribute, $SI_Offset + 64, 16)
+;			$__SI_ATime = _SwapEndian($__SI_ATime)
+;			$__SI_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $__SI_ATime)
+;			$__SI_ATime = _WinTime_UTCFileTimeFormat(Dec($__SI_ATime,2) - $tDelta, $DateTimeFormat, 2)
 ;			If @error Then
-;				$SI_ATime = "-"
+;				$__SI_ATime = "-"
 ;			Else
-;				$SI_ATime = $SI_ATime & ":" & _FillZero(StringRight($SI_ATime_tmp, 4))
+;				$__SI_ATime = $__SI_ATime & ":" & _FillZero(StringRight($__SI_ATime_tmp, 4))
 ;			EndIf
 			;
-			$SI_ATime = _SwapEndian($SI_ATime)
-			$SI_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_ATime)
-			$SI_ATime = _WinTime_UTCFileTimeFormat(Dec($SI_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+			$__SI_ATime = _SwapEndian($__SI_ATime)
+			$__SI_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $__SI_ATime)
+			$__SI_ATime = _WinTime_UTCFileTimeFormat(Dec($__SI_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$SI_ATime = $TimestampErrorVal
+				$__SI_ATime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
-				$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-4)
-				$SI_ATime_Precision = StringRight($SI_ATime,3)
+				$__SI_ATime_Core = StringMid($__SI_ATime,1,StringLen($__SI_ATime)-4)
+				$__SI_ATime_Precision = StringRight($__SI_ATime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$SI_ATime = $SI_ATime & $PrecisionSeparator2 & _FillZero(StringRight($SI_ATime_tmp, 4))
-				$SI_ATime_Core = StringMid($SI_ATime,1,StringLen($SI_ATime)-9)
-				$SI_ATime_Precision = StringRight($SI_ATime,8)
+				$__SI_ATime = $__SI_ATime & $PrecisionSeparator2 & _FillZero(StringRight($__SI_ATime_tmp, 4))
+				$__SI_ATime_Core = StringMid($__SI_ATime,1,StringLen($__SI_ATime)-9)
+				$__SI_ATime_Precision = StringRight($__SI_ATime,8)
 			Else
-				$SI_ATime_Core = $SI_ATime
+				$__SI_ATime_Core = $__SI_ATime
 			EndIf
 			;
-			$SI_MTime = StringMid($Attribute, $SI_Offset + 80, 16)
-;			$SI_MTime = _SwapEndian($SI_MTime)
-;			$SI_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_MTime)
-;			$SI_MTime = _WinTime_UTCFileTimeFormat(Dec($SI_MTime,2) - $tDelta, $DateTimeFormat, 2)
+			$__SI_MTime = StringMid($Attribute, $SI_Offset + 80, 16)
+;			$__SI_MTime = _SwapEndian($__SI_MTime)
+;			$__SI_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $__SI_MTime)
+;			$__SI_MTime = _WinTime_UTCFileTimeFormat(Dec($__SI_MTime,2) - $tDelta, $DateTimeFormat, 2)
 ;			If @error Then
-;				$SI_MTime = "-"
+;				$__SI_MTime = "-"
 ;			Else
-;				$SI_MTime = $SI_MTime & ":" & _FillZero(StringRight($SI_MTime_tmp, 4))
+;				$__SI_MTime = $__SI_MTime & ":" & _FillZero(StringRight($__SI_MTime_tmp, 4))
 ;			EndIf
 			;
-			$SI_MTime = _SwapEndian($SI_MTime)
-			$SI_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_MTime)
-			$SI_MTime = _WinTime_UTCFileTimeFormat(Dec($SI_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+			$__SI_MTime = _SwapEndian($__SI_MTime)
+			$__SI_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $__SI_MTime)
+			$__SI_MTime = _WinTime_UTCFileTimeFormat(Dec($__SI_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$SI_MTime = $TimestampErrorVal
+				$__SI_MTime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
-				$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-4)
-				$SI_MTime_Precision = StringRight($SI_MTime,3)
+				$__SI_MTime_Core = StringMid($__SI_MTime,1,StringLen($__SI_MTime)-4)
+				$__SI_MTime_Precision = StringRight($__SI_MTime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$SI_MTime = $SI_MTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_MTime_tmp, 4))
-				$SI_MTime_Core = StringMid($SI_MTime,1,StringLen($SI_MTime)-9)
-				$SI_MTime_Precision = StringRight($SI_MTime,8)
+				$__SI_MTime = $__SI_MTime & $PrecisionSeparator2 & _FillZero(StringRight($__SI_MTime_tmp, 4))
+				$__SI_MTime_Core = StringMid($__SI_MTime,1,StringLen($__SI_MTime)-9)
+				$__SI_MTime_Precision = StringRight($__SI_MTime,8)
 			Else
-				$SI_MTime_Core = $SI_MTime
+				$__SI_MTime_Core = $__SI_MTime
 			EndIf
 			;
-			$SI_RTime = StringMid($Attribute, $SI_Offset + 96, 16)
-;			$SI_RTime = _SwapEndian($SI_RTime)
-;			$SI_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_RTime)
-;			$SI_RTime = _WinTime_UTCFileTimeFormat(Dec($SI_RTime,2) - $tDelta, $DateTimeFormat, 2)
+			$__SI_RTime = StringMid($Attribute, $SI_Offset + 96, 16)
+;			$__SI_RTime = _SwapEndian($__SI_RTime)
+;			$__SI_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $__SI_RTime)
+;			$__SI_RTime = _WinTime_UTCFileTimeFormat(Dec($__SI_RTime,2) - $tDelta, $DateTimeFormat, 2)
 ;			If @error Then
-;				$SI_RTime = "-"
+;				$__SI_RTime = "-"
 ;			Else
-;				$SI_RTime = $SI_RTime & ":" & _FillZero(StringRight($SI_RTime_tmp, 4))
+;				$__SI_RTime = $__SI_RTime & ":" & _FillZero(StringRight($__SI_RTime_tmp, 4))
 ;			EndIf
 			;
-			$SI_RTime = _SwapEndian($SI_RTime)
-			$SI_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $SI_RTime)
-			$SI_RTime = _WinTime_UTCFileTimeFormat(Dec($SI_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+			$__SI_RTime = _SwapEndian($__SI_RTime)
+			$__SI_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $__SI_RTime)
+			$__SI_RTime = _WinTime_UTCFileTimeFormat(Dec($__SI_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 			If @error Then
-				$SI_RTime = $TimestampErrorVal
+				$__SI_RTime = $TimestampErrorVal
 			ElseIf $TimestampPrecision = 2 Then
-				$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-4)
-				$SI_RTime_Precision = StringRight($SI_RTime,3)
+				$__SI_RTime_Core = StringMid($__SI_RTime,1,StringLen($__SI_RTime)-4)
+				$__SI_RTime_Precision = StringRight($__SI_RTime,3)
 			ElseIf $TimestampPrecision = 3 Then
-				$SI_RTime = $SI_RTime & $PrecisionSeparator2 & _FillZero(StringRight($SI_RTime_tmp, 4))
-				$SI_RTime_Core = StringMid($SI_RTime,1,StringLen($SI_RTime)-9)
-				$SI_RTime_Precision = StringRight($SI_RTime,8)
+				$__SI_RTime = $__SI_RTime & $PrecisionSeparator2 & _FillZero(StringRight($__SI_RTime_tmp, 4))
+				$__SI_RTime_Core = StringMid($__SI_RTime,1,StringLen($__SI_RTime)-9)
+				$__SI_RTime_Precision = StringRight($__SI_RTime,8)
 			Else
-				$SI_RTime_Core = $SI_RTime
+				$__SI_RTime_Core = $__SI_RTime
 			EndIf
 			;
 			; 16 * 4 = 64
-			If $SI_Size >= 72 Then
-				$SI_FilePermission = StringMid($Attribute, $SI_Offset + 112, 8)
-				$SI_FilePermission = _SwapEndian($SI_FilePermission)
-				$SI_FilePermission = _File_Attributes("0x" & $SI_FilePermission)
+			If $attribute_offset <= 56 Then
+				$__SI_FilePermission = StringMid($Attribute, $SI_Offset + 112, 8)
+				$__SI_FilePermission = _SwapEndian($__SI_FilePermission)
+				$__SI_FilePermission = _File_Attributes("0x" & $__SI_FilePermission)
 			Else
-				$SI_FilePermission = "-"
+				$__SI_FilePermission = "-"
 			EndIf
-			If $SI_Size >= 80 Then
-				$SI_MaxVersions = StringMid($Attribute, $SI_Offset + 120, 8)
-				$SI_MaxVersions = Dec(_SwapEndian($SI_MaxVersions),2)
+			If $attribute_offset <= 60 Then
+				$__SI_MaxVersions = StringMid($Attribute, $SI_Offset + 120, 8)
+				$__SI_MaxVersions = Dec(_SwapEndian($__SI_MaxVersions),2)
 			Else
-				$SI_MaxVersions = $IntegerErrorVal
+				$__SI_MaxVersions = $IntegerErrorVal
 			EndIf
-			If $SI_Size >= 88 Then
-				$SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
-				$SI_VersionNumber = Dec(_SwapEndian($SI_VersionNumber),2)
+			If $attribute_offset <= 64 Then
+				$__SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
+				$__SI_VersionNumber = Dec(_SwapEndian($__SI_VersionNumber),2)
 			Else
-				$SI_VersionNumber = $IntegerErrorVal
+				$__SI_VersionNumber = $IntegerErrorVal
 			EndIf
-			If $SI_Size >= 96 Then
-				$SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
-				$SI_ClassID = Dec(_SwapEndian($SI_ClassID),2)
+			If $attribute_offset <= 68 Then
+				$__SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
+				$__SI_ClassID = Dec(_SwapEndian($__SI_ClassID),2)
 			Else
-				$SI_ClassID = $IntegerErrorVal
+				$__SI_ClassID = $IntegerErrorVal
 			EndIf
-			If $SI_Size >= 104 Then
-				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
-				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
+			If $attribute_offset <= 72 Then
+				$__SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
+				$__SI_OwnerID = Dec(_SwapEndian($__SI_OwnerID),2)
 			Else
-				$SI_OwnerID = $IntegerErrorVal
+				$__SI_OwnerID = $IntegerErrorVal
 			EndIf
-			If $SI_Size >= 112 Then
-				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
-				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
+			If $attribute_offset <= 76 Then
+				$__SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
+				$__SI_SecurityID = Dec(_SwapEndian($__SI_SecurityID),2)
 			Else
-				$SI_SecurityID = $IntegerErrorVal
+				$__SI_SecurityID = $IntegerErrorVal
 			EndIf
-			If $SI_Size >= 128 Then
-				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
-				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
+			If $attribute_offset <= 80 Then
+				$__SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
+				$__SI_QuotaCharged = Dec(_SwapEndian($__SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = $IntegerErrorVal
+				$__SI_QuotaCharged = $IntegerErrorVal
 			EndIf
-			If $SI_Size >= 144 Then
-				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
-				$SI_USN = Dec(_SwapEndian($SI_USN),2)
+			If $attribute_offset <= 88 Then
+				$__SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
+				$__SI_USN = Dec(_SwapEndian($__SI_USN),2)
 			Else
-				$SI_USN = $IntegerErrorVal
+				$__SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 56 And $attribute_offset < 60
 			$SI_Offset = 1-112
-			$SI_CTime = $TimestampErrorVal
-			$SI_ATime = $TimestampErrorVal
-			$SI_MTime = $TimestampErrorVal
-			$SI_RTime = $TimestampErrorVal
+			$__SI_CTime = $TimestampErrorVal
+			$__SI_ATime = $TimestampErrorVal
+			$__SI_MTime = $TimestampErrorVal
+			$__SI_RTime = $TimestampErrorVal
 			If $attribute_offset = 56 Then
-				$SI_FilePermission = StringMid($Attribute, $SI_Offset + 112, 8)
-				$SI_FilePermission = _SwapEndian($SI_FilePermission)
-				$SI_FilePermission = _File_Attributes("0x" & $SI_FilePermission)
+				$__SI_FilePermission = StringMid($Attribute, $SI_Offset + 112, 8)
+				$__SI_FilePermission = _SwapEndian($__SI_FilePermission)
+				$__SI_FilePermission = _File_Attributes("0x" & $__SI_FilePermission)
 			Else
-				$SI_FilePermission = "PARTIAL VALUE"
-				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 112, 8 - ($attribute_offset-56)*2)
+				$__SI_FilePermission = "PARTIAL VALUE"
+				$__SI_PartialValue = StringMid($Attribute, $SI_Offset + 112, 8 - ($attribute_offset-56)*2)
 			EndIf
 ;Adjust the rest of the attribute
 			For $f = 1 To $attribute_offset-56
@@ -5846,60 +5859,60 @@ Func _Decode_StandardInformation($Attribute)
 			$Attribute = $Add&$Attribute
 			$SI_Size = StringLen($Attribute)
 			If $SI_Size >= 16 Then
-				$SI_MaxVersions = StringMid($Attribute, $SI_Offset + 120, 8)
-				$SI_MaxVersions = Dec(_SwapEndian($SI_MaxVersions),2)
+				$__SI_MaxVersions = StringMid($Attribute, $SI_Offset + 120, 8)
+				$__SI_MaxVersions = Dec(_SwapEndian($__SI_MaxVersions),2)
 			Else
-				$SI_MaxVersions = $IntegerErrorVal
+				$__SI_MaxVersions = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 24 Then
-				$SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
-				$SI_VersionNumber = Dec(_SwapEndian($SI_VersionNumber),2)
+				$__SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
+				$__SI_VersionNumber = Dec(_SwapEndian($__SI_VersionNumber),2)
 			Else
-				$SI_VersionNumber = $IntegerErrorVal
+				$__SI_VersionNumber = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 32 Then
-				$SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
-				$SI_ClassID = Dec(_SwapEndian($SI_ClassID),2)
+				$__SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
+				$__SI_ClassID = Dec(_SwapEndian($__SI_ClassID),2)
 			Else
-				$SI_ClassID = $IntegerErrorVal
+				$__SI_ClassID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 40 Then
-				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
-				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
+				$__SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
+				$__SI_OwnerID = Dec(_SwapEndian($__SI_OwnerID),2)
 			Else
-				$SI_OwnerID = $IntegerErrorVal
+				$__SI_OwnerID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 48 Then
-				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
-				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
+				$__SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
+				$__SI_SecurityID = Dec(_SwapEndian($__SI_SecurityID),2)
 			Else
-				$SI_SecurityID = $IntegerErrorVal
+				$__SI_SecurityID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 64 Then
-				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
-				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
+				$__SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
+				$__SI_QuotaCharged = Dec(_SwapEndian($__SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = $IntegerErrorVal
+				$__SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 80 Then
-				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
-				$SI_USN = Dec(_SwapEndian($SI_USN),2)
+				$__SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
+				$__SI_USN = Dec(_SwapEndian($__SI_USN),2)
 			Else
-				$SI_USN = $IntegerErrorVal
+				$__SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 60 And $attribute_offset < 64
 			$SI_Offset = 1-120
-			$SI_CTime = $TimestampErrorVal
-			$SI_ATime = $TimestampErrorVal
-			$SI_MTime = $TimestampErrorVal
-			$SI_RTime = $TimestampErrorVal
-			$SI_FilePermission = "-"
+			$__SI_CTime = $TimestampErrorVal
+			$__SI_ATime = $TimestampErrorVal
+			$__SI_MTime = $TimestampErrorVal
+			$__SI_RTime = $TimestampErrorVal
+			$__SI_FilePermission = "-"
 			If $attribute_offset = 60 Then
-				$SI_MaxVersions = StringMid($Attribute, $SI_Offset + 120, 8)
-				$SI_MaxVersions = Dec(_SwapEndian($SI_MaxVersions),2)
+				$__SI_MaxVersions = StringMid($Attribute, $SI_Offset + 120, 8)
+				$__SI_MaxVersions = Dec(_SwapEndian($__SI_MaxVersions),2)
 			Else
-				$SI_MaxVersions = $IntegerPartialValReplacement
-				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 120, 8 - ($attribute_offset-60)*2)
+				$__SI_MaxVersions = $IntegerPartialValReplacement
+				$__SI_PartialValue = StringMid($Attribute, $SI_Offset + 120, 8 - ($attribute_offset-60)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-60
 				$Add &= "00"
@@ -5907,55 +5920,55 @@ Func _Decode_StandardInformation($Attribute)
 			$Attribute = $Add&$Attribute
 			$SI_Size = StringLen($Attribute)
 			If $SI_Size >= 16 Then
-				$SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
-				$SI_VersionNumber = Dec(_SwapEndian($SI_VersionNumber),2)
+				$__SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
+				$__SI_VersionNumber = Dec(_SwapEndian($__SI_VersionNumber),2)
 			Else
-				$SI_VersionNumber = $IntegerErrorVal
+				$__SI_VersionNumber = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 24 Then
-				$SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
-				$SI_ClassID = Dec(_SwapEndian($SI_ClassID),2)
+				$__SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
+				$__SI_ClassID = Dec(_SwapEndian($__SI_ClassID),2)
 			Else
-				$SI_ClassID = $IntegerErrorVal
+				$__SI_ClassID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 32 Then
-				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
-				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
+				$__SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
+				$__SI_OwnerID = Dec(_SwapEndian($__SI_OwnerID),2)
 			Else
-				$SI_OwnerID = $IntegerErrorVal
+				$__SI_OwnerID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 40 Then
-				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
-				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
+				$__SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
+				$__SI_SecurityID = Dec(_SwapEndian($__SI_SecurityID),2)
 			Else
-				$SI_SecurityID = $IntegerErrorVal
+				$__SI_SecurityID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 56 Then
-				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
-				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
+				$__SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
+				$__SI_QuotaCharged = Dec(_SwapEndian($__SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = $IntegerErrorVal
+				$__SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 80 Then
-				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
-				$SI_USN = Dec(_SwapEndian($SI_USN),2)
+				$__SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
+				$__SI_USN = Dec(_SwapEndian($__SI_USN),2)
 			Else
-				$SI_USN = $IntegerErrorVal
+				$__SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 64 And $attribute_offset < 68
 			$SI_Offset = 1-128
-			$SI_CTime = $TimestampErrorVal
-			$SI_ATime = $TimestampErrorVal
-			$SI_MTime = $TimestampErrorVal
-			$SI_RTime = $TimestampErrorVal
-			$SI_FilePermission = "-"
-			$SI_MaxVersions = $IntegerErrorVal
+			$__SI_CTime = $TimestampErrorVal
+			$__SI_ATime = $TimestampErrorVal
+			$__SI_MTime = $TimestampErrorVal
+			$__SI_RTime = $TimestampErrorVal
+			$__SI_FilePermission = "-"
+			$__SI_MaxVersions = $IntegerErrorVal
 			If $attribute_offset = 64 Then
-				$SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
-				$SI_VersionNumber = Dec(_SwapEndian($SI_VersionNumber),2)
+				$__SI_VersionNumber = StringMid($Attribute, $SI_Offset + 128, 8)
+				$__SI_VersionNumber = Dec(_SwapEndian($__SI_VersionNumber),2)
 			Else
-				$SI_VersionNumber = $IntegerPartialValReplacement
-				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 128, 8 - ($attribute_offset-64)*2)
+				$__SI_VersionNumber = $IntegerPartialValReplacement
+				$__SI_PartialValue = StringMid($Attribute, $SI_Offset + 128, 8 - ($attribute_offset-64)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-64
 				$Add &= "00"
@@ -5963,50 +5976,50 @@ Func _Decode_StandardInformation($Attribute)
 			$Attribute = $Add&$Attribute
 			$SI_Size = StringLen($Attribute)
 			If $SI_Size >= 16 Then
-				$SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
-				$SI_ClassID = Dec(_SwapEndian($SI_ClassID),2)
+				$__SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
+				$__SI_ClassID = Dec(_SwapEndian($__SI_ClassID),2)
 			Else
-				$SI_ClassID = $IntegerErrorVal
+				$__SI_ClassID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 24 Then
-				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
-				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
+				$__SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
+				$__SI_OwnerID = Dec(_SwapEndian($__SI_OwnerID),2)
 			Else
-				$SI_OwnerID = $IntegerErrorVal
+				$__SI_OwnerID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 32 Then
-				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
-				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
+				$__SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
+				$__SI_SecurityID = Dec(_SwapEndian($__SI_SecurityID),2)
 			Else
-				$SI_SecurityID = $IntegerErrorVal
+				$__SI_SecurityID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 48 Then
-				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
-				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
+				$__SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
+				$__SI_QuotaCharged = Dec(_SwapEndian($__SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = $IntegerErrorVal
+				$__SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 64 Then
-				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
-				$SI_USN = Dec(_SwapEndian($SI_USN),2)
+				$__SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
+				$__SI_USN = Dec(_SwapEndian($__SI_USN),2)
 			Else
-				$SI_USN = $IntegerErrorVal
+				$__SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 68 And $attribute_offset < 72
 			$SI_Offset = 1-136
-			$SI_CTime = $TimestampErrorVal
-			$SI_ATime = $TimestampErrorVal
-			$SI_MTime = $TimestampErrorVal
-			$SI_RTime = $TimestampErrorVal
-			$SI_FilePermission = "-"
-			$SI_MaxVersions = $IntegerErrorVal
-			$SI_VersionNumber = $IntegerErrorVal
+			$__SI_CTime = $TimestampErrorVal
+			$__SI_ATime = $TimestampErrorVal
+			$__SI_MTime = $TimestampErrorVal
+			$__SI_RTime = $TimestampErrorVal
+			$__SI_FilePermission = "-"
+			$__SI_MaxVersions = $IntegerErrorVal
+			$__SI_VersionNumber = $IntegerErrorVal
 			If $attribute_offset = 68 Then
-				$SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
-				$SI_ClassID = Dec(_SwapEndian($SI_ClassID),2)
+				$__SI_ClassID = StringMid($Attribute, $SI_Offset + 136, 8)
+				$__SI_ClassID = Dec(_SwapEndian($__SI_ClassID),2)
 			Else
-				$SI_ClassID = $IntegerPartialValReplacement
-				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 136, 8 - ($attribute_offset-68)*2)
+				$__SI_ClassID = $IntegerPartialValReplacement
+				$__SI_PartialValue = StringMid($Attribute, $SI_Offset + 136, 8 - ($attribute_offset-68)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-68
 				$Add &= "00"
@@ -6014,45 +6027,45 @@ Func _Decode_StandardInformation($Attribute)
 			$Attribute = $Add&$Attribute
 			$SI_Size = StringLen($Attribute)
 			If $SI_Size >= 16 Then
-				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
-				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
+				$__SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
+				$__SI_OwnerID = Dec(_SwapEndian($__SI_OwnerID),2)
 			Else
-				$SI_OwnerID = $IntegerErrorVal
+				$__SI_OwnerID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 24 Then
-				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
-				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
+				$__SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
+				$__SI_SecurityID = Dec(_SwapEndian($__SI_SecurityID),2)
 			Else
-				$SI_SecurityID = $IntegerErrorVal
+				$__SI_SecurityID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 40 Then
-				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
-				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
+				$__SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
+				$__SI_QuotaCharged = Dec(_SwapEndian($__SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = $IntegerErrorVal
+				$__SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 56 Then
-				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
-				$SI_USN = Dec(_SwapEndian($SI_USN),2)
+				$__SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
+				$__SI_USN = Dec(_SwapEndian($__SI_USN),2)
 			Else
-				$SI_USN = $IntegerErrorVal
+				$__SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 72 And $attribute_offset < 76
 			$SI_Offset = 1-144
-			$SI_CTime = $TimestampErrorVal
-			$SI_ATime = $TimestampErrorVal
-			$SI_MTime = $TimestampErrorVal
-			$SI_RTime = $TimestampErrorVal
-			$SI_FilePermission = "-"
-			$SI_MaxVersions = $IntegerErrorVal
-			$SI_VersionNumber = $IntegerErrorVal
-			$SI_ClassID = $IntegerErrorVal
+			$__SI_CTime = $TimestampErrorVal
+			$__SI_ATime = $TimestampErrorVal
+			$__SI_MTime = $TimestampErrorVal
+			$__SI_RTime = $TimestampErrorVal
+			$__SI_FilePermission = "-"
+			$__SI_MaxVersions = $IntegerErrorVal
+			$__SI_VersionNumber = $IntegerErrorVal
+			$__SI_ClassID = $IntegerErrorVal
 			If $attribute_offset = 72 Then
-				$SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
-				$SI_OwnerID = Dec(_SwapEndian($SI_OwnerID),2)
+				$__SI_OwnerID = StringMid($Attribute, $SI_Offset + 144, 8)
+				$__SI_OwnerID = Dec(_SwapEndian($__SI_OwnerID),2)
 			Else
-				$SI_OwnerID = $IntegerPartialValReplacement
-				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 144, 8 - ($attribute_offset-72)*2)
+				$__SI_OwnerID = $IntegerPartialValReplacement
+				$__SI_PartialValue = StringMid($Attribute, $SI_Offset + 144, 8 - ($attribute_offset-72)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-72
 				$Add &= "00"
@@ -6060,40 +6073,40 @@ Func _Decode_StandardInformation($Attribute)
 			$Attribute = $Add&$Attribute
 			$SI_Size = StringLen($Attribute)
 			If $SI_Size >= 16 Then
-				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
-				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
+				$__SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
+				$__SI_SecurityID = Dec(_SwapEndian($__SI_SecurityID),2)
 			Else
-				$SI_SecurityID = $IntegerErrorVal
+				$__SI_SecurityID = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 32 Then
-				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
-				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
+				$__SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
+				$__SI_QuotaCharged = Dec(_SwapEndian($__SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = $IntegerErrorVal
+				$__SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 48 Then
-				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
-				$SI_USN = Dec(_SwapEndian($SI_USN),2)
+				$__SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
+				$__SI_USN = Dec(_SwapEndian($__SI_USN),2)
 			Else
-				$SI_USN = $IntegerErrorVal
+				$__SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 76 And $attribute_offset < 80
 			$SI_Offset = 1-152
-			$SI_CTime = $TimestampErrorVal
-			$SI_ATime = $TimestampErrorVal
-			$SI_MTime = $TimestampErrorVal
-			$SI_RTime = $TimestampErrorVal
-			$SI_FilePermission = "-"
-			$SI_MaxVersions = $IntegerErrorVal
-			$SI_VersionNumber = $IntegerErrorVal
-			$SI_ClassID = $IntegerErrorVal
-			$SI_OwnerID = $IntegerErrorVal
+			$__SI_CTime = $TimestampErrorVal
+			$__SI_ATime = $TimestampErrorVal
+			$__SI_MTime = $TimestampErrorVal
+			$__SI_RTime = $TimestampErrorVal
+			$__SI_FilePermission = "-"
+			$__SI_MaxVersions = $IntegerErrorVal
+			$__SI_VersionNumber = $IntegerErrorVal
+			$__SI_ClassID = $IntegerErrorVal
+			$__SI_OwnerID = $IntegerErrorVal
 			If $attribute_offset = 76 Then
-				$SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
-				$SI_SecurityID = Dec(_SwapEndian($SI_SecurityID),2)
+				$__SI_SecurityID = StringMid($Attribute, $SI_Offset + 152, 8)
+				$__SI_SecurityID = Dec(_SwapEndian($__SI_SecurityID),2)
 			Else
-				$SI_SecurityID = $IntegerPartialValReplacement
-				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 152, 8 - ($attribute_offset-76)*2)
+				$__SI_SecurityID = $IntegerPartialValReplacement
+				$__SI_PartialValue = StringMid($Attribute, $SI_Offset + 152, 8 - ($attribute_offset-76)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-76
 				$Add &= "00"
@@ -6101,35 +6114,35 @@ Func _Decode_StandardInformation($Attribute)
 			$Attribute = $Add&$Attribute
 			$SI_Size = StringLen($Attribute)
 			If $SI_Size >= 24 Then
-				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
-				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
+				$__SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
+				$__SI_QuotaCharged = Dec(_SwapEndian($__SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = $IntegerErrorVal
+				$__SI_QuotaCharged = $IntegerErrorVal
 			EndIf
 			If $SI_Size >= 40 Then
-				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
-				$SI_USN = Dec(_SwapEndian($SI_USN),2)
+				$__SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
+				$__SI_USN = Dec(_SwapEndian($__SI_USN),2)
 			Else
-				$SI_USN = $IntegerErrorVal
+				$__SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 80 And $attribute_offset < 88
 			$SI_Offset = 1-160
-			$SI_CTime = $TimestampErrorVal
-			$SI_ATime = $TimestampErrorVal
-			$SI_MTime = $TimestampErrorVal
-			$SI_RTime = $TimestampErrorVal
-			$SI_FilePermission = "-"
-			$SI_MaxVersions = $IntegerErrorVal
-			$SI_VersionNumber = $IntegerErrorVal
-			$SI_ClassID = $IntegerErrorVal
-			$SI_OwnerID = $IntegerErrorVal
-			$SI_SecurityID = $IntegerErrorVal
+			$__SI_CTime = $TimestampErrorVal
+			$__SI_ATime = $TimestampErrorVal
+			$__SI_MTime = $TimestampErrorVal
+			$__SI_RTime = $TimestampErrorVal
+			$__SI_FilePermission = "-"
+			$__SI_MaxVersions = $IntegerErrorVal
+			$__SI_VersionNumber = $IntegerErrorVal
+			$__SI_ClassID = $IntegerErrorVal
+			$__SI_OwnerID = $IntegerErrorVal
+			$__SI_SecurityID = $IntegerErrorVal
 			If $attribute_offset = 80 Then
-				$SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
-				$SI_QuotaCharged = Dec(_SwapEndian($SI_QuotaCharged),2)
+				$__SI_QuotaCharged = StringMid($Attribute, $SI_Offset + 160, 16)
+				$__SI_QuotaCharged = Dec(_SwapEndian($__SI_QuotaCharged),2)
 			Else
-				$SI_QuotaCharged = $IntegerPartialValReplacement
-				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 160, 16 - ($attribute_offset-80)*2)
+				$__SI_QuotaCharged = $IntegerPartialValReplacement
+				$__SI_PartialValue = StringMid($Attribute, $SI_Offset + 160, 16 - ($attribute_offset-80)*2)
 			EndIf
 			For $f = 1 To $attribute_offset-80
 				$Add &= "00"
@@ -6137,52 +6150,79 @@ Func _Decode_StandardInformation($Attribute)
 			$Attribute = $Add&$Attribute
 			$SI_Size = StringLen($Attribute)
 			If $SI_Size = 16 Then
-				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
-				$SI_USN = Dec(_SwapEndian($SI_USN),2)
+				$__SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
+				$__SI_USN = Dec(_SwapEndian($__SI_USN),2)
 			Else
-				$SI_USN = $IntegerErrorVal
+				$__SI_USN = $IntegerErrorVal
 			EndIf
 		Case $attribute_offset >= 88 And $attribute_offset < 95
 			$SI_Offset = 1-176
-			$SI_CTime = $TimestampErrorVal
-			$SI_ATime = $TimestampErrorVal
-			$SI_MTime = $TimestampErrorVal
-			$SI_RTime = $TimestampErrorVal
-			$SI_FilePermission = "-"
-			$SI_MaxVersions = $IntegerErrorVal
-			$SI_VersionNumber = $IntegerErrorVal
-			$SI_ClassID = $IntegerErrorVal
-			$SI_OwnerID = $IntegerErrorVal
-			$SI_SecurityID = $IntegerErrorVal
-			$SI_QuotaCharged = $IntegerErrorVal
+			$__SI_CTime = $TimestampErrorVal
+			$__SI_ATime = $TimestampErrorVal
+			$__SI_MTime = $TimestampErrorVal
+			$__SI_RTime = $TimestampErrorVal
+			$__SI_FilePermission = "-"
+			$__SI_MaxVersions = $IntegerErrorVal
+			$__SI_VersionNumber = $IntegerErrorVal
+			$__SI_ClassID = $IntegerErrorVal
+			$__SI_OwnerID = $IntegerErrorVal
+			$__SI_SecurityID = $IntegerErrorVal
+			$__SI_QuotaCharged = $IntegerErrorVal
 			If $attribute_offset = 88 Then
-				$SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
-				$SI_USN = Dec(_SwapEndian($SI_USN),2)
+				$__SI_USN = StringMid($Attribute, $SI_Offset + 176, 16)
+				$__SI_USN = Dec(_SwapEndian($__SI_USN),2)
 			Else
-				$SI_USN = $IntegerPartialValReplacement
-				$SI_PartialValue = StringMid($Attribute, $SI_Offset + 176, 16 - ($attribute_offset-88)*2)
+				$__SI_USN = $IntegerPartialValReplacement
+				$__SI_PartialValue = StringMid($Attribute, $SI_Offset + 176, 16 - ($attribute_offset-88)*2)
 			EndIf
 		EndSelect
-	If $SI_USN <> $IntegerErrorVal Then _WriteLogFileDataRunsCsv()
+	If $__SI_USN <> $IntegerErrorVal Then _WriteLogFileDataRunsCsv()
 	If $VerboseOn Then
 		_DumpOutput("The rebuilt $STANDARD_INFORMATION: " & @CRLF)
 		_DumpOutput(_HexEncode("0x"&$Attribute) & @CRLF)
 ;		_DumpOutput("$SI_HEADER_Flags: " & $SI_HEADER_Flags & @CRLF)
-		_DumpOutput("$SI_CTime: " & $SI_CTime & @CRLF)
-		_DumpOutput("$SI_ATime: " & $SI_ATime & @CRLF)
-		_DumpOutput("$SI_MTime: " & $SI_MTime & @CRLF)
-		_DumpOutput("$SI_RTime: " & $SI_RTime & @CRLF)
-		_DumpOutput("$SI_FilePermission: " & $SI_FilePermission & @CRLF)
-		_DumpOutput("$SI_MaxVersions: " & $SI_MaxVersions & @CRLF)
-		_DumpOutput("$SI_VersionNumber: " & $SI_VersionNumber & @CRLF)
-		_DumpOutput("$SI_ClassID: " & $SI_ClassID & @CRLF)
-		_DumpOutput("$SI_OwnerID: " & $SI_OwnerID & @CRLF)
-		_DumpOutput("$SI_SecurityID: " & $SI_SecurityID & @CRLF)
-		_DumpOutput("$SI_QuotaCharged: " & $SI_QuotaCharged & @CRLF)
-		_DumpOutput("$SI_USN: " & $SI_USN & @CRLF)
-		_DumpOutput("$SI_PartialValue: " & $SI_PartialValue & @CRLF)
+		_DumpOutput("$__SI_CTime: " & $__SI_CTime & @CRLF)
+		_DumpOutput("$__SI_ATime: " & $__SI_ATime & @CRLF)
+		_DumpOutput("$__SI_MTime: " & $__SI_MTime & @CRLF)
+		_DumpOutput("$__SI_RTime: " & $__SI_RTime & @CRLF)
+		_DumpOutput("$__SI_FilePermission: " & $__SI_FilePermission & @CRLF)
+		_DumpOutput("$__SI_MaxVersions: " & $__SI_MaxVersions & @CRLF)
+		_DumpOutput("$__SI_VersionNumber: " & $__SI_VersionNumber & @CRLF)
+		_DumpOutput("$__SI_ClassID: " & $__SI_ClassID & @CRLF)
+		_DumpOutput("$__SI_OwnerID: " & $__SI_OwnerID & @CRLF)
+		_DumpOutput("$__SI_SecurityID: " & $__SI_SecurityID & @CRLF)
+		_DumpOutput("$__SI_QuotaCharged: " & $__SI_QuotaCharged & @CRLF)
+		_DumpOutput("$__SI_USN: " & $__SI_USN & @CRLF)
+		_DumpOutput("$__SI_PartialValue: " & $__SI_PartialValue & @CRLF)
+	EndIf
+
+	FileWrite($LogFileStandardInformationCsv, $RecordOffset&$de&$this_lsn&$de&$IsRedo&$de&$PredictedRefNumber&$de&$FN_Name &$de& $__SI_CTime&$de&$__SI_ATime&$de&$__SI_MTime&$de&$__SI_RTime&$de&$__SI_FilePermission&$de&$__SI_MaxVersions&$de&$__SI_VersionNumber&$de&$__SI_ClassID&$de&$__SI_SecurityID&$de&$__SI_QuotaCharged&$de&$__SI_USN&$de&$__SI_PartialValue&@CRLF)
+
+	If $IsRedo = 1 Then
+		$SI_CTime = $__SI_CTime
+		$SI_ATime = $__SI_ATime
+		$SI_MTime = $__SI_MTime
+		$SI_RTime = $__SI_RTime
+		$SI_FilePermission = $__SI_FilePermission
+		$SI_MaxVersions = $__SI_MaxVersions
+		$SI_VersionNumber = $__SI_VersionNumber
+		$SI_ClassID = $__SI_ClassID
+		;$SI_OwnerID = $__SI_OwnerID
+		$SI_SecurityID = $__SI_SecurityID
+		$SI_QuotaCharged = $__SI_QuotaCharged
+		$SI_USN = $__SI_USN
+		$SI_PartialValue = $__SI_PartialValue
+		$SI_CTime_Core = $__SI_CTime_Core
+		$SI_ATime_Core = $__SI_ATime_Core
+		$SI_MTime_Core = $__SI_MTime_Core
+		$SI_RTime_Core = $__SI_RTime_Core
+		$SI_CTime_Precision = $__SI_CTime_Precision
+		$SI_ATime_Precision = $__SI_ATime_Precision
+		$SI_MTime_Precision = $__SI_MTime_Precision
+		$SI_RTime_Precision = $__SI_RTime_Precision
 	EndIf
 EndFunc
+
 
 Func _DecodeSourceInfoFlag($input)
 	Select
@@ -6707,6 +6747,14 @@ Func _PrepareOutput($OutputDir)
 		Exit
 	EndIf
 ;	_DebugOut("Created output file: " & $LogFileEntriesObjectIdCsvFile)
+
+	$LogFileStandardInformationCsvFile = $ParserOutDir & "\LogFile_Mft_StandardInformation.csv"
+	$LogFileStandardInformationCsv = FileOpen($LogFileStandardInformationCsvFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileStandardInformationCsvFile)
+		Exit
+	EndIf
+;	_DebugOut("Created output file: " & $LogFileStandardInformationCsvFile)
 EndFunc
 
 Func _WriteCSVExtraHeader()
@@ -6729,8 +6777,10 @@ Func _WriteCSVHeader()
 ;	$LogFile_UsnJrnl_Csv_Header = "MFTReference"&$de&"MFTParentReference"&$de&"USN"&$de&"Timestamp"&$de&"Reason"&$de&"SourceInfo"&$de&"FileAttributes"&$de&"FileName"&$de&"FileNameModified"
 	$LogFile_UsnJrnl_Csv_Header = "FileName"&$de&"USN"&$de&"Timestamp"&$de&"Reason"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"MFTParentReference"&$de&"ParentReferenceSeqNo"&$de&"FileAttributes"&$de&"MajorVersion"&$de&"MinorVersion"&$de&"SourceInfo"&$de&"SecurityId"
 	FileWrite($LogFileUsnJrnlCsv, $LogFile_UsnJrnl_Csv_Header & @CRLF)
-	$LogFile_UpdateFileName_Csv_Header = "lf_Offset"&$de&"lf_LSN"&$de&"lf_CTime"&$de&"lf_ATime"&$de&"lf_MTime"&$de&"lf_RTime"&$de&"lf_AllocSize"&$de&"lf_RealSize"&$de&"lf_FileFlags"&$de&"lf_ReparseTag"&$de&"lf_EaSize"&$de&"lf_IsRedo"
+	$LogFile_UpdateFileName_Csv_Header = "lf_Offset"&$de&"lf_LSN"&$de&"is_redo"&$de&"lf_ParentMFTReference"&$de&"lf_CTime"&$de&"lf_ATime"&$de&"lf_MTime"&$de&"lf_RTime"&$de&"lf_AllocSize"&$de&"lf_RealSize"&$de&"lf_FileFlags"&$de&"lf_ReparseTag"&$de&"lf_EaSize"
 	FileWrite($LogFileUpdateFileNameCsv, $LogFile_UpdateFileName_Csv_Header & @CRLF)
+	$LogFile_SI_Header = "lf_Offset"&$de&"lf_LSN"&$de&"is_redo"&$de&"lf_MFTReference"&$de&"lf_FileName"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"
+	FileWrite($LogFileStandardInformationCsv, $LogFile_SI_Header & @CRLF)
 EndFunc
 
 Func _WriteCSVExtra()
@@ -13771,7 +13821,7 @@ Func _Decode_UpdateFileName($attribute,$IsRedo)
 ;		If $ReparseTag <> "ZERO" Then $TextInformation &= ";ReparseTag="&$ReparseTag
 		$TextInformation &= ";See LogFile_UpdateFileName_I30.csv"
 	EndIf
-	FileWrite($LogFileUpdateFileNameCsv, $RecordOffset & $de & $this_lsn & $de & $SI_CTime & $de & $SI_ATime & $de & $SI_MTime & $de & $SI_RTime & $de & $FN_AllocSize & $de & $FN_RealSize & $de & $FN_Flags & $de & $ReparseTag & $de & $EaSize & $de & $IsRedo & @CRLF)
+	FileWrite($LogFileUpdateFileNameCsv, $RecordOffset & $de & $this_lsn & $de & $IsRedo & $de & $PredictedRefNumber & $de & $SI_CTime & $de & $SI_ATime & $de & $SI_MTime & $de & $SI_RTime & $de & $FN_AllocSize & $de & $FN_RealSize & $de & $FN_Flags & $de & $ReparseTag & $de & $EaSize & @CRLF)
 EndFunc
 
 Func ExitPgm()
