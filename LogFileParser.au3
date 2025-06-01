@@ -7,7 +7,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=$LogFile parser utility for NTFS
 #AutoIt3Wrapper_Res_Description=$LogFile parser utility for NTFS
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.52
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.53
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #AutoIt3Wrapper_Res_requestedExecutionLevel=asInvoker
 #AutoIt3Wrapper_AU3Check_Parameters=-w 3 -w 5
@@ -29,7 +29,7 @@ Global $CharReplacement=":", $de="|", $PrecisionSeparator=".", $PrecisionSeparat
 Global $begin, $ElapsedTime, $CurrentRecord, $i, $PreviousUsn,$PreviousUsnFileName, $PreviousRedoOp, $PreviousAttribute, $PreviousUsnReason, $undo_length, $RealMftRef, $PreviousRealRef, $FromRcrdSlack, $IncompleteTransaction=0
 Global $ProgressLogFile, $ProgressReconstruct, $CurrentProgress=-1, $ProgressStatus, $ProgressUsnJrnl, $ProgressSize
 Global $CurrentFileOffset, $InputFileSize, $MaxRecords, $Record_Size=4096, $SectorSize=512, $Remainder = "", $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"), $PredictedRefNumber, $LogFileCsv, $LogFileIndxCsv, $LogFileDataRunsCsv, $LogFileDataRunsCsvFile, $LogFileDataRunsModCsv, $NtfsDbFile, $LogFileCsvFile, $LogFileIndxCsvfile, $LogFileDataRunsModCsvfile, $LogFileUsnJrnlCsv,$LogFileUsnJrnlCsvFile;$LogFileUndoWipeIndxCsv, $LogFileUndoWipeIndxCsvfile,
-Global $RecordOffset, $this_lsn, $client_previous_lsn, $redo_operation, $undo_operation, $record_offset_in_mft, $attribute_offset, $hOutFileMFT, $tBuffer, $nBytes2, $HDR_BaseRecord, $FilePath, $HDR_SequenceNo
+Global $RecordOffset, $this_lsn, $client_previous_lsn, $redo_operation, $undo_operation, $record_offset_in_mft, $attribute_offset, $hOutFileMFT, $tBuffer, $nBytes2, $HDR_BaseRecord, $FilePath, $HDR_SequenceNo, $HDR_LSN, $HDR_Flags
 Global $nBytes, $rFile, $DataRunArr[2][18], $NewDataRunArr[1][18], $RowsProcessed, $MaxRows, $hQuery, $aRow, $aRow2, $iRows, $iColumns, $aRes, $sOutputFile
 Global $RSTRsig = "52535452", $RCRDsig = "52435244", $BAADsig = "42414144", $CHKDsig = "43484d44", $Emptysig = "ffffffff"
 Global $SI_CTime, $SI_ATime, $SI_MTime, $SI_RTime, $SI_FilePermission, $SI_MaxVersions, $SI_VersionNumber, $SI_ClassID, $SI_SecurityID, $SI_QuotaCharged, $SI_USN, $SI_PartialValue
@@ -47,7 +47,7 @@ Global $de2=":",$LogFileSecureSDSCsv,$LogFileSecureSDHCsv,$LogFileSecureSIICsv,$
 Global $TargetSDSOffsetHex,$SecurityDescriptorHash,$SecurityId,$ControlText,$SidOwner,$SidGroup
 Global $SAclRevision,$SAceCount,$SAceTypeText,$SAceFlagsText,$SAceMask,$SAceObjectType,$SAceInheritedObjectType,$SAceSIDString,$SAceObjectFlagsText
 Global $DAclRevision,$DAceCount,$DAceTypeText,$DAceFlagsText,$DAceMask,$DAceObjectType,$DAceInheritedObjectType,$DAceSIDString,$DAceObjectFlagsText
-Global $OpenAttributesArray[0][14],$AttributeNamesDumpArray[0][4],$DirtyPageTableDumpArray32bit[0][10],$DirtyPageTableDumpArray64bit[0][15],$lsn_openattributestable=0,$FileOutputTesterArray[27],$SlackOpenAttributesArray[0][14],$SlackAttributeNamesDumpArray[0][4]
+Global $OpenAttributesArray[0][14],$AttributeNamesDumpArray[0][4],$DirtyPageTableDumpArray32bit[0][10],$DirtyPageTableDumpArray64bit[0][15],$lsn_openattributestable=0,$FileOutputTesterArray[28],$SlackOpenAttributesArray[0][14],$SlackAttributeNamesDumpArray[0][4]
 Global $GlobalFileNamesCounter = 0, $FileNamesArray[0][3]
 Global $GlobalAttrCounter, $AttrArray[0][2]
 Global $LogFileOpenAttributeTableCsv,$LogFileOpenAttributeTableCsvFile,$LogFileDirtyPageTable32bitCsv,$LogFileDirtyPageTable32bitCsvFile,$LogFileDirtyPageTable64bitCsv,$LogFileDirtyPageTable64bitCsvFile,$LogFileBitsInNonresidentBitMapCsv,$LogFileBitsInNonresidentBitMapCsvFile,$LogFileTransactionTableCsv,$LogFileTransactionTableCsvFile
@@ -66,7 +66,7 @@ Global $IntegerErrorVal = -1
 Global $IntegerPartialValReplacement = -2 ;"PARTIAL VALUE"
 Global $MftRefReplacement = -2 ;Parent
 Global $FragmentMode=0, $RebuiltFragment, $LogFileFragmentFile, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $SkipFixups=0, $checkFixups, $CleanUp=0, $checkBrokenLogFile, $BrokenLogFile=0, $RegExPatternHexNotNull = "[1-9a-fA-F]"
-Global $LogFileEntriesObjectIdCsvFile, $LogFileEntriesObjectIdCsv, $HDR_MFTREcordNumber, $LogFileStandardInformationCsvFile, $LogFileStandardInformationCsv
+Global $LogFileEntriesObjectIdCsvFile, $LogFileEntriesObjectIdCsv, $HDR_MFTREcordNumber, $LogFileStandardInformationCsvFile, $LogFileStandardInformationCsv, $LogFileDataContentFile, $LogFileDataContent
 
 Global Const $GUI_EVENT_CLOSE = -3
 Global Const $GUI_CHECKED = 1
@@ -108,8 +108,12 @@ If Not FileExists($sSqlite3_exe) Then
 	MsgBox(0,"Error","sqlite3.exe not found at: " & $sSqlite3_exe)
 	Exit
 EndIf
+If StringInStr($sSqlite3_exe, " ") Then
+	MsgBox(0,"Error","Detected whitespace in program path which unfortunately is not supported.")
+	Exit
+EndIf
 
-Global $Progversion = "NTFS $LogFile Parser 2.0.0.52"
+Global $Progversion = "NTFS $LogFile Parser 2.0.0.53"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -507,6 +511,7 @@ $FileOutputTesterArray[23] = $LogFileDirtyPageTable64bitCsvFile
 $FileOutputTesterArray[24] = $LogFileTransactionHeaderCsvFile
 $FileOutputTesterArray[25] = $LogFileEntriesObjectIdCsvFile
 $FileOutputTesterArray[26] = $LogFileStandardInformationCsvFile
+$FileOutputTesterArray[27] = $LogFileDataContentFile
 
 
 _WriteCSVHeader()
@@ -937,7 +942,7 @@ If $DoReconstructDataRuns Then
 	EndIf
 EndIf
 
-$SQLiteExecution = _SQLite_Exec($hDB, "CREATE TABLE LogFile (lf_Offset TEXT,lf_MFTReference INTEGER,lf_RealMFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_LSN INTEGER,lf_LSNPrevious INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_FileName TEXT,lf_CurrentAttribute TEXT,lf_TextInformation TEXT,lf_UsnJrlFileName TEXT,lf_UsnJrlMFTReference INTEGER,lf_UsnJrlMFTParentReference INTEGER,lf_UsnJrlTimestamp TEXT,lf_UsnJrlReason TEXT,lf_UsnJrnlUsn INTEGER,lf_SI_CTime TEXT,lf_SI_ATime TEXT,lf_SI_MTime TEXT,lf_SI_RTime TEXT,lf_SI_FilePermission TEXT,lf_SI_MaxVersions INTEGER,lf_SI_VersionNumber INTEGER,lf_SI_ClassID INTEGER,lf_SI_SecurityID INTEGER,lf_SI_QuotaCharged INTEGER,lf_SI_USN INTEGER,lf_SI_PartialValue TEXT,lf_FN_CTime TEXT,lf_FN_ATime TEXT,lf_FN_MTime TEXT,lf_FN_RTime TEXT,lf_FN_AllocSize INTEGER,lf_FN_RealSize INTEGER,lf_FN_Flags TEXT,lf_FN_Namespace TEXT,lf_DT_StartVCN INTEGER,lf_DT_LastVCN INTEGER,lf_DT_ComprUnitSize INTEGER,lf_DT_AllocSize INTEGER,lf_DT_RealSize INTEGER,lf_DT_InitStreamSize INTEGER,lf_DT_DataRuns TEXT,lf_DT_Name TEXT,lf_FileNameModified INTEGER,lf_RedoChunkSize INTEGER,lf_UndoChunkSize INTEGER,lf_client_index INTEGER,lf_record_type INTEGER,lf_transaction_id INTEGER,lf_flags INTEGER,lf_target_attribute INTEGER,lf_lcns_to_follow INTEGER,lf_attribute_offset INTEGER,lf_MftClusterIndex INTEGER,lf_target_vcn INTEGER,lf_target_lcn INTEGER,InOpenAttributeTable INTEGER,FromRcrdSlack INTEGER,IncompleteTransaction INTEGER);")
+$SQLiteExecution = _SQLite_Exec($hDB, "CREATE TABLE LogFile (lf_Offset TEXT,lf_MFTReference INTEGER,lf_MftHdr_Seq INTEGER,lf_MftHdr_Lsn INTEGER,lf_MftHdr_Flags TEXT,lf_RealMFTReference INTEGER,lf_MFTBaseRecRef INTEGER,lf_LSN INTEGER,lf_LSNPrevious INTEGER,lf_RedoOperation TEXT,lf_UndoOperation TEXT,lf_OffsetInMft INTEGER,lf_FileName TEXT,lf_CurrentAttribute TEXT,lf_TextInformation TEXT,lf_UsnJrlFileName TEXT,lf_UsnJrlMFTReference INTEGER,lf_UsnJrlMFTParentReference INTEGER,lf_UsnJrlTimestamp TEXT,lf_UsnJrlReason TEXT,lf_UsnJrnlUsn INTEGER,lf_SI_CTime TEXT,lf_SI_ATime TEXT,lf_SI_MTime TEXT,lf_SI_RTime TEXT,lf_SI_FilePermission TEXT,lf_SI_MaxVersions INTEGER,lf_SI_VersionNumber INTEGER,lf_SI_ClassID INTEGER,lf_SI_SecurityID INTEGER,lf_SI_QuotaCharged INTEGER,lf_SI_USN INTEGER,lf_SI_PartialValue TEXT,lf_FN_CTime TEXT,lf_FN_ATime TEXT,lf_FN_MTime TEXT,lf_FN_RTime TEXT,lf_FN_AllocSize INTEGER,lf_FN_RealSize INTEGER,lf_FN_Flags TEXT,lf_FN_Namespace TEXT,lf_DT_StartVCN INTEGER,lf_DT_LastVCN INTEGER,lf_DT_ComprUnitSize INTEGER,lf_DT_AllocSize INTEGER,lf_DT_RealSize INTEGER,lf_DT_InitStreamSize INTEGER,lf_DT_DataRuns TEXT,lf_DT_Name TEXT,lf_FileNameModified INTEGER,lf_RedoChunkSize INTEGER,lf_UndoChunkSize INTEGER,lf_client_index INTEGER,lf_record_type INTEGER,lf_transaction_id INTEGER,lf_flags INTEGER,lf_target_attribute INTEGER,lf_lcns_to_follow INTEGER,lf_attribute_offset INTEGER,lf_MftClusterIndex INTEGER,lf_target_vcn INTEGER,lf_target_lcn INTEGER,InOpenAttributeTable INTEGER,FromRcrdSlack INTEGER,IncompleteTransaction INTEGER);")
 If $SQLiteExecution <> 0 Then
 	MsgBox(0,"Error","Could not create table LogFile in database: " & $NtfsDbFile & " : " & @error)
 	_DumpOutput("Error Could not create table LogFile, $SQLiteExecution: " & $SQLiteExecution & @CRLF)
@@ -1239,7 +1244,7 @@ While _SQLite_FetchData($hQuery, $aRow) = $SQLITE_OK
 	For $i = 0 To UBound($DataRunArr)-1
 		$RowsProcessed+=1
 		$TestRef = $DataRunArr[$i][1]
-		$RefAlreadyExist = _ArraySearch($NewDataRunArr, $TestRef, 0, 0, 1, 0, 1, 1)
+		$RefAlreadyExist = _ArraySearch($NewDataRunArr, $TestRef, 0, $Counter, 1, 0, 1, 1)
 		$RedoOperation = $DataRunArr[$i][5]
 		If $RefAlreadyExist = -1 Or ($RedoOperation="CreateAttribute" Or $RedoOperation="InitializeFileRecordSegment") Then
 			If $RedoOperation<>"CreateAttribute" And $RedoOperation<>"InitializeFileRecordSegment" And $DataRunArr[$i][16]="" Then $DataRunArr[$i][16] = 64
@@ -1264,7 +1269,9 @@ While _SQLite_FetchData($hQuery, $aRow) = $SQLITE_OK
 ;			$NewDataRunArr[$Counter][16] = $MaxOffsetToDataruns ; Offset to datarun
 			If $DataRunArr[$i][17] <> "" Then $NewDataRunArr[$Counter][17] = _UpdateDataRunInformation($NewDataRunArr[$Counter][5],$NewDataRunArr[$Counter][8],$NewDataRunArr[$Counter][16],$DataRunArr[$i][17],$NewDataRunArr[$Counter][17])
 			$Counter+=1
-			Redim $NewDataRunArr[2+$Counter][18]
+			If 2+$Counter >= UBound($NewDataRunArr) Then
+				Redim $NewDataRunArr[$Counter+500][18]
+			EndIf
 			ContinueLoop
 		EndIf
 	; Update existing row
@@ -1285,6 +1292,7 @@ While _SQLite_FetchData($hQuery, $aRow) = $SQLITE_OK
 		If $DataRunArr[$i][16] <> "" Then $NewDataRunArr[$Counter-1][16] = $DataRunArr[$i][16]
 		If $DataRunArr[$i][17] <> "" Then $NewDataRunArr[$Counter-1][17] = _UpdateDataRunInformation($NewDataRunArr[$Counter-1][5],$NewDataRunArr[$Counter-1][8],$NewDataRunArr[$Counter-1][16],$DataRunArr[$i][17],$NewDataRunArr[$Counter-1][17])
 	Next
+	Redim $NewDataRunArr[2+$Counter][18]
 	_ArrayDelete($NewDataRunArr,UBound($NewDataRunArr))
 WEnd
 ;_ArrayDisplay($NewDataRunArr,"$NewDataRunArr")
@@ -2581,7 +2589,7 @@ If $undo_length > 0 Then
 			EndIf
 		Case $undo_operation_hex="0100" ;CompensationlogRecord
 		Case $undo_operation_hex="0200" ;InitializeFileRecordSegment
-			If $UndoChunkSize > 26 Then
+			If $UndoChunkSize >= 26 Then
 ;				_DumpOutput(@CRLF & "$this_lsn: " & $this_lsn & @CRLF)
 ;				_DumpOutput("$undo_operation: " & $undo_operation & @CRLF)
 ;				_DumpOutput("$undo_operation_hex: " & $undo_operation_hex & @CRLF)
@@ -3114,7 +3122,7 @@ Func _HexEncode($bInput)
 EndFunc
 
 Func _ParserCodeOldVersion($MFTEntry,$IsRedo)
-	Local $UpdSeqArrOffset, $HDR_LSN, $HDR_HardLinkCount, $HDR_Flags, $HDR_RecRealSize, $HDR_RecAllocSize, $HDR_BaseRecSeqNo, $HDR_NextAttribID, $NextAttributeOffset, $AttributeType, $AttributeSize, $RecordActive
+	Local $UpdSeqArrOffset, $HDR_HardLinkCount, $HDR_RecRealSize, $HDR_RecAllocSize, $HDR_BaseRecSeqNo, $HDR_NextAttribID, $NextAttributeOffset, $AttributeType, $AttributeSize, $RecordActive
 	Local $AttributeArray[17][2], $TestAttributeString
 	$AttributeArray[0][0] = "Attribute name"
 	$AttributeArray[0][1] = "Number"
@@ -3168,6 +3176,11 @@ Func _ParserCodeOldVersion($MFTEntry,$IsRedo)
 	EndSelect
 	$HDR_RecRealSize = StringMid($MFTEntry, 49, 8)
 	$HDR_RecRealSize = Dec(_SwapEndian($HDR_RecRealSize),2)
+
+	If StringLen($MFTEntry) <= 52 Then
+		; A deallocation that only includes part of the header.
+		Return SetError(1)
+	EndIf
 
 	If StringLen($MFTEntry) < 98 Then
 		;The critical offset is where the mft record number is located.
@@ -3230,7 +3243,6 @@ Func _ParserCodeOldVersion($MFTEntry,$IsRedo)
 			Case $AttributeType = $STANDARD_INFORMATION
 				$AttributeKnown = 1
 				$AttributeArray[1][1] += 1
-;				_Get_StandardInformation($MFTEntry, $NextAttributeOffset, $AttributeSize)
 				_Get_StandardInformation(StringMid($MFTEntry,1,($NextAttributeOffset+($AttributeSize*2))-1), $NextAttributeOffset, $AttributeSize)
 				$TestAttributeString &= '$STANDARD_INFORMATION?'&($NextAttributeOffset-1)/2&','
 				If $AttributeSize-24 <> 72 Then $TextInformation &= ";Non-standard size of $STANDARD_INFORMATION"
@@ -3374,6 +3386,14 @@ Func _ParserCodeOldVersion($MFTEntry,$IsRedo)
 	If $IsRedo Then
 		_UpdateSeveralOffsetOfAttribute($HDR_MFTREcordNumber, $TestAttributeString)
 	EndIf
+
+	Local $thisOperation
+	If $IsRedo = 1 Then
+		$thisOperation = $redo_operation
+	Else
+		$thisOperation = $undo_operation
+	EndIf
+	FileWrite($LogFileStandardInformationCsv, $RecordOffset&$de&$this_lsn&$de&$thisOperation&$de&$IsRedo&$de&$PredictedRefNumber&$de&$HDR_SequenceNo&$de&$FN_Name &$de& $SI_CTime&$de&$SI_ATime&$de&$SI_MTime&$de&$SI_RTime&$de&$SI_FilePermission&$de&$SI_MaxVersions&$de&$SI_VersionNumber&$de&$SI_ClassID&$de&$SI_SecurityID&$de&$SI_QuotaCharged&$de&$SI_USN&$de&""&@CRLF)
 EndFunc
 
 Func _Get_StandardInformation($MFTEntry, $SI_Offset, $SI_Size)
@@ -3490,7 +3510,7 @@ Func _Get_StandardInformation($MFTEntry, $SI_Offset, $SI_Size)
 		_DumpOutput("$SI_QuotaCharged: " & $SI_QuotaCharged & @CRLF)
 		_DumpOutput("$SI_USN: " & $SI_USN & @CRLF)
 	EndIf
-EndFunc   ;==>_Get_StandardInformation
+EndFunc
 
 Func _AttribHeaderFlags($AHinput)
 	Local $AHoutput = ""
@@ -3998,7 +4018,12 @@ Func _Get_FileName($MFTEntry, $FN_Offset, $FN_Number)
 EndFunc
 
 Func _Get_Data($MFTEntry, $DT_Offset, $DT_Number, $IsRedo)
-	Local $DT_NameLength, $DT_NameRelativeOffset, $DT_VCNs, $DT_LengthOfAttribute, $DT_OffsetToAttribute, $DT_IndexedFlag
+	Local $DT_NameLength, $DT_NameRelativeOffset, $DT_VCNs, $DT_LengthOfAttribute, $DT_OffsetToAttribute, $DT_IndexedFlag, $thisOperation
+	If $IsRedo = 1 Then
+		$thisOperation = $redo_operation
+	Else
+		$thisOperation = $undo_operation
+	EndIf
 	$DT_NonResidentFlag = StringMid($MFTEntry, $DT_Offset + 16, 2)
 	$DT_NameLength = Dec(StringMid($MFTEntry, $DT_Offset + 18, 2))
 	$DT_NameRelativeOffset = StringMid($MFTEntry, $DT_Offset + 20, 4)
@@ -4067,9 +4092,10 @@ Func _Get_Data($MFTEntry, $DT_Offset, $DT_Number, $IsRedo)
 			_DumpOutput("$DT_IndexedFlag: " & $DT_IndexedFlag & @CRLF)
 		EndIf
 		If $DT_LengthOfAttribute > 0 Then
-			_DumpOutput("$DATA for MFT " & $PredictedRefNumber & " in LSN " & $this_lsn & ":" & @CRLF)
-			_DumpOutput(_HexEncode("0x"&$xData))
-			$TextInformation &= ";See $DATA dump in debug.log"
+;			_DumpOutput("$DATA for MFT " & $PredictedRefNumber & " in LSN " & $this_lsn & ":" & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$xData))
+			$TextInformation &= ";Separate $DATA dump."
+			FileWrite($LogFileDataContentFile, "LSN: " & $this_lsn & @CRLF & "Record: " & $PredictedRefNumber & @CRLF & "ReDo: " & $IsRedo & @CRLF & "Operation: " & $thisOperation & @CRLF & "$DATA:" & @CRLF & _HexEncode("0x"&$xData) & @CRLF)
 		Else
 			$TextInformation &= ";$DATA is zero"
 		EndIf
@@ -5185,6 +5211,12 @@ Func _Get_LoggedUtilityStream($Entry,$CurrentAttributeName)
 EndFunc
 
 Func _Decode_UpdateResidentValue($record,$IsRedo)
+	Local $thisOperation
+	If $IsRedo = 1 Then
+		$thisOperation = $redo_operation
+	Else
+		$thisOperation = $undo_operation
+	EndIf
 	If $VerboseOn Then _DumpOutput("_Decode_UpdateResidentValue():" & @CRLF)
 	If $IsRedo Then
 		Select
@@ -5192,17 +5224,16 @@ Func _Decode_UpdateResidentValue($record,$IsRedo)
 				_Decode_StandardInformation($record, $IsRedo)
 				$AttributeString = "$STANDARD_INFORMATION"
 
+			Case $AttributeString = "$DATA"
+				$TextInformation &= ";Separate $DATA dump."
+				FileWrite($LogFileDataContentFile, "LSN: " & $this_lsn & @CRLF & "Record: " & $PredictedRefNumber & @CRLF & "ReDo: " & $IsRedo & @CRLF & "Operation: " & $thisOperation & @CRLF & "$DATA:" & @CRLF & _HexEncode("0x"&$record) & @CRLF)
+
 			Case $AttributeString = "$LOGGED_UTILITY_STREAM" And $undo_length > 0
 				_Decode_TXF_DATA($record)
 
 			Case $AttributeString = "$EA" And $undo_length > 0
 				_Get_Ea($record)
 
-			Case $AttributeString = "$BITMAP" And $undo_length > 0
-
-;			Case $DoExtractResidentUpdates And $MinSizeResidentExtraction > 0 And $redo_length >= $MinSizeResidentExtraction And $undo_length > 0 And $redo_length=$undo_length
-			Case $DoExtractResidentUpdates And $redo_length >= $MinSizeResidentExtraction And $undo_length > 0 ;Assume $DATA
-				_ExtractResidentUpdates($record,$IsRedo)
 			Case $client_previous_lsn=0 And $undo_length=0
 				$TextInformation &= ";Initializing with zeros"
 			Case $PredictedRefNumber = 31 ;Updates to $Tops:$DATA
@@ -5210,7 +5241,7 @@ Func _Decode_UpdateResidentValue($record,$IsRedo)
 				_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
 				_DumpOutput(_HexEncode("0x"&$record) & @CRLF)
 			Case Else
-				_DumpOutput("Error in _Decode_UpdateResidentValue():" & @CRLF)
+				_DumpOutput("Warning: _Decode_UpdateResidentValue() skipped parsing." & @CRLF)
 				_DumpOutput("$this_lsn: " & $this_lsn & @CRLF)
 				_DumpOutput("$AttributeString: " & $AttributeString & @CRLF)
 				_DumpOutput("$record_offset_in_mft: " & $record_offset_in_mft & @CRLF)
@@ -5224,15 +5255,20 @@ Func _Decode_UpdateResidentValue($record,$IsRedo)
 			Case $record_offset_in_mft = 48 Or $record_offset_in_mft = 56 Or $AttributeString = "$STANDARD_INFORMATION"
 				_Decode_StandardInformation($record, $IsRedo)
 
+			Case $AttributeString = "$DATA"
+				$TextInformation &= ";Separate $DATA dump."
+				FileWrite($LogFileDataContentFile, "LSN: " & $this_lsn & @CRLF & "Record: " & $PredictedRefNumber & @CRLF & "ReDo: " & $IsRedo & @CRLF & "Operation: " & $thisOperation & @CRLF & "$DATA:" & @CRLF & _HexEncode("0x"&$record) & @CRLF)
+
 			Case $AttributeString = "$LOGGED_UTILITY_STREAM"
 
 			Case $AttributeString = "$BITMAP"
 
-;			Case $record_offset_in_mft <> 56 And $DoExtractResidentUpdates And $MinSizeResidentExtraction > 0 And $redo_length >= $MinSizeResidentExtraction And $undo_length > 0 And $redo_length=$undo_length ;Assume $DATA
-			Case $record_offset_in_mft <> 56 And $DoExtractResidentUpdates And $redo_length >= $MinSizeResidentExtraction
-				_ExtractResidentUpdates($record,$IsRedo)
 
 		EndSelect
+	EndIf
+
+	If $AttributeString = "$DATA" Or ($record_offset_in_mft > 56 And $DoExtractResidentUpdates And $redo_length >= $MinSizeResidentExtraction And $undo_length > 0) Then
+		_ExtractResidentUpdates($record,$IsRedo)
 	EndIf
 EndFunc
 
@@ -5678,10 +5714,10 @@ Func _Decode_StandardInformation($Attribute, $IsRedo)
 				Else
 					$HighEnd_SI_XTime_Fragment = $HighEnd_SI_XTime_Fragment & $PrecisionSeparator2 & _FillZero(StringRight($HighEnd_SI_XTime_Fragment_tmp, 4))
 				EndIf
-				_DumpOutput("The decoded timestamps for the above range " & $LowEnd_SI_XTime_Fragment & " - " & $HighEnd_SI_XTime_Fragment & @CRLF)
-				_DumpOutput("The replacement values are always 00's. That is the timestamp in the low end of the range." & @CRLF)
-				_DumpOutput("This is not a parsing error, but a consequence of that these specific bytes did not change from the previous timestamp." & @CRLF)
-				_DumpOutput("If there is an earlier UpdateResidentValue for this MFT ref, you may be able to resolve the missing byte(s)." & @CRLF & @CRLF)
+				_DumpOutput("The decoded timestamp range is: " & $LowEnd_SI_XTime_Fragment & " - " & $HighEnd_SI_XTime_Fragment & @CRLF & @CRLF)
+;				_DumpOutput("The replacement values are always 00's. That is the timestamp in the low end of the range." & @CRLF)
+;				_DumpOutput("This is not a parsing error, but a consequence of that these specific bytes did not change from the previous timestamp." & @CRLF)
+;				_DumpOutput("If there is an earlier UpdateResidentValue for this MFT ref, you may be able to resolve the missing byte(s)." & @CRLF & @CRLF)
 			EndIf
 
 			$__SI_CTime = StringMid($Attribute, $SI_Offset + 48, 16)
@@ -6196,7 +6232,14 @@ Func _Decode_StandardInformation($Attribute, $IsRedo)
 		_DumpOutput("$__SI_PartialValue: " & $__SI_PartialValue & @CRLF)
 	EndIf
 
-	FileWrite($LogFileStandardInformationCsv, $RecordOffset&$de&$this_lsn&$de&$IsRedo&$de&$PredictedRefNumber&$de&$FN_Name &$de& $__SI_CTime&$de&$__SI_ATime&$de&$__SI_MTime&$de&$__SI_RTime&$de&$__SI_FilePermission&$de&$__SI_MaxVersions&$de&$__SI_VersionNumber&$de&$__SI_ClassID&$de&$__SI_SecurityID&$de&$__SI_QuotaCharged&$de&$__SI_USN&$de&$__SI_PartialValue&@CRLF)
+	Local $thisOperation
+	If $IsRedo = 1 Then
+		$thisOperation = $redo_operation
+	Else
+		$thisOperation = $undo_operation
+	EndIf
+
+	FileWrite($LogFileStandardInformationCsv, $RecordOffset&$de&$this_lsn&$de&$thisOperation&$de&$IsRedo&$de&$PredictedRefNumber&$de&$HDR_SequenceNo&$de&$FN_Name &$de& $__SI_CTime&$de&$__SI_ATime&$de&$__SI_MTime&$de&$__SI_RTime&$de&$__SI_FilePermission&$de&$__SI_MaxVersions&$de&$__SI_VersionNumber&$de&$__SI_ClassID&$de&$__SI_SecurityID&$de&$__SI_QuotaCharged&$de&$__SI_USN&$de&$__SI_PartialValue&@CRLF)
 
 	If $IsRedo = 1 Then
 		$SI_CTime = $__SI_CTime
@@ -6467,6 +6510,8 @@ Func _ClearVar()
 	$AttributeString=""
 	$HDR_BaseRecord=""
 	$HDR_SequenceNo=""
+	$HDR_LSN=""
+	$HDR_Flags=""
 	$TextInformation=""
 	$RedoChunkSize=""
 	$UndoChunkSize=""
@@ -6559,7 +6604,7 @@ Func _PrepareOutput($OutputDir)
 	EndIf
 	$NtfsDbFile = $ParserOutDir & "\ntfs.db"
 ;	_DebugOut("Output DB file: " & $NtfsDbFile)
-	$tBuffer = DllStructCreate("byte [1024]")
+;	$tBuffer = DllStructCreate("byte [1024]")
 	$OutFileMFT = $ParserOutDir&"\MFTrecords.bin"
 	$hOutFileMFT = _WinAPI_CreateFile("\\.\" & $OutFileMFT,3,6,7)
 	If $hOutFileMFT = 0 Then
@@ -6755,6 +6800,14 @@ Func _PrepareOutput($OutputDir)
 		Exit
 	EndIf
 ;	_DebugOut("Created output file: " & $LogFileStandardInformationCsvFile)
+
+	$LogFileDataContentFile = $ParserOutDir & "\LogFile_Mft_Data.txt"
+	$LogFileDataContent = FileOpen($LogFileDataContentFile, $EncodingWhenOpen)
+	If @error Then
+		_DebugOut("Error creating: " & $LogFileDataContentFile)
+		Exit
+	EndIf
+;	_DebugOut("Created output file: " & $LogFileDataContentFile)
 EndFunc
 
 Func _WriteCSVExtraHeader()
@@ -6765,8 +6818,7 @@ Func _WriteCSVExtraHeader()
 EndFunc
 
 Func _WriteCSVHeader()
-;	$LogFile_Csv_Header = "lf_Offset"&$de&"lf_MFTReference"&$de&"lf_RealMFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_LSN"&$de&"lf_LSNPrevious"&$de&"lf_RedoOperation"&$de&"lf_UndoOperation"&$de&"lf_OffsetInMft"&$de&"lf_FileName"&$de&"lf_CurrentAttribute"&$de&"lf_TextInformation"&$de&"lf_UsnJrnlFileName"&$de&"lf_UsnJrnlMFTReference"&$de&"lf_UsnJrnlMFTParentReference"&$de&"lf_UsnJrnlTimestamp"&$de&"lf_UsnJrnlReason"&$de&"lf_UsnJrnlUsn"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"&$de&"lf_FN_CTime"&$de&"lf_FN_ATime"&$de&"lf_FN_MTime"&$de&"lf_FN_RTime"&$de&"lf_FN_AllocSize"&$de&"lf_FN_RealSize"&$de&"lf_FN_Flags"&$de&"lf_FN_Namespace"&$de&"lf_DT_StartVCN"&$de&"lf_DT_LastVCN"&$de&"lf_DT_ComprUnitSize"&$de&"lf_DT_AllocSize"&$de&"lf_DT_RealSize"&$de&"lf_DT_InitStreamSize"&$de&"lf_DT_DataRuns"&$de&"lf_DT_Name"&$de&"lf_FileNameModified"&$de&"lf_RedoChunkSize"&$de&"lf_UndoChunkSize"
-	$LogFile_Csv_Header = "lf_Offset"&$de&"lf_MFTReference"&$de&"lf_RealMFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_LSN"&$de&"lf_LSNPrevious"&$de&"lf_RedoOperation"&$de&"lf_UndoOperation"&$de&"lf_OffsetInMft"&$de&"lf_FileName"&$de&"lf_CurrentAttribute"&$de&"lf_TextInformation"&$de&"lf_UsnJrnlFileName"&$de&"lf_UsnJrnlMFTReference"&$de&"lf_UsnJrnlMFTParentReference"&$de&"lf_UsnJrnlTimestamp"&$de&"lf_UsnJrnlReason"&$de&"lf_UsnJrnlUsn"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"&$de&"lf_FN_CTime"&$de&"lf_FN_ATime"&$de&"lf_FN_MTime"&$de&"lf_FN_RTime"&$de&"lf_FN_AllocSize"&$de&"lf_FN_RealSize"&$de&"lf_FN_Flags"&$de&"lf_FN_Namespace"&$de&"lf_DT_StartVCN"&$de&"lf_DT_LastVCN"&$de&"lf_DT_ComprUnitSize"&$de&"lf_DT_AllocSize"&$de&"lf_DT_RealSize"&$de&"lf_DT_InitStreamSize"&$de&"lf_DT_DataRuns"&$de&"lf_DT_Name"&$de&"lf_FileNameModified"&$de&"lf_RedoChunkSize"&$de&"lf_UndoChunkSize"&$de&"lf_client_index"&$de&"lf_record_type"&$de&"lf_transaction_id"&$de&"lf_flags"&$de&"lf_target_attribute"&$de&"lf_lcns_to_follow"&$de&"lf_attribute_offset"&$de&"lf_MftClusterIndex"&$de&"lf_target_vcn"&$de&"lf_target_lcn"&$de&"InOpenAttributeTable"&$de&"FromRcrdSlack"&$de&"IncompleteTransaction"
+	$LogFile_Csv_Header = "lf_Offset"&$de&"lf_MFTReference"&$de&"lf_MftHdrSeq"&$de&"lf_MftHdrLsn"&$de&"lf_MftHdrFlags"&$de&"lf_RealMFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_LSN"&$de&"lf_LSNPrevious"&$de&"lf_RedoOperation"&$de&"lf_UndoOperation"&$de&"lf_OffsetInMft"&$de&"lf_FileName"&$de&"lf_CurrentAttribute"&$de&"lf_TextInformation"&$de&"lf_UsnJrnlFileName"&$de&"lf_UsnJrnlMFTReference"&$de&"lf_UsnJrnlMFTParentReference"&$de&"lf_UsnJrnlTimestamp"&$de&"lf_UsnJrnlReason"&$de&"lf_UsnJrnlUsn"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"&$de&"lf_FN_CTime"&$de&"lf_FN_ATime"&$de&"lf_FN_MTime"&$de&"lf_FN_RTime"&$de&"lf_FN_AllocSize"&$de&"lf_FN_RealSize"&$de&"lf_FN_Flags"&$de&"lf_FN_Namespace"&$de&"lf_DT_StartVCN"&$de&"lf_DT_LastVCN"&$de&"lf_DT_ComprUnitSize"&$de&"lf_DT_AllocSize"&$de&"lf_DT_RealSize"&$de&"lf_DT_InitStreamSize"&$de&"lf_DT_DataRuns"&$de&"lf_DT_Name"&$de&"lf_FileNameModified"&$de&"lf_RedoChunkSize"&$de&"lf_UndoChunkSize"&$de&"lf_client_index"&$de&"lf_record_type"&$de&"lf_transaction_id"&$de&"lf_flags"&$de&"lf_target_attribute"&$de&"lf_lcns_to_follow"&$de&"lf_attribute_offset"&$de&"lf_MftClusterIndex"&$de&"lf_target_vcn"&$de&"lf_target_lcn"&$de&"InOpenAttributeTable"&$de&"FromRcrdSlack"&$de&"IncompleteTransaction"
 	FileWrite($LogFileCsv, $LogFile_Csv_Header & @CRLF)
 	$LogFile_Indx_Csv_Header = "lf_Offset"&$de&"lf_LSN"&$de&"lf_EntryNumber"&$de&"lf_MFTReference"&$de&"lf_MFTReferenceSeqNo"&$de&"lf_IndexFlags"&$de&"lf_MFTParentReference"&$de&"lf_MFTParentReferenceSeqNo"&$de&"lf_CTime"&$de&"lf_ATime"&$de&"lf_MTime"&$de&"lf_RTime"&$de&"lf_AllocSize"&$de&"lf_RealSize"&$de&"lf_FileFlags"&$de&"lf_ReparseTag"&$de&"lf_EaSize"&$de&"lf_FileName"&$de&"lf_FileNameModified"&$de&"lf_NameSpace"&$de&"lf_SubNodeVCN"&$de&"IsRedo"
 	FileWrite($LogFileIndxCsv, $LogFile_Indx_Csv_Header & @CRLF)
@@ -6774,12 +6826,11 @@ Func _WriteCSVHeader()
 	FileWrite($LogFileDataRunsCsv, $LogFile_DataRuns_Csv_Header & @CRLF)
 	$LogFile_DataRunsResolved_Csv_Header = "lf_MFTReference"&$de&"lf_MFTBaseRecRef"&$de&"lf_FileName"&$de&"lf_LSN"&$de&"lf_OffsetInMft"&$de&"lf_DataName"&$de&"lf_Flags"&$de&"lf_NonResident"&$de&"lf_FileSize"&$de&"lf_InitializedStreamSize"&$de&"lf_DataRuns"
 	FileWrite($LogFileDataRunsModCsv, $LogFile_DataRunsResolved_Csv_Header & @CRLF)
-;	$LogFile_UsnJrnl_Csv_Header = "MFTReference"&$de&"MFTParentReference"&$de&"USN"&$de&"Timestamp"&$de&"Reason"&$de&"SourceInfo"&$de&"FileAttributes"&$de&"FileName"&$de&"FileNameModified"
 	$LogFile_UsnJrnl_Csv_Header = "FileName"&$de&"USN"&$de&"Timestamp"&$de&"Reason"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"MFTParentReference"&$de&"ParentReferenceSeqNo"&$de&"FileAttributes"&$de&"MajorVersion"&$de&"MinorVersion"&$de&"SourceInfo"&$de&"SecurityId"
 	FileWrite($LogFileUsnJrnlCsv, $LogFile_UsnJrnl_Csv_Header & @CRLF)
 	$LogFile_UpdateFileName_Csv_Header = "lf_Offset"&$de&"lf_LSN"&$de&"is_redo"&$de&"lf_ParentMFTReference"&$de&"lf_CTime"&$de&"lf_ATime"&$de&"lf_MTime"&$de&"lf_RTime"&$de&"lf_AllocSize"&$de&"lf_RealSize"&$de&"lf_FileFlags"&$de&"lf_ReparseTag"&$de&"lf_EaSize"
 	FileWrite($LogFileUpdateFileNameCsv, $LogFile_UpdateFileName_Csv_Header & @CRLF)
-	$LogFile_SI_Header = "lf_Offset"&$de&"lf_LSN"&$de&"is_redo"&$de&"lf_MFTReference"&$de&"lf_FileName"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"
+	$LogFile_SI_Header = "lf_Offset"&$de&"lf_LSN"&$de&"current_operation"&$de&"is_redo"&$de&"lf_MFTReference"&$de&"lf_MFTSeqNo"&$de&"lf_FileName"&$de&"lf_SI_CTime"&$de&"lf_SI_ATime"&$de&"lf_SI_MTime"&$de&"lf_SI_RTime"&$de&"lf_SI_FilePermission"&$de&"lf_SI_MaxVersions"&$de&"lf_SI_VersionNumber"&$de&"lf_SI_ClassID"&$de&"lf_SI_SecurityID"&$de&"lf_SI_QuotaCharged"&$de&"lf_SI_USN"&$de&"lf_SI_PartialValue"
 	FileWrite($LogFileStandardInformationCsv, $LogFile_SI_Header & @CRLF)
 EndFunc
 
@@ -6789,8 +6840,7 @@ Func _WriteCSVExtra()
 EndFunc
 
 Func _WriteLogFileCsv()
-;	FileWriteLine($LogFileCsv, $RecordOffset & $de & $PredictedRefNumber & $de & $RealMftRef & $de & $HDR_BaseRecord & $de & $this_lsn & $de & $client_previous_lsn & $de & $redo_operation & $de & $undo_operation & $de & $record_offset_in_mft & $de & $FN_Name & $de & $AttributeString & $de & $TextInformation & $de & $UsnJrnlFileName & $de & $UsnJrnlFileReferenceNumber & $de & $UsnJrnlParentFileReferenceNumber & $de & $UsnJrnlTimestamp & $de & $UsnJrnlReason & $de & $UsnJrnlUsn & $de & $SI_CTime & $de & $SI_ATime & $de & $SI_MTime & $de & $SI_RTime & $de & $SI_FilePermission & $de & $SI_MaxVersions & $de & $SI_VersionNumber & $de & $SI_ClassID & $de & $SI_SecurityID & $de & $SI_QuotaCharged & $de & $SI_USN & $de & $SI_PartialValue & $de & $FN_CTime & $de & $FN_ATime & $de & $FN_MTime & $de & $FN_RTime & $de & $FN_AllocSize & $de & $FN_RealSize & $de & $FN_Flags & $de & $FN_NameType & $de & $DT_StartVCN & $de & $DT_LastVCN & $de & $DT_ComprUnitSize & $de & $DT_AllocSize & $de & $DT_RealSize & $de & $DT_InitStreamSize & $de & $DT_DataRuns & $de & $DT_Name & $de & $FileNameModified & $de & $RedoChunkSize & $de & $UndoChunkSize & @CRLF)
-	FileWrite($LogFileCsv, $RecordOffset & $de & $PredictedRefNumber & $de & $RealMftRef & $de & $HDR_BaseRecord & $de & $this_lsn & $de & $client_previous_lsn & $de & $redo_operation & $de & $undo_operation & $de & $record_offset_in_mft & $de & $FN_Name & $de & $AttributeString & $de & $TextInformation & $de & $UsnJrnlFileName & $de & $UsnJrnlFileReferenceNumber & $de & $UsnJrnlParentFileReferenceNumber & $de & $UsnJrnlTimestamp & $de & $UsnJrnlReason & $de & $UsnJrnlUsn & $de & $SI_CTime & $de & $SI_ATime & $de & $SI_MTime & $de & $SI_RTime & $de & $SI_FilePermission & $de & $SI_MaxVersions & $de & $SI_VersionNumber & $de & $SI_ClassID & $de & $SI_SecurityID & $de & $SI_QuotaCharged & $de & $SI_USN & $de & $SI_PartialValue & $de & $FN_CTime & $de & $FN_ATime & $de & $FN_MTime & $de & $FN_RTime & $de & $FN_AllocSize & $de & $FN_RealSize & $de & $FN_Flags & $de & $FN_NameType & $de & $DT_StartVCN & $de & $DT_LastVCN & $de & $DT_ComprUnitSize & $de & $DT_AllocSize & $de & $DT_RealSize & $de & $DT_InitStreamSize & $de & $DT_DataRuns & $de & $DT_Name & $de & $FileNameModified & $de & $RedoChunkSize & $de & $UndoChunkSize & $de & $client_index & $de &$record_type & $de & $transaction_id & $de & $lf_flags & $de & $target_attribute & $de & $lcns_to_follow & $de & $attribute_offset & $de & $MftClusterIndex & $de & $target_vcn & $de & $target_lcn & $de & $InOpenAttributeTable & $de & $FromRcrdSlack & $de & $IncompleteTransaction & @CRLF)
+	FileWrite($LogFileCsv, $RecordOffset & $de & $PredictedRefNumber & $de & $HDR_SequenceNo & $de & $HDR_LSN & $de & $HDR_Flags & $de & $RealMftRef & $de & $HDR_BaseRecord & $de & $this_lsn & $de & $client_previous_lsn & $de & $redo_operation & $de & $undo_operation & $de & $record_offset_in_mft & $de & $FN_Name & $de & $AttributeString & $de & $TextInformation & $de & $UsnJrnlFileName & $de & $UsnJrnlFileReferenceNumber & $de & $UsnJrnlParentFileReferenceNumber & $de & $UsnJrnlTimestamp & $de & $UsnJrnlReason & $de & $UsnJrnlUsn & $de & $SI_CTime & $de & $SI_ATime & $de & $SI_MTime & $de & $SI_RTime & $de & $SI_FilePermission & $de & $SI_MaxVersions & $de & $SI_VersionNumber & $de & $SI_ClassID & $de & $SI_SecurityID & $de & $SI_QuotaCharged & $de & $SI_USN & $de & $SI_PartialValue & $de & $FN_CTime & $de & $FN_ATime & $de & $FN_MTime & $de & $FN_RTime & $de & $FN_AllocSize & $de & $FN_RealSize & $de & $FN_Flags & $de & $FN_NameType & $de & $DT_StartVCN & $de & $DT_LastVCN & $de & $DT_ComprUnitSize & $de & $DT_AllocSize & $de & $DT_RealSize & $de & $DT_InitStreamSize & $de & $DT_DataRuns & $de & $DT_Name & $de & $FileNameModified & $de & $RedoChunkSize & $de & $UndoChunkSize & $de & $client_index & $de &$record_type & $de & $transaction_id & $de & $lf_flags & $de & $target_attribute & $de & $lcns_to_follow & $de & $attribute_offset & $de & $MftClusterIndex & $de & $target_vcn & $de & $target_lcn & $de & $InOpenAttributeTable & $de & $FromRcrdSlack & $de & $IncompleteTransaction & @CRLF)
 EndFunc
 
 Func _WriteLogFileDataRunsCsv()
@@ -12964,7 +13014,12 @@ Func _ExtractResidentUpdates($InputData,$IsRedo)
 EndFunc
 
 Func _Get_DataName($MFTEntry, $DT_Offset, $DT_Number, $IsRedo)
-	Local $DT_NameLength, $DT_NameRelativeOffset, $DT_VCNs, $DT_LengthOfAttribute, $DT_OffsetToAttribute, $DT_IndexedFlag
+	Local $DT_NameLength, $DT_NameRelativeOffset, $DT_VCNs, $DT_LengthOfAttribute, $DT_OffsetToAttribute, $DT_IndexedFlag, $thisOperation
+	If $IsRedo = 1 Then
+		$thisOperation = $redo_operation
+	Else
+		$thisOperation = $undo_operation
+	EndIf
 	$DT_NonResidentFlag = StringMid($MFTEntry, $DT_Offset + 16, 2)
 	$DT_NameLength = Dec(StringMid($MFTEntry, $DT_Offset + 18, 2))
 	$DT_NameRelativeOffset = StringMid($MFTEntry, $DT_Offset + 20, 4)
@@ -13033,9 +13088,10 @@ Func _Get_DataName($MFTEntry, $DT_Offset, $DT_Number, $IsRedo)
 			_DumpOutput("$DT_IndexedFlag: " & $DT_IndexedFlag & @CRLF)
 		EndIf
 		If $DT_LengthOfAttribute > 0 Then
-			_DumpOutput("$DATA for MFT " & $PredictedRefNumber & " in LSN " & $this_lsn & ":" & @CRLF)
-			_DumpOutput(_HexEncode("0x"&$xData))
-			$TextInformation &= ";See $DATA dump in debug.log"
+;			_DumpOutput("$DATA for MFT " & $PredictedRefNumber & " in LSN " & $this_lsn & ":" & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$xData))
+			$TextInformation &= ";Separate $DATA dump."
+			FileWrite($LogFileDataContentFile, "LSN: " & $this_lsn & @CRLF & "Record: " & $PredictedRefNumber & @CRLF & "ReDo: " & $IsRedo & @CRLF & "Operation: " & $thisOperation & @CRLF & "$DATA:" & @CRLF & _HexEncode("0x"&$xData) & @CRLF)
 		Else
 			$TextInformation &= ";$DATA is zero"
 		EndIf

@@ -1,5 +1,14 @@
 LogFileParser Changelog
 
+v2.0.0.53
+Added new logging of all $DATA changes both redo and undo operations in a new output LogFile_Mft_Data.txt.
+Display a message box upon startup if spaces are detected in program path, which is not supported.
+Expanded the main csv LogFile.csv to include new columns for lf_MftHdrSeq, lf_MftHdrLsn and lf_MftHdrFlags, as resolved trough $MFT header in InitializeFileRecordSegment and DeallocateFileRecordSegment.
+Added support for InitializeFileRecordSegment to LogFile_Mft_StandardInformation.csv.
+Expanded columns in LogFile_Mft_StandardInformation.csv to include current_operation (UpdateResidentValue or InitializeFileRecordSegment), and sequence number (applicable for InitializeFileRecordSegment).
+A roughly 10% performance improvement in the reconstruction of dataruns.
+Sql files updated according to new schema.
+
 v2.0.0.52
 Changed output structure for UpdateFileNameAllocation in LogFile_UpdateFileName_I30.csv.
 New output for UpdateResidentValue for STANDARD_INFORMATION, as LogFile_Mft_StandardInformation.csv.

@@ -3,6 +3,9 @@ CREATE TABLE logfile(
 	Id							  INT(11) NOT NULL AUTO_INCREMENT
 	,lf_Offset                    VARCHAR(18)
 	,lf_MFTReference              BIGINT
+	,lf_MftHdrSeq 	              BIGINT
+	,lf_MftHdrLsn 	              BIGINT
+	,lf_MftHdrFlags               VARCHAR(9)
 	,lf_RealMFTReference          BIGINT 
 	,lf_MFTBaseRecRef             BIGINT 
 	,lf_LSN                       BIGINT
