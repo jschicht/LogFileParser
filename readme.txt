@@ -388,5 +388,4 @@ Last example is a basic that uses common defaults that work out just fine in man
 References:
 Windows Internals 6th Edition
 http://www.opensource.apple.com/source/ntfs/ntfs-80/kext/ntfs_logfile.h
-http://forensicinsight.org/wp-content/uploads/2012/05/INSIGHT_A-Dig-into-the-LogFile.pdf
 https://dl.dropbox.com/s/c0u980a53ipaq7h/CEIC-2012_Anti-Anti_Forensics.pptx?dl=1
